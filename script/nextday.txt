@@ -1,0 +1,28 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test a few next-day events in clocks
+#
+# Prerequisites:
+# - Select a clock (if not selected there's no visual feedback)
+#
+# Usage example (with digital HMS):
+# cs 3
+# e s ../script/clock.txt
+#
+
+# Make sure we're seeing a date
+ap 0
+
+# Check end of month
+ds 31 8 13
+ts 23 59 50
+tp
+cf n
+
+# Check leap year
+ds 28 2 12
+ts 23 59 50
+tp
+cf n
+

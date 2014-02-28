@@ -1,0 +1,182 @@
+
+mchron - Emuchron emulator command line tool
+
+Use: mchron [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]
+            [-d <logfile>] [-h]
+  -d <logfile>  - Debug logfile name
+  -g <geometry> - Geometry (x,y) of glut window
+                  Default: "520x264"
+                  Examples: "130x66" or "260x132"
+  -h            - Give usage help
+  -l <device>   - LCD stub device type
+                  Values: "glut" or "ncurses" or "all"
+                  Default: "glut"
+  -p <position> - Position (x,y) of glut window
+                  Default: "100,100"
+  -t <tty>      - tty device for ncurses of 258x66 sized terminal
+                  Default: get <tty> from $HOME/.mchron
+
+Examples:
+  ./mchron
+  ./mchron -l glut -p "768,128"
+  ./mchron -l ncurses
+  ./mchron -l ncurses -t /dev/pts/1 -d debug.log
+
+Commands:
+  '#'   - Comments
+  'ap'  - Set alarm switch position
+          Argument: <position>
+              position: 0 = off, 1 = on
+  'as'  - Set alarm time
+          Arguments: <hour> <min>
+              hour: 0..23
+              min: 0..59
+  'b'   - Play audible beep
+          Arguments: <frequency> <duration>
+              frequency: 150..10000 (Hz)
+              duration: 1..255 (msec)
+  'cf'  - Feed clock with time and keyboard events
+          Argument: <mode>
+              mode: 'c' = start in single cycle mode, 'n' = start normal
+  'cs'  - Select clock
+          Argument: <clock>
+              clock: 0 = [detach], 1 = analogHMS, 2 = analogHM, 3 = digitalHMS,
+                     4 = digitalHM, 5 = mosquito, 6 = nerd, 7 = pong,
+                     8 = puzzle, 9 = slider, 10 = cascade, 11 = speed,
+                     12 = spider, 13 = traffic
+  'dr'  - Reset clock date to system date
+  'ds'  - Set clock date
+          Arguments: <day> <month> <year>
+              day: 1..31
+              month: 1..12
+              year: 0..99
+  'e'   - Execute commands from file
+          Arguments: <echo> <filename>
+              echo: 'e' = echo commands, 'i' = inherit, 's' = silent
+              filename: full filepath or relative to startup folder mchron
+  'h'   - Help
+  'lbs' - Set LCD backlight brightness (glut support only)
+          Argument: <backlight>
+              backlight: 0..16
+  'le'  - Erase LCD display
+  'li'  - Inverse LCD display
+  'm'   - Start Monochron emulator
+          Arguments: <mode> <eeprom>
+              mode: 'c' = start in single cycle mode, 'n' = start normal
+              eeprom: 'k' = keep, 'r' = reset
+  'pa'  - Paint ascii
+          Arguments: <color> <x> <y> <font> <orientation> <xscale> <yscale>
+                     <text>
+              color: 'f' = foreground, 'b' = background
+              x: 0..127
+              y: 0..63
+              font: '5x5p' = 5x5 proportional, '5x7n' = 5x7 non-proportional
+              orientation: 'b' = bottom-up vertical, 'h' = horizontal,
+                           't' = top-down vertical
+              xscale: >=1
+              yscale: >=1
+              text: ascii text
+  'pc'  - Paint circle
+          Arguments: <color> <x> <y> <radius> <pattern>
+              color: 'f' = foreground, 'b' = background
+              x: 0..127
+              y: 0..63
+              radius: 1..31
+              pattern: 0 = full line, 1 = half (even), 2 = half (uneven), 
+                       3 = 3rd line
+  'pcf' - Paint circle with fill pattern
+          Arguments: <color> <x> <y> <radius> <pattern>
+              color: 'f' = foreground, 'b' = background
+              x: 0..127
+              y: 0..63
+              radius: 1..31
+              pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
+                       4 = <unsupported>, 5 = clear
+  'pd'  - Paint dot
+          Arguments: <color> <x> <y>
+              color: 'f' = foreground, 'b' = background
+              x: 0..127
+              y: 0..63
+  'pl'  - Paint line
+          Arguments: <color> <xstart> <ystart> <xend> <yend>
+              color: 'f' = foreground, 'b' = background
+              xstart: 0..127
+              ystart: 0..63
+              xend: 0..127
+              yend: 0..63
+  'pr'  - Paint rectangle
+          Arguments: <color> <x> <y> <xsize> <ysize>
+              color: 'f' = foreground, 'b' = background
+              x: 0..127
+              y: 0..63
+              xsize: 1..128
+              ysize: 1..64
+  'prf' - Paint rectangle with fill pattern
+          Arguments: <color> <x> <y> <xsize> <ysize> <align> <pattern>
+              color: 'f' = foreground, 'b' = background
+              x: 0..127
+              y: 0..63
+              xsize: 1..128
+              ysize: 1..64
+              align (for pattern 1-3): 0 = top, 1 = bottom, 2 = auto
+              pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
+                       4 = inverse, 5 = clear
+  'rn'  - Repeat loop next
+  'rw'  - Repeat loop while
+          Arguments: <variable> <condition> <end> <start> <step>
+              variable: one or two characters 'a'..'z'
+              condition: '<' = variable value is less than end value,
+                         '>' = variable value is greater than end value,
+                         '<=' = variable value is less than or equal to end
+                                value,
+                         '>=' = variable value is greater than or equal to end
+                                value
+                         '<>' = variable value is unequal to end value
+              end: signed 32-bit integer
+              start: signed 32-bit integer
+              step: signed 32-bit integer
+  'q'   - Keypress to interrupt execution of command or command file
+  'sp'  - Print statistics on stub and LCD device
+  'sr'  - Reset statistics on stub and LCD device
+  'tf'  - Flush Monochron time and date to active clock
+  'tp'  - Print time/date/alarm
+  'tr'  - Reset time to system time
+  'ts'  - Set time
+          Arguments: <hour> <min> <sec>
+              hour: 0..23
+              min: 0..59
+              sec: 0..59
+  'vp'  - Print value of variable(s)
+          Argument: <variable>
+              variable: one or two characters 'a'..'z'
+                        or '*' for all variables
+  'vr'  - Reset variable(s)
+          Argument: <variable>
+              variable: one or two characters 'a'..'z'
+                        or '*' for all variables
+  'vs'  - Set value of variable 
+          Arguments: <variable> <value>
+              variable: one or two characters 'a'..'z'
+              value: signed 32-bit integer
+  'w'   - Wait for keypress or amount of time
+          Argument: <delay>
+              delay: 0 = wait for keypress, >0 = wait delay*0.01 sec
+          When waiting for keypress, a 'q' will return control back to the
+          mchron command prompt
+  'x'   - Exit
+
+Examples:
+  le
+    Erase LCD display
+  pr f 10 20 15 18
+    Paint rectangle -> Foreground color -> Position 10,20 with size 15x18
+  pcf f 64 32 20 1
+    Paint circle with fill pattern -> Foreground color -> Center 64,32 with
+    radius 20 using fill pattern 'half'  
+  ts 19 12 34
+    Set mchron time -> 19:12:34
+
+Reminder:
+  - To enable coredump file creation in the current (bash) shell enter the
+    following command once prior to running mchron: ulimit -c unlimited
+

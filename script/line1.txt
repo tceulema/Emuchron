@@ -1,0 +1,25 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test glcdLine()
+#
+
+# Erase LCD display
+le
+
+# Paint mirrored horizontal lines
+rw v <= 61 1 3
+  pl f 1 v 64 31
+  pl f 62 31 125 v
+rn
+
+# Paint mirrored vertical lines
+rw h <= 123 3 5
+  pl f h 0 63 31
+  pl f h 62 63 31
+rn
+
+# Paint the function name in a cleared rectangle
+prf f 49 28 29 7 0 5
+pa f 50 29 5x5p h 1 1 glcdline
+

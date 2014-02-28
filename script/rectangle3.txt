@@ -1,0 +1,33 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Show the several fill types for glcdFillRectangle2()
+#
+
+# Erase LCD display and paint the function name
+le
+pa f 1 1 5x5p h 1 1 glcdfillrectangle2 - fill patterns
+
+# Draw the rectangle text headers
+pa f 13 9 5x5p h 1 1 Full
+pa f 53 9 5x5p h 1 1 Half
+pa f 89 9 5x5p h 1 1 3rd Up
+pa f 3 37 5x5p h 1 1 3rd Down
+pa f 48 37 5x5p h 1 1 Inverse
+pa f 90 37 5x5p h 1 1 Blank
+
+# Draw the cross lines for pattern 0, 4 and 5
+pl f 4 15 34 33
+pl f 4 33 34 15
+pl f 44 43 74 61
+pl f 44 61 74 43
+pl f 84 43 114 61
+pl f 84 61 114 43
+
+# Draw the six filled rectangles
+rw x < 3 0 1
+  rw y < 2 0 1
+    prf f (10+40*x) (15+y*28) 19 19 0 (y*3+x)
+  rn
+rn
+

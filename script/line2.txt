@@ -1,0 +1,27 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: This script is used for testing gldcdLine()
+#
+
+# Erase LCD display
+le
+
+# Set horizontal and vertical display size
+vs h 127
+vs v 63
+
+# Paint in total 9x4 edge-to-edge lines
+rw a <= 90 10 10
+  # From left to top and left to bottom
+  pl f 0 v/100*a h-(h/100*a) 0
+  pl f 0 v/100*a h/100*a v
+  # From right to top and right to bottom
+  pl f h v-(v/100*a) h-(h/100*a) 0
+  pl f h v-(v/100*a) h/100*a v
+rn
+
+# Paint the glcdline function name in a rectangle box
+pr f 48 27 31 9
+pa f 50 29 5x5p h 1 1 glcdline
+

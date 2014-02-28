@@ -1,0 +1,28 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test glcdFillRectangle2()
+#
+
+# Erase LCD display and paint the function name
+le
+pa f 0 0 5x5p h 1 1 glcdFillRectangle2
+
+# Enclose the paint area with a big rectangle
+pr f 3 6 122 57
+
+# Almost indefinitely keep animating filled rectangles of
+# mixed length and width
+rw rm >= 0 1000000 -1
+  vs dx 1
+  rw x < 14 0 1
+    vs dy 1
+    rw y < 9 0 1
+      prf f x+dx+4 y+dy+7 x+1 y+1 2 (x+y+rm)%6
+      vs dy y+dy+1
+    rn
+    vs dx x+dx+1
+  rn
+  w 10
+rn
+

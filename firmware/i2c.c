@@ -1,18 +1,6 @@
-/*! \file i2c.c \brief I2C interface using AVR Two-Wire Interface (TWI) hardware. */
 //*****************************************************************************
-//
-// File Name	: 'i2c.c'
-// Title		: I2C interface using AVR Two-Wire Interface (TWI) hardware
-// Author		: Pascal Stang - Copyright (C) 2002-2003
-// Created		: 2002.06.25
-// Revised		: 2003.03.02
-// Version		: 0.9
-// Target MCU	: Atmel AVR series
-// Editor Tabs	: 4
-//
-// This code is distributed under the GNU Public License
-//		which can be found at http://www.gnu.org/licenses/gpl.txt
-//
+// Filename : 'i2c.c'
+// Title    : I2C interface using AVR Two-Wire Interface (TWI) hardware
 //*****************************************************************************
 
 #include <avr/io.h>
@@ -74,7 +62,7 @@ void i2cInit(void)
 
 void i2cSetBitrate(u16 bitrate)
 {
-	u08 bitrate_div;
+	//u08 bitrate_div;
 	// set i2c bitrate
 	// SCL freq = F_CPU/(16+2*TWBR))
 	/*
@@ -88,26 +76,26 @@ void i2cSetBitrate(u16 bitrate)
 	*/
 
 	// calculate bitrate division	
-	bitrate_div = (F_CPU/32)/bitrate;
+	//bitrate_div = (F_CPU/32)/bitrate;
 	//outb(TWBR, bitrate_div);
 	TWBR = 32;
 }
 
-void i2cSetLocalDeviceAddr(u08 deviceAddr, u08 genCallEn)
+/*void i2cSetLocalDeviceAddr(u08 deviceAddr, u08 genCallEn)
 {
 	// set local device address (used in slave mode only)
 	outb(TWAR, ((deviceAddr&0xFE) | (genCallEn?1:0)) );
-}
+}*/
 
-void i2cSetSlaveReceiveHandler(void (*i2cSlaveRx_func)(u08 receiveDataLength, u08* recieveData))
+/*void i2cSetSlaveReceiveHandler(void (*i2cSlaveRx_func)(u08 receiveDataLength, u08* recieveData))
 {
 	i2cSlaveReceive = i2cSlaveRx_func;
-}
+}*/
 
-void i2cSetSlaveTransmitHandler(u08 (*i2cSlaveTx_func)(u08 transmitDataLengthMax, u08* transmitData))
+/*void i2cSetSlaveTransmitHandler(u08 (*i2cSlaveTx_func)(u08 transmitDataLengthMax, u08* transmitData))
 {
 	i2cSlaveTransmit = i2cSlaveTx_func;
-}
+}*/
 
 inline void i2cSendStart(void)
 {
@@ -157,11 +145,11 @@ inline u08 i2cGetReceivedByte(void)
 	return( inb(TWDR) );
 }
 
-inline u08 i2cGetStatus(void)
+/*inline u08 i2cGetStatus(void)
 {
 	// retieve current i2c status from i2c TWSR
 	return( inb(TWSR) );
-}
+}*/
 
 void i2cMasterSend(u08 deviceAddr, u08 length, u08* data)
 {
@@ -295,8 +283,8 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
 
 	return retval;
 }
-/*
-void i2cMasterTransferNI(u08 deviceAddr, u08 sendlength, u08* senddata, u08 receivelength, u08* receivedata)
+
+/* void i2cMasterTransferNI(u08 deviceAddr, u08 sendlength, u08* senddata, u08 receivelength, u08* receivedata)
 {
 	// disable TWI interrupt
 	cbi(TWCR, TWIE);
@@ -562,7 +550,7 @@ SIGNAL(TWI_vect)
 	}
 }
 
-eI2cStateType i2cGetState(void)
+/*eI2cStateType i2cGetState(void)
 {
 	return I2cState;
-}
+}*/

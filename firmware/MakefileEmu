@@ -1,0 +1,84 @@
+#
+# Emuchron emulator and mchron command line tool makefile
+#
+
+# Compiler/linker/tool settings
+CC = gcc
+CFLAGS = -g -std=gnu99 -Wall -MMD
+CLIB = -lm -lncurses -lreadline -lglut -lGLU -lpthread
+FLEX = flex
+FLIB = -lfl
+BISON = bison
+REMOVE = rm --force
+
+# Select Linux emulator stub code
+STUB = -DEMULIN
+
+# Uncomment this to get bison runtime trace output.
+# This also requires a code section in expr.y [firmware/emulator] to be
+# uncommented. Keep the flag below and that code section in sync.
+#BDEBUG = --debug
+
+# Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
+# There is a similar switch in Makefile that should be in sync with this one.
+# Note: This will cost you ~840 bytes of Monochron program and data space.
+#       In Emuchron program and data space is of no concern.
+MARIO = -DMARIO
+
+# The clock and emulator source files and target
+CSRC = emulator/stub.c emulator/lcd.c emulator/lcdglut.c emulator/lcdncurses.c \
+  emulator/scanutil.c emulator/mchronutil.c emulator/mchron.c \
+  ratt.c ks0108.c glcd.c config.c anim.c \
+  clock/analog.c clock/digital.c clock/mosquito.c clock/nerd.c clock/pong.c \
+  clock/puzzle.c clock/slider.c \
+  clock/spotfire.c clock/cascade.c clock/speeddial.c clock/spiderplot.c \
+  clock/trafficlight.c
+FSRC = emulator/expr.l
+BSRC = emulator/expr.y
+TARGET = mchron
+
+# Define object and dependency files using source files
+COBJ = $(CSRC:.c=.o)
+CDEP = $(CSRC:.c=.d)
+FOBJ = $(FSRC:.l=.yy.c)
+BOBJ = $(BSRC:.y=.tab.c)
+BOBJH = $(BSRC:.y=.tab.h)
+
+# ---------------------------------------------------------------------------
+
+# Build project (= emuchron with mchron)
+all:	$(COBJ) $(BOBJ) $(FOBJ)
+	$(CC) -g -o $(TARGET) $(CLIB) $(COBJ) $(BOBJ) $(FOBJ) $(FLIB)
+
+# Clean project
+clean:	
+	$(REMOVE) $(TARGET); \
+	$(REMOVE) $(COBJ); \
+	$(REMOVE) $(CDEP); \
+	$(REMOVE) $(FOBJ); \
+	$(REMOVE) $(BOBJ); \
+	$(REMOVE) $(BOBJH);
+
+# Rebuild project
+rebuild:	clean all
+
+# Build expression evaluator
+expr:	$(BOBJ) $(FOBJ)
+
+# ---------------------------------------------------------------------------
+
+# Create parser object for y source file
+%.tab.c:	%.y
+	$(BISON) $(BDEBUG) -o $@ -d $<
+
+# Create scanner object for l source file
+%.yy.c:	%.l
+	$(FLEX) -o $@ $<
+
+# Create c object file for c source file
+%.o:	%.c
+	$(CC) -c $(CFLAGS) $(STUB) $(MARIO) -o $@ $<
+
+# Pull in dependencies created by gcc flag -MMD
+-include $(CDEP)
+

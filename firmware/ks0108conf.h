@@ -1,22 +1,6 @@
-/*! \file ks0108conf.h \brief Graphic LCD driver configuration. */
 //*****************************************************************************
-//
-// File Name	: 'ks0108conf.h'
-// Title		: Graphic LCD driver for HD61202/KS0108 displays
-// Author		: Pascal Stang - Copyright (C) 2001-2003
-// Date			: 10/19/2001
-// Revised		: 5/1/2003
-// Version		: 0.5
-// Target MCU	: Atmel AVR
-// Editor Tabs	: 4
-//
-// NOTE: This code is currently below version 1.0, and therefore is considered
-// to be lacking in some functionality or documentation, or may not be fully
-// tested.  Nonetheless, you can expect most functions to work.
-//
-// This code is distributed under the GNU Public License
-//		which can be found at http://www.gnu.org/licenses/gpl.txt
-//
+// Filename : 'ks0108conf.h'
+// Title    : Graphic LCD driver for HD61202/KS0108 displays
 //*****************************************************************************
 
 

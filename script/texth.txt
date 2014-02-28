@@ -1,0 +1,18 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test several options for horizontal text
+#
+
+le
+pa f 1 1 5x5p h 1 1 hello
+pa f 1 13 5x5p h 1 1 hello
+pa f 1 21 5x5p h 2 2 hello
+pa f 21 1 5x5p h 2 2 Even some more
+pa f 1 36 5x5p h 2 5 Squeeze
+
+pa f 30 13 5x7n h 1 1 Hello
+pa f 75 15 5x7n h 1 2 The Dude
+pa f 42 24 5x7n h 1 1 Hello
+pa f 55 38 5x7n h 2 3 Bright
+

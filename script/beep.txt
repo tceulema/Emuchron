@@ -1,0 +1,14 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Hearing aid test
+#
+
+vs du 100
+rw fr <= 7500 150 125
+  b fr du
+rn
+rw fr >= 150 7500 -125
+  b fr du
+rn
+

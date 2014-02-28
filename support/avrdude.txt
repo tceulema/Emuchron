@@ -1,0 +1,22 @@
+### Linux ###
+# Note: Execute avrdude as root and in the folder that holds monochron.hex
+# Note: Device /dev/ttyUSBx may differ based on attached USB devices
+# Note: For parameter -p use either "m328p" or "atmega328p"
+
+# Pre-test: Verify if we can communicate with Monochron
+avrdude -c arduino -p m328p -P /dev/ttyUSB0 -b 57600
+
+# Upload firmware to Monochron. The hex file must reside in current directory.
+avrdude -c arduino -p m328p -P /dev/ttyUSB0 -b 57600 -U flash:w:monochron.hex
+
+### Windows ###
+# Note: Execute avrdude in the folder that holds monochron.hex
+# Note: Port COM3 may differ based on configuration of AVR and avrdude
+# Note: For parameter -p use either "m328p" or "atmega328p"
+
+# Pre-test: Verify if we can communicate with Monochron
+avrdude -c arduino -p m328p -P COM3 -b 57600
+
+# Upload firmware to Monochron. The hex file must reside in current directory.
+avrdude -c arduino -p m328p -P COM3 -b 57600 -U flash:w:monochron.hex
+

@@ -1,0 +1,54 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Demo all kinds of graphics functions
+#
+
+# Release any active clock and give a short beep
+cs 0
+b 1000 100
+
+# Demo several graphics and text functions
+w 10
+e i ../script/paint.txt
+
+w 0
+# Demo the 5x5 proportional font
+e i ../script/font5x5p.txt
+
+w 0
+# Demo horizontal text
+e i ../script/texth.txt
+
+w 0
+# Demo vertical text
+e i ../script/textv.txt
+
+w 0
+# Demo lines
+e i ../script/line1.txt
+
+w 0
+# Demo lines
+e i ../script/line2.txt
+
+w 0
+# Demo circle function
+e i ../script/circle1.txt
+
+w 0
+# Demo circle and circle fill functions
+e i ../script/circle3.txt
+
+w 0
+# Demo rectangle function
+e i ../script/rectangle1.txt
+
+w 0
+# Demo fillrectangle fill patterns
+e i ../script/rectangle3.txt
+
+w 0
+# Demo fillrectangle fill alignment
+e i ../script/rectangle2.txt
+

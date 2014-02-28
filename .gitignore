@@ -1,0 +1,35 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+*.d
+*.eep
+*.lss
+*.map
+*.sym
+
+# Libraries
+*.lib
+*.a
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.elf
+
+# Specific files to ignore
+/firmware/mchron
+/firmware/emulator/expr.tab.c
+/firmware/emulator/expr.tab.h
+/firmware/emulator/expr.yy.c
+

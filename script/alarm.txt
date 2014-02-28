@@ -1,0 +1,39 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose:
+# Use repeat loops to quickly skip through the alarm times of a day
+# and see how a clock redraws itself
+#
+# Prerequisites:
+# - Select a clock (if not selected there's no visual feedback)
+# - Set the minute step using variable 's'
+# - Set the wait delay between alarm times using variable 'w'
+#
+# Usage example (with analog HM, minute step 1 and delay of 0.03 sec):
+# cs 2
+# vs s 1
+# vs w 3
+# e s ../script/alarm.txt
+#
+
+# Set a time so the alarm will not fire
+ts 22 9 30
+
+# Make sure we'll be seeing the alarm time
+ap 1
+
+# Repeat h(our) between 0..23
+rw h < 24 0 1
+  # Repeat m(inute) between 0..59 with step 's'
+  rw m < 60 0 s
+    # Change the alarm using the 'h' and 'm' variables
+    # This will update the layout of the selected clock
+    as h m
+    # Wait 'w'*0.01 second
+    w w
+  # Next m(inute)
+  rn
+# Next h(our)
+rn
+

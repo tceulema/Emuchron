@@ -1,0 +1,42 @@
+#
+# For instructions refer to section 3.3 of the Emuchron pdf manual.
+#
+# This command script will install everything you need to be able to:
+# - Build Monochron firmware
+# - Build Emuchron and the mchron command line tool
+# - Connect and upload firmware to Monochron via the FTDI port
+# - Read Monochron debug strings from the FTDI port
+# - Debug clock and high-level graphics code
+#
+# !! Run this script with root privileges !!
+#
+
+# Compiler and AVR stuff
+apt-get install gcc
+apt-get install make
+apt-get install flex
+apt-get install byacc
+apt-get install bison
+apt-get install libusb-dev
+apt-get install avr-libc
+apt-get install gcc-avr
+apt-get install avrdude
+
+# Debugger and gui front-ends
+apt-get install gdb
+apt-get install ddd
+apt-get install nemiver
+
+# LCD device stubs
+apt-get install libncurses5-dev
+apt-get install freeglut3-dev
+
+# Piezo (audio) device stub
+apt-get install sox
+
+# Readline library
+apt-get install libreadline-dev
+
+# Read Monochron debug strings from FTDI port
+apt-get install minicom
+

@@ -1,0 +1,25 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose:
+# Use repeat loop to quickly skip through the minutes of one
+# hour and see how a clock redraws itself
+#
+# Prerequisites:
+# - Select a clock (if not selected there's no visual feedback)
+#
+# Usage example (with analog HM):
+# cs 2
+# e s ../script/minutes.txt
+#
+
+# Repeat m(inute) between 0..59
+rw m < 60 0 1
+  # Change the time using the 'm' variable
+  # This will update the layout of the selected clock
+  ts 16 m 30
+  # Wait 0.2 second
+  w 20
+# Next m(inute)
+rn
+
