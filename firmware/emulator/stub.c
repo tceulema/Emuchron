@@ -628,7 +628,7 @@ void stubEepromReset(void)
 //
 uint8_t stubEeprom_read_byte(uint8_t *eprombyte)
 {
-  int idx = (int)eprombyte;
+  size_t idx = (size_t)eprombyte;
   return eeprom[idx];
 }
 
@@ -639,7 +639,7 @@ uint8_t stubEeprom_read_byte(uint8_t *eprombyte)
 //
 void stubEeprom_write_byte(uint8_t *eprombyte, uint8_t value)
 {
-  int idx = (int)eprombyte;
+  size_t idx = (size_t)eprombyte;
   eeprom[idx] = value;
 }
 
