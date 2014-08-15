@@ -13,6 +13,9 @@ int exprValue;
 // Indicates if an error occured while evaluating a variable (most
 // likely caused by variable not being active or invalid identifier)
 extern int varError;
+
+// Prototype of generated scanner in expr.yy.c
+struct yy_buffer_state *yy_scan_string(const char *);
 %}
 
 %token NUMBER
@@ -80,7 +83,7 @@ int exprEvaluate(char *expString)
   strcpy(yyInput, expString);
 
   // Scan the expression
-  buf = (struct yy_buffer_state *)yy_scan_string(yyInput);
+  buf = yy_scan_string(yyInput);
 
   // Parse the expression
   retVal = yyparse();
