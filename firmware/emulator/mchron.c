@@ -1467,20 +1467,17 @@ int doVarPrint(char *input, int echoCmd)
       if (varActive == GLCD_TRUE)
       {
         varValGet(var, &varValue);
-        if (echoCmd == CMD_ECHO_YES)
+        printf("%s=%d", var, varValue);
+        sprintf(valString, "%s=%d", var, varValue);
+        tabCount = tabCount + strlen(valString) / 8 + 1;
+        if (tabCount < tabCountMax)
         {
-          printf("%s=%d", var, varValue);
-          sprintf(valString, "%s=%d", var, varValue);
-          tabCount = tabCount + strlen(valString) / 8 + 1;
-          if (tabCount < tabCountMax)
-          {
-            printf("\t");
-          }
-          else
-          {
-            tabCount = 0;
-            printf("\n");
-          }
+          printf("\t");
+        }
+        else
+        {
+          tabCount = 0;
+          printf("\n");
         }
       }
     }
@@ -1493,20 +1490,17 @@ int doVarPrint(char *input, int echoCmd)
         if (varActive == GLCD_TRUE)
         {
           varValGet(var, &varValue);
-          if (echoCmd == CMD_ECHO_YES)
+          printf("%s=%d", var, varValue);
+          sprintf(valString, "%s=%d", var, varValue);
+          tabCount = tabCount + strlen(valString) / 8 + 1;
+          if (tabCount < tabCountMax)
           {
-            printf("%s=%d", var, varValue);
-            sprintf(valString, "%s=%d", var, varValue);
-            tabCount = tabCount + strlen(valString) / 8 + 1;
-            if (tabCount < tabCountMax)
-            {
-              printf("\t");
-            }
-            else
-            {
-              tabCount = 0;
-              printf("\n");
-            }
+            printf("\t");
+          }
+          else
+          {
+            tabCount = 0;
+            printf("\n");
           }
         }
       }
@@ -1530,10 +1524,7 @@ int doVarPrint(char *input, int echoCmd)
       return CMD_RET_ERROR;
     }    
     varValGet(argWord[1], &varValue);
-    if (echoCmd == CMD_ECHO_YES)
-    {
-      printf("%s=%d\n", argWord[1], varValue);
-    }
+    printf("%s=%d\n", argWord[1], varValue);
   }
 
   return CMD_RET_OK;
