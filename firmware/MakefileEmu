@@ -21,7 +21,7 @@ STUB = -DEMULIN
 
 # Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
 # There is a similar switch in Makefile that should be in sync with this one.
-# Note: This will cost you ~840 bytes of Monochron program and data space.
+# Note: This will cost you ~615 bytes of Monochron program and data space.
 #       In Emuchron program and data space is of no concern.
 MARIO = -DMARIO
 

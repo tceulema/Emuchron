@@ -22,7 +22,7 @@ BASE = anim.c buttons.c config.c glcd.c i2c.c ks0108.c ratt.c util.c
 
 # Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
 # There is a similar switch in MakefileEmu that should be in sync with this one.
-# Note: This will cost you ~840 bytes of Monochron program and data space.
+# Note: This will cost you ~615 bytes of Monochron program and data space.
 MARIO = -DMARIO
 
 # Below are examples of SRC definitions for Monochron firmware.

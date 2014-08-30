@@ -61,8 +61,9 @@ volatile uint16_t animTicker, alarmTicker;
 // Runtime data for two-tone or Mario alarm
 #ifdef MARIO
 uint16_t marioFreq = 0;
-uint16_t marioIdx = sizeof(MarioTones);
-uint16_t marioLength = sizeof(MarioTones);
+uint8_t marioIdx = 0;
+uint8_t marioIdxEnd = 0;
+uint8_t marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
 uint8_t marioPauze = GLCD_TRUE;
 #else
 uint8_t alarmTone = 0;
@@ -345,10 +346,16 @@ SIGNAL(TIMER0_COMPA_vect)
     {
 #ifdef MARIO
       // Mario chiptune alarm
-      if (marioIdx == marioLength && marioPauze == GLCD_TRUE)
+      if (marioIdx == marioIdxEnd && marioPauze == GLCD_TRUE)
       {
-        // End of tune reached so restart at top
-        marioIdx = 0;
+        // End of current tune line. Move to next line or continue at beginning.
+        if (marioMasterIdx == (uint8_t)(sizeof(MarioMaster) - 2))
+          marioMasterIdx = 0;
+        else
+          marioMasterIdx = marioMasterIdx + 2;
+
+        marioIdx = pgm_read_byte(&MarioMaster[marioMasterIdx]);
+        marioIdxEnd = marioIdx + pgm_read_byte(&MarioMaster[marioMasterIdx + 1]);
       }
 
       // Should we play a tone or a post-tone half beat pauze
@@ -424,7 +431,9 @@ SIGNAL(TIMER0_COMPA_vect)
     PIEZO_PORT &= ~_BV(PIEZO);
     alarmTimer = 0;
 #ifdef MARIO
-    marioIdx = marioLength;
+    // On next audible alarm start at beginning of Mario tune
+    marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+    marioIdx = marioIdxEnd;
     marioPauze = GLCD_TRUE;
 #else
     alarmTone = 0;
@@ -500,7 +509,8 @@ SIGNAL (TIMER2_OVF_vect)
         // Init alarm data at starting positions right before we
         // return from snooze
 #ifdef MARIO
-        marioIdx = marioLength;
+        marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+        marioIdx = marioIdxEnd;
         marioPauze = GLCD_TRUE;
 #else
         alarmTone = 0;
@@ -627,7 +637,9 @@ void alarmStateSet(void)
         alarming = GLCD_FALSE;
         TCCR1B = 0;
 #ifdef MARIO
-        marioIdx = marioLength;
+        // On next audible alarm start at beginning of Mario tune
+        marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+        marioIdx = marioIdxEnd;
         marioPauze = GLCD_TRUE;
 #else
         alarmTone = 0;
@@ -649,7 +661,9 @@ void alarmStateSet(void)
       snoozeTimer = 0;
       alarmTimer = 0;
 #ifdef MARIO
-      marioIdx = marioLength;
+      // On next audible alarm start at beginning of Mario tune
+      marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+      marioIdx = marioIdxEnd;
       marioPauze = GLCD_TRUE;
 #else
       alarmTone = 0;

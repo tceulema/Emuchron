@@ -31,34 +31,48 @@
 // Since the quality of the piezo speaker in Monochron is worse than horrible,
 // this 4 Hz delta sounds (pun intended) acceptable to me.
 //
-// Note: The original linear tone search algorithm overhead is replaced by fixed
-// length basic integer arithmetic to reproduce a tone. It is considered to be an
-// acceptable alternative. Also, we no longer need the search tables either, saving
-// a rough 100 bytes on data space.
-// Note: Each byte in this array must have a corresponding byte in MarioBeats[].
+// Then there's the following. The Mario tune partly consists of repeated
+// sequences of tones+durations. By cutting out the redundancy we can reduce the
+// size of the tones+durations arrays. So, instead of 295 bytes for the entire
+// tune we can cut it back to 10 unique tone+duration sequences requiring only 150
+// bytes. By applying this approach on both the tone and durations arrays below
+// we'll save a total of 290 data bytes. A nice side effect of this is that because
+// the array size is now less than 255 elements we now can use uint8_t array
+// indices instead of uint16_t indices, leading to a substantial save in generated
+// object code. The downside of this is that we need a master table that defines
+// the sequence of unique tones+durations sets to be played, and that the logic to
+// play these sets becomes slightly more complicated. But, these extra costs are
+// outweighed by the savings reached by no longer needing the linear search arrays
+// in the firmware.
+// All in all, by cutting out the data redundancy, we save an additional ~225
+// bytes on the image size, free to be used by clock code.
+// 
+// Note: Each byte in MarioTones[] must have a corresponding byte in MarioBeats[].
 //
 const unsigned char __attribute__ ((progmem)) MarioTones[] =
-{ 146, 146, 0, 146, 0, 116, 146, 0, 174, 0, 0, 87, 0, 0, 116, 0, 0, 87, 0, 73, 0, 0, 98,
-0, 110, 0, 104, 98, 0, 87, 146, 174, 196, 0, 155, 174, 0, 146, 0, 116, 130, 110, 0, 116,
-0, 0, 87, 0, 73, 0, 0, 98, 0, 110, 0, 104, 98, 0, 87, 146, 174, 196, 0, 155, 174, 0,
-146, 0, 116, 130, 110, 0, 0, 174, 164, 155, 138, 0, 146, 0, 92, 98, 116, 0, 98, 116,
-130, 0, 174, 164, 155, 138, 0, 146, 0, 232, 0, 232, 232, 0, 0, 0, 174, 164, 155, 138, 0,
-146, 0, 92, 98, 116, 0, 98, 116, 130, 0, 138, 0, 0, 130, 0, 116, 0, 0, 0, 116, 116, 0,
-116, 0, 116, 130, 0, 146, 116, 0, 98, 87, 0, 0, 116, 116, 0, 116, 0, 116, 130, 146, 0,
-0, 116, 116, 0, 116, 0, 116, 130, 0, 146, 116, 0, 98, 87, 0, 0, 146, 146, 0, 146, 0,
-116, 146, 0, 174, 0, 0, 87, 0, 0, 116, 0, 0, 87, 0, 73, 0, 0, 98, 0, 110, 0, 104, 98,
-0, 87, 146, 174, 196, 0, 155, 174, 0, 146, 0, 116, 130, 110, 0, 116, 0, 0, 87, 0, 73, 0,
-0, 98, 0, 110, 0, 104, 98, 0, 87, 146, 174, 196, 0, 155, 174, 0, 146, 0, 116, 130, 110,
-0, 146, 116, 0, 87, 0, 92, 0, 98, 155, 0, 155, 98, 0, 0, 110, 196, 196, 196, 174, 155,
-146, 116, 0, 98, 87, 0, 0, 146, 116, 0, 87, 0, 92, 0, 98, 155, 0, 155, 98, 0, 0, 110,
-155, 0, 155, 155, 146, 130, 116, 73, 0, 73, 58, 0, 0, 0, 0 };
+{
+// Metadata: playLine + byteIdx + byteLen + byteLenTotal
+/*  1   0 14  14 */ 146, 146, 0, 146, 0, 116, 146, 0, 174, 0, 0, 87, 0, 0,
+/*  2  14 29  43 */ 116, 0, 0, 87, 0, 73, 0, 0, 98, 0, 110, 0, 104, 98, 0, 87, 146,
+                    174, 196, 0, 155, 174, 0, 146, 0, 116, 130, 110, 0,
+/*  3  43 15  58 */ 0, 174, 164, 155, 138, 0, 146, 0, 92, 98, 116, 0, 98, 116, 130,
+/*  4  58 14  72 */ 0, 174, 164, 155, 138, 0, 146, 0, 232, 0, 232, 232, 0, 0,
+/*  5  72 10  82 */ 0, 138, 0, 0, 130, 0, 116, 0, 0, 0,
+/*  6  82 15  97 */ 116, 116, 0, 116, 0, 116, 130, 0, 146, 116, 0, 98, 87, 0, 0,
+/*  7  97 10 107 */ 116, 116, 0, 116, 0, 116, 130, 146, 0, 0,
+/*  8 107 14 121 */ 146, 116, 0, 87, 0, 92, 0, 98, 155, 0, 155, 98, 0, 0,
+/*  9 121 13 134 */ 110, 196, 196, 196, 174, 155, 146, 116, 0, 98, 87, 0, 0,
+/* 10 134 16 150 */ 110, 155, 0, 155, 155, 146, 130, 116, 73, 0, 73, 58, 0, 0, 0, 0
+};
 
 //
 // The Arduino firmware stores the 295 beats as floats, which is 4 bytes per beat.
 // To reduce the program space footprint and to avoid the use of floating point
 // arithmetic we want put a single beat in a byte. A densed Mario beat is put in a
 // byte using division factor MAR_BEATFACTOR. This approach saves us CPU expensive
-// floating point arithmetic and... 885 bytes of data space!
+// floating point arithmetic and lots of data space. And, as noted above, by cutting
+// out data redundancy as well, instead of 1180 data bytes (295 floats) we'll only
+// need 150. Nice!
 // Concerning inaccuracies in reproducing durations, here's the worst-case scenario:
 // When in the Arduino data a beat duration 1.3 is used this leads to a duration of
 // 1.3 * MAR_TEMPO = 123 msec. Our implementation for the same beat in a byte will
@@ -66,33 +80,62 @@ const unsigned char __attribute__ ((progmem)) MarioTones[] =
 // Since the quality of the piezo speaker in Monochron is worse than horrible
 // this 3 msec delta sounds (pun intended) acceptable to me.
 //
-// Note: Yes, the floating point arithmetic is replaced by a slightly more
-// complicated integer algorithm to expand a byte value. The integer algorithm is
-// expected to be much faster than its floating point counterpart.
-// Note: Looking at the data below we can even put each value in a nibble, saving
-// an additional 295 / 2 = 147 data space bytes. However, the algorithm to expand
-// the nibble back to its value becomes more CPU intensive and will cost approx. 70
-// extra bytes of runtime code, making the total savings only 75 bytes. Considering
-// the additional CPU strain in the 1 msec interrupt handler, this approach has
-// been rejected and as such we'll stick to using byte values instead.
-// Note: Each byte in this array must have a corresponding tone in MarioTones[].
-//
 const unsigned char __attribute__ ((progmem)) MarioBeats[] =
-{ 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 6, 3, 3, 3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 3,
-3, 6, 3, 3, 6, 12, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 12,
-12, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 6,
-3, 3, 3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3,
-3, 3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3,
-3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 6, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 6, 3, 3, 3, 3, 6,
-3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 3, 3, 4, 4, 4, 3, 3, 3, 3, 3, 12, 12, 12, 12 };
+{
+// Metadata: playLine + byteIdx + byteLen + byteLenTotal
+/*  1   0 14  14 */ 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 6,
+/*  2  14 29  43 */ 3, 3, 3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+                    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6,
+/*  3  43 15  58 */ 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+/*  4  58 14  72 */ 6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6,
+/*  5  72 10  82 */ 6, 3, 3, 3, 3, 6, 3, 3, 6, 12,
+/*  6  82 15  97 */ 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6,
+/*  7  97 10 107 */ 3, 3, 3, 3, 3, 3, 3, 3, 12, 12,
+/*  8 107 14 121 */ 3, 3, 3, 3, 6, 3, 3, 3, 3, 3, 3, 3, 3, 6,
+/*  9 121 13 134 */ 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 6,
+/* 10 134 16 150 */ 3, 3, 3, 3, 4, 4, 4, 3, 3, 3, 3, 3, 12, 12, 12, 12
+};
+
+//
+// The Mario tune partly consists of repeated sets of tones with play duration. In
+// total 295 tones are played. Data is saved by removing the redundancy and instead
+// create data for only uniquely played parts. This will save us ~290 tone and
+// duration bytes. However, in order to play Mario properly we will now need a master
+// table to play the sequence of unique tune parts. It turns out that Mario consists
+// of 17 lines. Array MarioMaster[] introduces this master play table, at a cost of
+// 34 bytes.
+// Each play line consists of two bytes:
+// - The first byte is the index in the tones+duration arrays for the line to play.
+// - The second byte is the number of tones to play for the line (after which to move
+//   on to play the next line or restart at the beginning).
+//
+const unsigned char __attribute__ ((progmem)) MarioMaster[] =
+{
+// Metadata: line + playLine + byteIdx + byteLen + byteLenTotal
+/*  1  1   0 14  14 */   0, 14,
+/*  2  2  14 29  43 */  14, 29,
+/*  3  2  14 29  72 */  14, 29,
+/*  4  3  43 15  87 */  43, 15,
+/*  5  4  58 14 101 */  58, 14,
+/*  6  3  43 15 116 */  43, 15,
+/*  7  5  72 10 126 */  72, 10,
+/*  8  6  82 15 141 */  82, 15,
+/*  9  7  97 10 151 */  97, 10,
+/* 10  6  82 15 166 */  82, 15,
+/* 11  1   0 14 180 */   0, 14,
+/* 12  2  14 29 209 */  14, 29,
+/* 13  2  14 29 238 */  14, 29,
+/* 14  8 107 14 252 */ 107, 14,
+/* 15  9 121 13 265 */ 121, 13,
+/* 16  8 107 14 279 */ 107, 14,
+/* 17 10 134 16 295 */ 134, 16
+};
 
 #ifdef EMULIN
 // Constants derived from array sizes to be used for sanity checks in Emuchron
 const int marioTonesLen = sizeof(MarioTones);
 const int marioBeatsLen = sizeof(MarioBeats);
+const int marioMasterLen = sizeof(MarioMaster);
 #endif
 #endif
 

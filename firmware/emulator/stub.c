@@ -38,7 +38,8 @@ volatile uint8_t buttonholdcounter = 0;
 // Mario chiptune alarm data
 extern const unsigned char __attribute__ ((progmem)) MarioTones[];
 extern const unsigned char __attribute__ ((progmem)) MarioBeats[];
-extern uint16_t marioLength;
+extern const unsigned char __attribute__ ((progmem)) MarioMaster[];
+extern uint16_t marioMasterLen;
 #endif
 
 // Stubbed hardware related stuff
@@ -155,8 +156,19 @@ void alarmSoundStart(void)
 
     char *mallocPtr = NULL;
     int i = 0;
+    int j = 0;
+    int lineStart = 0;
+    int lineLength = 0;
     int paramsIdx = 0;
-    char *params[marioLength * 2 + 5];
+    int totalLength = 0;
+
+    // Get the total number of Mario tones to play and based on that
+    // declare an array that fits all required shell commands to play it
+    for (i = 0; i <= (marioMasterLen - 2); i = i + 2)
+    {
+      totalLength = totalLength + MarioMaster[i + 1];
+    }
+    char *params[totalLength * 2 + 5];
 
     // Begin of the execvp parameters
     params[0] = "/usr/bin/play";
@@ -164,22 +176,31 @@ void alarmSoundStart(void)
 
     // Generate the Mario chiptune tones for execvp
     paramsIdx = 2;
-    for (i = 0; i < marioLength; i++)
-    {
-      // Add the tone to be played
-      mallocPtr = malloc(80);
-      sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin %d",
-        (float)(MarioBeats[i] * MAR_TEMPO / MAR_BEATFACTOR) / 1000,
-        MarioTones[i] * MAR_TONEFACTOR);
-      params[paramsIdx] = mallocPtr;
-      paramsIdx++;
 
-      // Add the pauze between tones
-      mallocPtr = malloc(80);
-      sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin %d",
-        (float)(MAR_TEMPO / 2) / 1000, 0);
-      params[paramsIdx] = mallocPtr;
-      paramsIdx++;
+    // Mario alarm
+    for (i = 0; i < marioMasterLen; i = i + 2)
+    {
+      lineStart = MarioMaster[i];
+      lineLength = MarioMaster[i + 1];
+      for (j = lineStart; j < lineStart + lineLength; j++)
+      {
+        // Add the tone to be played
+        mallocPtr = malloc(80);
+
+        // The tone using a beat byte
+        sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin %d",
+          (float)(MarioBeats[j] * MAR_TEMPO / MAR_BEATFACTOR) / 1000,
+          MarioTones[j] * MAR_TONEFACTOR);
+        params[paramsIdx] = mallocPtr;
+        paramsIdx++;
+
+        // Add a pauze of half a beat between tones
+        mallocPtr = malloc(80);
+        sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin %d",
+          (float)(MAR_TEMPO / 2) / 1000, 0);
+        params[paramsIdx] = mallocPtr;
+        paramsIdx++;
+      }
     }
 
     // Set play repeat and end of the execvp parameters
