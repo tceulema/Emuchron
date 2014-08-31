@@ -2,9 +2,14 @@
 # Emuchron emulator and mchron command line tool makefile
 #
 
+# Disable built-in make rules for lex/yacc as we'll be using flex/bison
+%.c: %.y
+%.c: %.l
+
 # Compiler/linker/tool settings
 CC = gcc
 CFLAGS = -g -std=gnu99 -Wall -MMD
+EVALFLAGS = -g -MMD
 CLIB = -lm -lncurses -lreadline -lglut -lGLU -lpthread
 FLEX = flex
 FLIB = -lfl
@@ -35,6 +40,7 @@ CSRC = emulator/stub.c emulator/lcd.c emulator/lcdglut.c emulator/lcdncurses.c \
   clock/trafficlight.c
 FSRC = emulator/expr.l
 BSRC = emulator/expr.y
+EVALSRC = emulator/expr.c
 TARGET = mchron
 
 # Define object and dependency files using source files
@@ -43,12 +49,13 @@ CDEP = $(CSRC:.c=.d)
 FOBJ = $(FSRC:.l=.yy.c)
 BOBJ = $(BSRC:.y=.tab.c)
 BOBJH = $(BSRC:.y=.tab.h)
+EVALOBJ = $(EVALSRC:.c=.o)
+EVALDEP = $(EVALSRC:.c=.d)
 
 # ---------------------------------------------------------------------------
 
 # Build project (= emuchron with mchron)
-all:	$(COBJ) $(BOBJ) $(FOBJ)
-	$(CC) -g -o $(TARGET) $(CLIB) $(COBJ) $(BOBJ) $(FOBJ) $(FLIB)
+all:	$(TARGET)
 
 # Clean project
 clean:	
@@ -57,28 +64,41 @@ clean:
 	$(REMOVE) $(CDEP); \
 	$(REMOVE) $(FOBJ); \
 	$(REMOVE) $(BOBJ); \
-	$(REMOVE) $(BOBJH);
+	$(REMOVE) $(BOBJH); \
+	$(REMOVE) $(EVALOBJ); \
+	$(REMOVE) $(EVALDEP);
 
 # Rebuild project
 rebuild:	clean all
 
 # Build expression evaluator
-expr:	$(BOBJ) $(FOBJ)
+expr:	$(EVALOBJ)
 
 # ---------------------------------------------------------------------------
 
-# Create parser object for y source file
+# Generate parser c source from y source file
 %.tab.c:	%.y
 	$(BISON) $(BDEBUG) -o $@ -d $<
 
-# Create scanner object for l source file
+# Generate scanner c source from l source file
 %.yy.c:	%.l
 	$(FLEX) -o $@ $<
+
+# Create scanner/parser object file from generated source files
+$(EVALOBJ):	$(BOBJ) $(FOBJ) $(EVALSRC)
+	$(CC) -c $(EVALFLAGS) -o $(EVALOBJ) $(EVALSRC)
 
 # Create c object file for c source file
 %.o:	%.c
 	$(CC) -c $(CFLAGS) $(STUB) $(MARIO) -o $@ $<
 
+# Create mchron out of object files and libraries
+$(TARGET):	$(COBJ) $(EVALOBJ)
+	$(CC) -o $(TARGET) $(COBJ) $(CLIB) $(EVALOBJ) $(FLIB)
+
 # Pull in dependencies created by gcc flag -MMD
--include $(CDEP)
+-include $(CDEP) $(EVALDEP)
+
+# Listing of phony targets
+.PHONY : all clean rebuild expr
 

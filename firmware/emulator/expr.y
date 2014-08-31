@@ -14,8 +14,10 @@ int exprValue;
 // likely caused by variable not being active or invalid identifier)
 extern int varError;
 
-// Prototype of generated scanner in expr.yy.c
-struct yy_buffer_state *yy_scan_string(const char *);
+// Prototype of generated scanner functions in expr.yy.c
+struct yy_buffer_state *yy_scan_string(const char[]);
+void yy_delete_buffer (struct yy_buffer_state *b);
+int yywrap (void);
 %}
 
 %token NUMBER
@@ -56,7 +58,6 @@ Expression:
 ;
 
 %%
-
 int yyerror(char *s)
 {
   //printf("%s\n", s);
