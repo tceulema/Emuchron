@@ -9,7 +9,7 @@
 # - Set the second step using variable 's'
 # - Set the wait delay between timestamps using variable 'w'
 #
-# Usage example (with digital HMS, second step 2 and delay of 0.04 sec):
+# Usage example (with digital HMS, second step 1 and delay of 0.04 sec):
 # cs 3
 # vs s 1
 # vs w 4

@@ -8,6 +8,7 @@
 *.lss
 *.map
 *.sym
+*.lst
 
 # Libraries
 *.lib
@@ -26,6 +27,7 @@
 *.i*86
 *.x86_64
 *.elf
+core
 
 # Specific files to ignore
 /firmware/mchron
