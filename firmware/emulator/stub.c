@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include "stub.h"
 #include "lcd.h"
+#include "mchronutil.h"
 #include "../ks0108.h"
 #include "../ratt.h"
 #include "../glcd.h"
@@ -133,7 +134,7 @@ void alarmSoundKill(void)
 //
 void alarmSoundStart(void)
 {
-  // Don't do anythng if we're already playing
+  // Don't do anything if we're already playing
   if (playPid >= 0)
     return;
 
@@ -168,7 +169,7 @@ void alarmSoundStart(void)
     {
       totalLength = totalLength + MarioMaster[i + 1];
     }
-    char *params[totalLength * 2 + 5];
+    char *params[totalLength * 2 + 7];
 
     // Begin of the execvp parameters
     params[0] = "/usr/bin/play";
@@ -203,10 +204,12 @@ void alarmSoundStart(void)
       }
     }
 
-    // Set play repeat and end of the execvp parameters
-    params[paramsIdx] = "repeat";
-    params[paramsIdx + 1] = "100";
-    params[paramsIdx + 2] = NULL;
+    // Set use of alsa and play repeat and end of the execvp parameters
+    params[paramsIdx] = "-t";
+    params[paramsIdx + 1] = "alsa";
+    params[paramsIdx + 2] = "repeat";
+    params[paramsIdx + 3] = "100";
+    params[paramsIdx + 4] = NULL;
 
     // Play Mario!
     execvp("/usr/bin/play", params);
@@ -220,10 +223,10 @@ void alarmSoundStart(void)
     //   "|/usr/bin/sox -n -p synth 0.325000 sin 0",
     //   "|/usr/bin/sox -n -p synth 0.325000 sin 3750",
     //   "|/usr/bin/sox -n -p synth 0.325000 sin 0",
-    //   "repeat", "3600", 0);
+    //   "-t", "alsa", "repeat", "3600", 0);
     //
     // Example of a similar (yet shorter) command in bash is as follows (copy/paste):
-    // /usr/bin/play -q "|/usr/bin/sox -n -p synth 0.3 sin 4000" "|/usr/bin/sox -n -p synth 0.3 sin 0" repeat 7200
+    // /usr/bin/play -q "|/usr/bin/sox -n -p synth 0.3 sin 4000" "|/usr/bin/sox -n -p synth 0.3 sin 0" -t alsa repeat 7200
 
     char soxTone1[80], soxTone2[80], soxSilent[80];
 
@@ -235,7 +238,7 @@ void alarmSoundStart(void)
       (float)ALARMTICK_MS / 1000);
     execlp("/usr/bin/play", "/usr/bin/play", "-q",
       soxTone1, soxSilent, soxTone2, soxSilent,
-      "repeat", "3600", NULL);
+      "-t", "alsa", "repeat", "3600", NULL);
 #endif
     exit(0);
   }
@@ -462,7 +465,7 @@ char kbWaitDelay(int delay)
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_SCAN);
 
-  // Wait till end of delay or a' 'q' keypress
+  // Wait till end of delay or a 'q' keypress
   while (ch != 'q' && timeDiff > 1000)
   {
     // Split time to delay up in parts of max 250msec
@@ -556,7 +559,7 @@ void statsPrint(void)
 
   // First print the stub statistics
   printf("stub   : cycle=%d msec, inTime=%d, outTime=%d\n         ",
-    STUB_CYCLE/1000, inTimeCount, outTimeCount);
+    STUB_CYCLE / 1000, inTimeCount, outTimeCount);
   if (inTimeCount == 0)
   {
     printf("avgSleep=- msec, ");
@@ -604,7 +607,7 @@ void stubBeep(uint16_t hz, uint16_t msec)
 {
   char shellCmd[100];
 
-  sprintf(shellCmd, "/usr/bin/play -q -n synth %f sin %d 2>/dev/null",
+  sprintf(shellCmd, "/usr/bin/play -q -n -t alsa synth %f sin %d",
     ((float)(msec)) / 1000L, hz);
   system(shellCmd);
 }
@@ -855,6 +858,11 @@ char stubGetEvent(void)
       just_pressed = just_pressed | BTTN_SET;
       pressed = pressed | BTTN_SET;
     }
+    else if (c == 't' || c == 'T')
+    {
+      // Print time/date/alarm
+      emuTimePrint();
+    }
     else if (c == '+')
     {
       // + button
@@ -887,6 +895,7 @@ void stubHelpClockFeed(void)
   printf("  p = print performance statistics\n");
   printf("  q = quit\n");
   printf("  r = reset performance statistics\n");
+  printf("  t = print time/date/alarm\n");
   printf("hardware stub keys:\n");
   printf("  a = toggle alarm switch\n");
   printf("  s = set button\n");
@@ -906,6 +915,7 @@ void stubHelpMonochron(void)
   printf("  p = print performance statistics\n");
   printf("  q = quit (valid only when clock is displayed)\n");
   printf("  r = reset performance statistics\n");
+  printf("  t = print time/date/alarm\n");
   printf("hardware stub keys:\n");
   printf("  a = toggle alarm switch\n");
   printf("  m = menu button\n");

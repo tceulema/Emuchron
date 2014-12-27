@@ -43,7 +43,8 @@ Commands:
               clock: 0 = [detach], 1 = analogHMS, 2 = analogHM, 3 = digitalHMS,
                      4 = digitalHM, 5 = mosquito, 6 = nerd, 7 = pong,
                      8 = puzzle, 9 = slider, 10 = cascade, 11 = speed,
-                     12 = spider, 13 = traffic
+                     12 = spider, 13 = traffic, 14 = bigdigOne, 15 = bigdigTwo,
+                     16 = qrHMS, 17 = qrHM
   'dr'  - Reset clock date to system date
   'ds'  - Set clock date
           Arguments: <day> <month> <year>

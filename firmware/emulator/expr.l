@@ -35,7 +35,7 @@ int exprVarValGet(char *var)
 white [ \t]+
 digit [0-9]
 integer {digit}+
-var [a-z]{1,2}
+var [a-z]+
 
 %%
 

@@ -190,7 +190,7 @@ void lcdStatsPrint(void)
     }
     else
     {
-      // Get timediff with previous call
+      // Get time elapsed since interface start time
       (void) gettimeofday(&tv, NULL);
       diffDivider = (double)(((tv.tv_sec - lcdGlutStats.lcdGlutTimeStart.tv_sec) * 1E6 + 
         tv.tv_usec - lcdGlutStats.lcdGlutTimeStart.tv_usec) / 1E4);

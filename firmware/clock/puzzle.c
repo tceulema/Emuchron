@@ -67,6 +67,28 @@ extern volatile uint8_t mcU8Util2;
 // Display mode for clock
 extern volatile uint8_t mcU8Util3;
 
+// Arrays with help page left/right panel text strings
+char *puzzleHelpMsgsLeft[] =
+{
+  animSec,
+  animDay,
+  animMin,
+  animMonth,
+  animHour,
+  animYear
+};
+char *puzzleHelpMsgsRight[] =
+{
+  "Sec / Min",
+  "Day / Mon",
+  "Sec / Hour",
+  "Day / Year",
+  "Min / Hour",
+  "Mon / Year",
+  "All Time",
+  "All Date"
+};
+
 // For each of the eight permutations of a bulb value specify the
 // parameters for the fill circle draw
 bulbDriver_t bulbDriver[] =
@@ -78,7 +100,7 @@ bulbDriver_t bulbDriver[] =
   { 1, FILL_HALF },
   { 1, FILL_THIRDDOWN },
   { 1, FILL_THIRDUP },
-  { 0, FILL_FULL }
+  { 1, FILL_BLANK }
 };
 
 // Local function prototypes
@@ -317,7 +339,7 @@ void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
     return;
 
   // Get the old and new bulb values and update the bulb (if needed)
-  for (i = 0; i <=9; i++)
+  for (i = 0; i <= 9; i++)
   {
     bulbOld = 0;
     bulbNew = 0;
@@ -371,69 +393,43 @@ void puzzleHelp(void)
   // Draw the bulbs
   for (i = 0; i < 4; i++)
   {
+    // Left side
     if (i == 3)
-    {
       color = mcBgColor;
-    }
     else
-    {
-      if (bulbDriver[i].colorCode == 0)
-        color = mcFgColor;
-      else
-        color = mcBgColor;
-    }
+      color = mcFgColor;
     glcdFillCircle2(PUZZLE_HELP_LEFT_X, 14 + i * 14, PUZZLE_BULB_RADIUS,
       bulbDriver[i].fillType, color);
     glcdCircle2(PUZZLE_HELP_LEFT_X, 14 + i * 14, PUZZLE_BULB_RADIUS, CIRCLE_FULL,
       mcFgColor);
 
+    // Right side
     if (i == 0)
-    {
       color = mcFgColor;
-    }
     else
-    {
-      if (bulbDriver[i + 4].colorCode == 0)
-        color = mcFgColor;
-      else
-        color = mcBgColor;
-    }
+      color = mcBgColor;
     glcdFillCircle2(PUZZLE_HELP_RIGHT_X, 14 + i * 14, PUZZLE_BULB_RADIUS,
       bulbDriver[i + 4].fillType, color);
     glcdCircle2(PUZZLE_HELP_RIGHT_X, 14 + i * 14, PUZZLE_BULB_RADIUS, CIRCLE_FULL,
       mcFgColor);
   }
 
-  // Draw the help text
+  // Draw the help text for the top left None bulb
   glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 12, FONT_5X5P,
     "None", mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 22, FONT_5X5P,
-    animSec, mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 29, FONT_5X5P,
-    animDay, mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 36, FONT_5X5P,
-    animMin, mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 43, FONT_5X5P,
-    animMonth, mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 50, FONT_5X5P,
-    animHour, mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 57, FONT_5X5P,
-    animYear, mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET,  8, FONT_5X5P,
-    "Sec / Min", mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 15, FONT_5X5P,
-    "Day / Mon", mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 22, FONT_5X5P,
-    "Sec / Hour", mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 29, FONT_5X5P,
-    "Day / Year", mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 36, FONT_5X5P,
-    "Min / Hour", mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 43, FONT_5X5P,
-    "Mon / Year", mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 50, FONT_5X5P,
-    "All Time", mcFgColor);
-  glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 57, FONT_5X5P,
-    "All Date", mcFgColor);
+
+  // Draw the help texts for the other bulbs
+  // Left side
+  for (i = 0; i < 6; i++)
+  {
+    glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 22 + i * 7, FONT_5X5P,
+      puzzleHelpMsgsLeft[i], mcFgColor);
+  }
+  // Right side
+  for (i = 0; i < 8; i++)
+  {
+    glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 8 + i * 7, FONT_5X5P,
+      puzzleHelpMsgsRight[i], mcFgColor);
+  }
 }
 

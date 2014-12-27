@@ -32,13 +32,15 @@
 #include "../clock/speeddial.h"
 #include "../clock/spiderplot.h"
 #include "../clock/trafficlight.h"
+#include "../clock/bigdigit.h"
+#include "../clock/qr.h"
 
 // Mchron stubs, utilities and command profile defines
 #include "stub.h"
 #include "stubrefs.h"
 #include "lcd.h"
-#include "scanprofile.h"
 #include "scanutil.h"
+#include "scanprofile.h"
 #include "mchronutil.h"
 
 // Monochron defined data
@@ -65,9 +67,6 @@ extern char argChar[];
 extern int argInt[];
 extern char *argWord[];
 extern char *argString;
-
-// Indicator for readline interface type
-extern int useReadline;
 
 // Help function when running the clock or Monochron emulator
 extern void (*stubHelp)(void);
@@ -132,7 +131,11 @@ clockDriver_t emuMonochron[] =
   {CHRON_CASCADE,     DRAW_INIT_FULL, spotCascadeInit,    spotCascadeCycle,    0},
   {CHRON_SPEEDDIAL,   DRAW_INIT_FULL, spotSpeedDialInit,  spotSpeedDialCycle,  0},
   {CHRON_SPIDERPLOT,  DRAW_INIT_FULL, spotSpiderPlotInit, spotSpiderPlotCycle, 0},
-  {CHRON_TRAFLIGHT,   DRAW_INIT_FULL, spotTrafLightInit,  spotTrafLightCycle,  0}
+  {CHRON_TRAFLIGHT,   DRAW_INIT_FULL, spotTrafLightInit,  spotTrafLightCycle,  0},
+  {CHRON_BIGDIG_ONE,  DRAW_INIT_FULL, bigdigInit,         bigdigCycle,         bigdigButton},
+  {CHRON_BIGDIG_TWO,  DRAW_INIT_FULL, bigdigInit,         bigdigCycle,         bigdigButton},
+  {CHRON_QR_HMS,      DRAW_INIT_FULL, qrInit,             qrCycle,             0},
+  {CHRON_QR_HM,       DRAW_INIT_FULL, qrInit,             qrCycle,             0},
 };
 
 // Main command handler function prototypes
@@ -326,7 +329,7 @@ int doAlarmPosition(char *input, int echoCmd)
   uint8_t on = GLCD_TRUE;
   
   // Scan command line with alarm switch position profile
-  _argScan(argAlarmPosition, &input);
+  ARGSCAN(argAlarmPosition, &input);
 
   // Define new alarm switch position
   if (argInt[0] == 0)
@@ -363,7 +366,7 @@ int doAlarmSet(char *input, int echoCmd)
 {
   // Overide alarm
   // Scan command line with alarm set profile
-  _argScan(argAlarmSet, &input);
+  ARGSCAN(argAlarmSet, &input);
 
   // Set new alarm time
   emuAlarmH = ((uint8_t)argInt[0]) % 24;
@@ -425,7 +428,7 @@ int doAlarmSet(char *input, int echoCmd)
 int doBeep(char *input, int echoCmd)
 {
   // Scan command line with beep profile
-  _argScan(argBeep, &input);
+  ARGSCAN(argBeep, &input);
 
   // Sound beep
   beep(argInt[0], (uint8_t)argInt[1]);
@@ -445,7 +448,7 @@ int doClockFeed(char *input, int echoCmd)
   int myKbMode = KB_MODE_LINE;
 
   // Scan command line with clock feed profile
-  _argScan(argClockFeed, &input);
+  ARGSCAN(argClockFeed, &input);
 
   // Get the start mode
   emuStartModeGet(argChar[0], &startMode);
@@ -520,7 +523,7 @@ int doClockFeed(char *input, int echoCmd)
 int doClockSet(char *input, int echoCmd)
 {
   // Scan command line with clock set profile
-  _argScan(argClockSelect, &input);
+  ARGSCAN(argClockSelect, &input);
 
   if (argInt[0] == CHRON_NONE)
   {
@@ -530,15 +533,19 @@ int doClockSet(char *input, int echoCmd)
   else
   {
     // Init clock layout for selected clock
+    if (argInt[0] > sizeof(emuMonochron) / sizeof(clockDriver_t) - 1)
+    {
+      // Requested clock is beyond max value
+      printf("%s? invalid value: %d\n", argClockSelect[0].argName, argInt[0]);
+      return CMD_RET_ERROR;
+    }
     alarmSoundKill();
     mcClockTimeEvent = GLCD_TRUE;
     mcMchronClock = (uint8_t)argInt[0];
     mcAlarmSwitch = ALARM_SWITCH_NONE;
     alarmStateSet();
     animClockDraw(DRAW_INIT_FULL);
-    animClockDraw(DRAW_CYCLE);
-    lcdDeviceFlush(0);
-    mcClockTimeEvent = GLCD_FALSE;
+    emuClockUpdate();
   }
 
   return CMD_RET_OK;
@@ -573,7 +580,7 @@ int doDate(char *input, int echoCmd, int reset)
   {
     // Reset date to system date
     // The command line may not contain additional arguments
-    _argScan(argEnd, &input);
+    ARGSCAN(argEnd, &input);
 
     stubTimeSet(70, 0, 0, 0, 80, 0, 0);
   }
@@ -581,7 +588,7 @@ int doDate(char *input, int echoCmd, int reset)
   {
     // Set date
     // Scan command line with date set profile
-    _argScan(argDateSet, &input);
+    ARGSCAN(argDateSet, &input);
 
     dateOk = stubTimeSet(70, 0, 0, 0, (uint8_t)argInt[0], (uint8_t)argInt[1],
       (uint8_t)argInt[2]);
@@ -596,14 +603,7 @@ int doDate(char *input, int echoCmd, int reset)
   mchronTimeInit();
 
   // Update clock when active
-  if (mcClockPool[mcMchronClock].clockId != CHRON_NONE)
-  {
-    animClockDraw(DRAW_CYCLE);
-    lcdDeviceFlush(0);
-    DEBUGP("Clear time event");
-    mcClockTimeEvent = GLCD_FALSE;
-    time_event = GLCD_FALSE;
-  }
+  emuClockUpdate();
 
   // Report the new date settings
   if (echoCmd == CMD_ECHO_YES)
@@ -637,7 +637,7 @@ int doExecute(char *input, int echoCmd)
   }
 
   // Scan command line with execute profile
-  _argScan(argExecute, &input);
+  ARGSCAN(argExecute, &input);
 
   // Get echo
   if (argChar[0] == 'e')
@@ -688,7 +688,7 @@ int doExit(char *input, int echoCmd)
   int retVal = CMD_RET_OK;
 
   // The command line may not contain additional arguments
-  _argScan(argEnd, &input);
+  ARGSCAN(argEnd, &input);
 
   if (listExecDepth > 0)
   {
@@ -712,7 +712,7 @@ int doExit(char *input, int echoCmd)
 int doHelp(char *input, int echoCmd)
 {
   // The command line may not contain additional arguments
-  _argScan(argEnd, &input);
+  ARGSCAN(argEnd, &input);
 
   if (listExecDepth > 0)
   {
@@ -755,7 +755,7 @@ int doInput(cmdInput_t *cmdInput, int echoCmd)
 
   // We have non-whitespace characters so scan the command line with
   // the command profile
-  _argScan(argCmd, &input);
+  ARGSCAN(argCmd, &input);
 
   // Process the main command
   if (strcmp(argWord[0], "#") == 0)
@@ -964,7 +964,7 @@ int doInput(cmdInput_t *cmdInput, int echoCmd)
 int doLcdBacklightSet(char *input, int echoCmd)
 {
   // Scan command line with backlight profile
-  _argScan(argBacklight, &input);
+  ARGSCAN(argBacklight, &input);
 
   // Process backlight
   emuBacklight = argInt[0];
@@ -981,7 +981,7 @@ int doLcdBacklightSet(char *input, int echoCmd)
 int doLcdErase(char *input, int echoCmd)
 {
   // The command line may not contain additional arguments
-  _argScan(argEnd, &input);
+  ARGSCAN(argEnd, &input);
 
   // Erase LCD display and flush the display
   glcdClearScreen(mcBgColor);
@@ -998,7 +998,7 @@ int doLcdErase(char *input, int echoCmd)
 int doLcdInverse(char *input, int echoCmd)
 {
   // The command line may not contain additional arguments
-  _argScan(argEnd, &input);
+  ARGSCAN(argEnd, &input);
 
   // Toggle the foreground and background colors
   if (mcBgColor == OFF)
@@ -1032,7 +1032,7 @@ int doMonochron(char *input, int echoCmd)
   int myKbMode = KB_MODE_LINE;
 
   // Scan command line with monochron profile
-  _argScan(argMchronStart, &input);
+  ARGSCAN(argMchronStart, &input);
 
   // Get the start mode
   emuStartModeGet(argChar[0], &startMode);
@@ -1114,7 +1114,7 @@ int doPaintAscii(char *input, int echoCmd)
   int color;
 
   // Scan paint ascii text with x/y font scaling profile
-  _argScan(argPaintAscii, &input);
+  ARGSCAN(argPaintAscii, &input);
 
   // Get color
   emuColorGet(argChar[0], &color);
@@ -1140,10 +1140,7 @@ int doPaintAscii(char *input, int echoCmd)
     len = glcdPutStr3((u08)argInt[0], (u08)argInt[1], font, argString,
       (u08)argInt[2], (u08)argInt[3], (u08)color);
     if (echoCmd == CMD_ECHO_YES)
-    {
-      emuPrefixEcho();
       printf("hor px=%d\n", (int)len);
-    }
   }
   else
   {
@@ -1151,10 +1148,7 @@ int doPaintAscii(char *input, int echoCmd)
     len = glcdPutStr3v((u08)argInt[0], (u08)argInt[1], font, orientation,
       argString, (u08)argInt[2], (u08)argInt[3], (u08)color);
     if (echoCmd == CMD_ECHO_YES)
-    {
-      emuPrefixEcho();
       printf("vert px=%d\n", (int)len);
-    }
   }
   lcdDeviceFlush(0);
 
@@ -1173,7 +1167,7 @@ int doPaintCircle(char *input, int echoCmd, int fill)
   if (fill == GLCD_FALSE)
   {
     // Scan circle profile
-    _argScan(argPaintCircle, &input);
+    ARGSCAN(argPaintCircle, &input);
 
     // Get color
     emuColorGet(argChar[0], &color);
@@ -1185,7 +1179,7 @@ int doPaintCircle(char *input, int echoCmd, int fill)
   else
   {
     // Scan fill circle profile
-    _argScan(argPaintCircleFill, &input);
+    ARGSCAN(argPaintCircleFill, &input);
 
     // Get color
     emuColorGet(argChar[0], &color);
@@ -1216,7 +1210,7 @@ int doPaintDot(char *input, int echoCmd)
   int color;
 
   // Scan dot profile
-  _argScan(argPaintDot, &input);
+  ARGSCAN(argPaintDot, &input);
 
   // Get color
   emuColorGet(argChar[0], &color);
@@ -1238,7 +1232,7 @@ int doPaintLine(char *input, int echoCmd)
   int color;
 
   // Scan line profile
-  _argScan(argPaintLine, &input);
+  ARGSCAN(argPaintLine, &input);
 
   // Get color
   emuColorGet(argChar[0], &color);
@@ -1263,7 +1257,7 @@ int doPaintRectangle(char *input, int echoCmd, int fill)
   if (fill == GLCD_FALSE)
   {
     // Scan paint rectangle profile
-    _argScan(argPaintRect, &input);
+    ARGSCAN(argPaintRect, &input);
 
     // Get color
     emuColorGet(argChar[0], &color);
@@ -1275,7 +1269,7 @@ int doPaintRectangle(char *input, int echoCmd, int fill)
   else
   {
     // Scan fill reactangle profile
-    _argScan(argPaintRectFill, &input);
+    ARGSCAN(argPaintRectFill, &input);
 
     // Get color
     emuColorGet(argChar[0], &color);
@@ -1302,7 +1296,7 @@ int doRepeatNext(char *input, int echoCmd)
   // A repeat while/next combination is handled in doListExecute().
 
   // Scan end of command
-  _argScan(argEnd, &input);
+  ARGSCAN(argEnd, &input);
 
   // Parse error
   printf("%s? parse error: no matching rw command\n", argCmd[0].argName);
@@ -1347,7 +1341,7 @@ int doRepeatWhile(cmdInput_t *cmdInput, int echoCmd)
 int doStats(char *input, int echoCmd, int reset)
 {
   // The command line may not contain additional arguments
-  _argScan(argEnd, &input);
+  ARGSCAN(argEnd, &input);
 
   if (reset == GLCD_FALSE)
   {
@@ -1379,7 +1373,7 @@ int doTime(char *input, int echoCmd, char type)
   if (type == 'p' || type == 'f')
   {
     // The command line may not contain additional arguments
-    _argScan(argEnd, &input);
+    ARGSCAN(argEnd, &input);
 
     // Get current time+date
     readi2ctime();
@@ -1387,7 +1381,7 @@ int doTime(char *input, int echoCmd, char type)
   else if (type == 'r')
   {
     // The command line may not contain additional arguments
-    _argScan(argEnd, &input);
+    ARGSCAN(argEnd, &input);
 
     // Reset time to system time
     stubTimeSet(80, 0, 0, 0, 70, 0, 0);
@@ -1395,7 +1389,7 @@ int doTime(char *input, int echoCmd, char type)
   else // type = 's'
   {
     // Scan command line with time set profile
-    _argScan(argTimeSet, &input);
+    ARGSCAN(argTimeSet, &input);
 
     // Overide time
     timeOk = stubTimeSet((uint8_t)argInt[2], (uint8_t)argInt[1],
@@ -1414,14 +1408,7 @@ int doTime(char *input, int echoCmd, char type)
     mchronTimeInit();
 
     // Update clock when active
-    if (mcClockPool[mcMchronClock].clockId != CHRON_NONE)
-    {
-      animClockDraw(DRAW_CYCLE);
-      lcdDeviceFlush(0);
-      DEBUGP("Clear time event");
-      mcClockTimeEvent = GLCD_FALSE;
-      time_event = GLCD_FALSE;
-    }
+    emuClockUpdate();
   }
 
   // Report (new) time+date+alarm
@@ -1441,93 +1428,15 @@ int doTime(char *input, int echoCmd, char type)
 //
 int doVarPrint(char *input, int echoCmd)
 {
-  const int tabCountMax = 8;
-  char var[3];
-  int varActive = GLCD_TRUE;
-  int varValue = 0;
   int retVal = CMD_RET_OK;
 
   // Scan command line with var print profile
-  _argScan(argVarPrint, &input);
+  ARGSCAN(argVarPrint, &input);
 
-  // Get and print the value of one or all variables
-  if (strcmp(argWord[1], "*") == 0)
-  {
-    // Get and print the value of all used variables
-    int tabCount = 0;
-    char valString[50];
+  // Print the value of variable(s)
+  retVal = varValPrint(argWord[1], argVarSet[0].argName);
 
-    var[1] = '\0';
-    var[2] = '\0';
-
-    // First the single character variables
-    for (var[0] = 'a'; var[0] <= 'z'; var[0]++)
-    {
-      varStateGet(var, &varActive);
-      if (varActive == GLCD_TRUE)
-      {
-        varValGet(var, &varValue);
-        printf("%s=%d", var, varValue);
-        sprintf(valString, "%s=%d", var, varValue);
-        tabCount = tabCount + strlen(valString) / 8 + 1;
-        if (tabCount < tabCountMax)
-        {
-          printf("\t");
-        }
-        else
-        {
-          tabCount = 0;
-          printf("\n");
-        }
-      }
-    }
-    // Then the two character variables
-    for (var[0] = 'a'; var[0] <= 'z'; var[0]++)
-    {
-      for (var[1] = 'a'; var[1] <= 'z'; var[1]++)
-      {
-        varStateGet(var, &varActive);
-        if (varActive == GLCD_TRUE)
-        {
-          varValGet(var, &varValue);
-          printf("%s=%d", var, varValue);
-          sprintf(valString, "%s=%d", var, varValue);
-          tabCount = tabCount + strlen(valString) / 8 + 1;
-          if (tabCount < tabCountMax)
-          {
-            printf("\t");
-          }
-          else
-          {
-            tabCount = 0;
-            printf("\n");
-          }
-        }
-      }
-    }
-    // End on newline if needed
-    if (tabCount != 0)
-      printf("\n");
-  }
-  else
-  {
-    // Get and print the value of a single variable, when active
-    retVal = varStateGet(argWord[1], &varActive);
-    if (retVal != CMD_RET_OK)
-    {
-      printf("%s? invalid value: %s\n", argVarSet[0].argName, argWord[1]);
-      return retVal;
-    }
-    if (varActive == GLCD_FALSE)
-    {
-      printf("variable not in use: %s\n", argWord[1]);
-      return CMD_RET_ERROR;
-    }    
-    varValGet(argWord[1], &varValue);
-    printf("%s=%d\n", argWord[1], varValue);
-  }
-
-  return CMD_RET_OK;
+  return retVal;
 }
 
 //
@@ -1540,7 +1449,7 @@ int doVarReset(char *input, int echoCmd)
   int retVal = CMD_RET_OK;
 
   // Scan command line with var reset profile
-  _argScan(argVarReset, &input);
+  ARGSCAN(argVarReset, &input);
 
   // Clear the variable
   if (strcmp(argWord[1], "*") == 0)
@@ -1565,7 +1474,7 @@ int doVarSet(char *input, int echoCmd)
   int retVal = CMD_RET_OK;
 
   // Scan command line with var set profile
-  _argScan(argVarSet, &input);
+  ARGSCAN(argVarSet, &input);
 
   // Make the variable active (when not in use) and set its value
   retVal = varValSet(argWord[1], argInt[0]);
@@ -1588,7 +1497,7 @@ int doWait(char *input, int echoCmd)
   char ch = '\0';
 
   // Scan command line with delay profile
-  _argScan(argWait, &input);
+  ARGSCAN(argWait, &input);
 
   delay = argInt[0];
   if (delay == 0)

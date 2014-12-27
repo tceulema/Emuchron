@@ -40,6 +40,11 @@
 #define ANA_DATE_Y_START	57
 #define ANA_DATE_X_SIZE		23
 
+// Determine how the minute arrow moves.
+// 0 = Only at a full minute stop
+// 1 = Whenever the (x,y) position of the arrow tip changes
+#define ANA_MIN_MOVE		1
+
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -57,7 +62,7 @@ extern unsigned char *months[12];
 // Local function prototypes
 void analogAlarmAreaUpdate(void);
 u08 analogElementCalc(s08 position[], s08 positionNew[], float radial, float radialOffset,
-  u08 arrowRadius, u08 legRadius);
+  u08 arrowRadius, u08 legRadius, u08 legsCheck);
 void analogElementDraw(s08 position[], u08 color);
 void analogElementSync(s08 position[], s08 positionNew[]);
 void analogInit(u08 mode);
@@ -100,22 +105,31 @@ void analogCycle(void)
   // Calculate (potential) changes in seconds needle
   if (anaSecShow == GLCD_TRUE)
   {
-    radElement = (2L * M_PI / ANA_SECMIN_STEPS) * mcClockNewTS;
+    radElement = (2L * M_PI / ANA_SECMIN_STEPS) * (float)mcClockNewTS;
     secElementChanged = analogElementCalc(posSec, posSecNew, radElement,
-      0L, ANA_SEC_RADIUS, 0);
+      0L, ANA_SEC_RADIUS, 0, 1);
   }
 
   // Calculate (potential) changes in minute arrow
-  radElement = (2L * M_PI / ANA_SECMIN_STEPS) * mcClockNewTM;
+  if (ANA_MIN_MOVE == 0)
+    radElement = (2L * M_PI / ANA_SECMIN_STEPS) * (float)mcClockNewTM;
+  else
+    radElement = (2L * M_PI / ANA_SECMIN_STEPS) * (float)mcClockNewTM  +
+      (2L * M_PI / ANA_SECMIN_STEPS / ANA_SECMIN_STEPS) * (float)mcClockNewTS;
   minElementChanged = analogElementCalc(posMin, posMinNew, radElement,
-    ANA_MIN_LEG_RADIAL_OFFSET, ANA_MIN_RADIUS, ANA_MIN_LEG_RADIUS);
+    ANA_MIN_LEG_RADIAL_OFFSET, ANA_MIN_RADIUS, ANA_MIN_LEG_RADIUS, 1);
 
-  // Calculate (potential) changes in hour arrow.
+  // Calculate (potential) changes in hour arrow. In normal operation only
+  // change the hour arrow if the minute arrow moves as well.
   // Note: Include progress in minutes during the hour.
-  radElement = (2L * M_PI / ANA_HOUR_STEPS) * (mcClockNewTH % 12) +
-    (2L * M_PI / ANA_SECMIN_STEPS / ANA_HOUR_STEPS) * mcClockNewTM;
-  hourElementChanged = analogElementCalc(posHour, posHourNew, radElement,
-    ANA_HOUR_LEG_RADIAL_OFFSET, ANA_HOUR_RADIUS, ANA_HOUR_LEG_RADIUS);
+  if (minElementChanged == GLCD_TRUE || mcClockOldTH != mcClockNewTH ||
+      mcClockInit == GLCD_TRUE)
+  {
+    radElement = (2L * M_PI / ANA_HOUR_STEPS) * (float)(mcClockNewTH % 12) +
+      (2L * M_PI / ANA_SECMIN_STEPS / ANA_HOUR_STEPS) * (float)mcClockNewTM;
+    hourElementChanged = analogElementCalc(posHour, posHourNew, radElement,
+      ANA_HOUR_LEG_RADIAL_OFFSET, ANA_HOUR_RADIUS, ANA_HOUR_LEG_RADIUS, 3);
+  }
 
   // Redraw seconds needle if needed
   if (anaSecShow == GLCD_TRUE &&
@@ -166,8 +180,7 @@ void analogCycle(void)
   {
     // The hour arrow has not changed but the seconds needle and/or
     // minute arrow has.
-    // Redraw the hour arrow as it got distorted by the other
-    // draws.
+    // Redraw the hour arrow as it got distorted by the other draws.
     analogElementDraw(posHour, mcFgColor);
   }
 }
@@ -218,11 +231,11 @@ void analogAlarmAreaUpdate(void)
       float radM, radH;
 
       // Prepare the analog alarm clock
-      radM = (2L * M_PI / ANA_SECMIN_STEPS) * mcAlarmM;
+      radM = (2L * M_PI / ANA_SECMIN_STEPS) * (float)mcAlarmM;
       dxM = (s08)(sin(radM) * ANA_ALARM_MIN_RADIUS);
       dyM = (s08)(-cos(radM) * ANA_ALARM_MIN_RADIUS);
-      radH = (2L * M_PI / ANA_HOUR_STEPS) * (mcAlarmH % 12) +
-        (2L * M_PI / ANA_SECMIN_STEPS / ANA_HOUR_STEPS) * mcAlarmM;
+      radH = (2L * M_PI / ANA_HOUR_STEPS) * (float)(mcAlarmH % 12) +
+        (2L * M_PI / ANA_SECMIN_STEPS / ANA_HOUR_STEPS) * (float)mcAlarmM;
       dxH = (s08)(sin(radH) * ANA_ALARM_HOUR_RADIUS);
       dyH = (s08)(-cos(radH) * ANA_ALARM_HOUR_RADIUS);
 
@@ -295,38 +308,21 @@ void analogAlarmAreaUpdate(void)
 // Calculate the position of a needle or three points of an analog clock arrow
 //
 u08 analogElementCalc(s08 position[], s08 positionNew[], float radial, float radialOffset,
-  u08 arrowRadius, u08 legRadius)
+  u08 arrowRadius, u08 legRadius, u08 legsCheck)
 {
   u08 i;
-  u08 isSecondsNeedle;
-  u08 posLimit;
-
-  // For the seconds needle we don't need leg calculations 
-  if (position[2] == ANA_X_START && position[3] == ANA_Y_START)
-  {
-    isSecondsNeedle = GLCD_TRUE;
-    posLimit = 2; 
-  }
-  else
-  {
-    isSecondsNeedle = GLCD_FALSE;
-    posLimit = 6;
-  }
 
   // Calculate the new position of a needle or each of the three arrow points
   positionNew[0] = (s08)(sin(radial) * arrowRadius) + ANA_X_START;
   positionNew[1] = (s08)(-cos(radial) * arrowRadius) + ANA_Y_START;
-  if (isSecondsNeedle == GLCD_FALSE)
-  {
-    positionNew[2] = (s08)(sin(radial + radialOffset) * legRadius) + ANA_X_START;
-    positionNew[3] = (s08)(-cos(radial + radialOffset) * legRadius) + ANA_Y_START;
-    positionNew[4] = (s08)(sin(radial - radialOffset) * legRadius) + ANA_X_START;
-    positionNew[5] = (s08)(-cos(radial - radialOffset) * legRadius) + ANA_Y_START;
-  }
+  positionNew[2] = (s08)(sin(radial + radialOffset) * legRadius) + ANA_X_START;
+  positionNew[3] = (s08)(-cos(radial + radialOffset) * legRadius) + ANA_Y_START;
+  positionNew[4] = (s08)(sin(radial - radialOffset) * legRadius) + ANA_X_START;
+  positionNew[5] = (s08)(-cos(radial - radialOffset) * legRadius) + ANA_Y_START;
 
   // Provide info if the needle or arrow has changed position  
-  for (i = 0; i < posLimit; i++)
-  {
+  for (i = 0; i < legsCheck * 2; i++)
+  {    
     if (position[i] != positionNew[i])
       return GLCD_TRUE;
   }

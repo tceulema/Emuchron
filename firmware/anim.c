@@ -18,11 +18,13 @@
 
 // Include the supported clocks
 #include "clock/analog.h"
+#include "clock/bigdigit.h"
 #include "clock/digital.h"
 #include "clock/mosquito.h"
 #include "clock/nerd.h"
 #include "clock/pong.h"
 #include "clock/puzzle.h"
+#include "clock/qr.h"
 #include "clock/slider.h"
 #include "clock/cascade.h"
 #include "clock/speeddial.h"
@@ -117,9 +119,14 @@ clockDriver_t monochron[] =
   //,{CHRON_PONG,        DRAW_INIT_FULL,    pongInit,           pongCycle,           pongButton}
   ,{CHRON_PUZZLE,      DRAW_INIT_FULL,    puzzleInit,         puzzleCycle,         puzzleButton}
   //,{CHRON_SLIDER,      DRAW_INIT_FULL,    sliderInit,         sliderCycle,         0}
+  //,{CHRON_BIGDIG_TWO,  DRAW_INIT_FULL,    bigdigInit,         bigdigCycle,         bigdigButton}
+  //,{CHRON_BIGDIG_ONE,  DRAW_INIT_PARTIAL, bigdigInit,         bigdigCycle,         bigdigButton}
+  //,{CHRON_QR_HM,       DRAW_INIT_FULL,    qrInit,             qrCycle,             0}
+  //,{CHRON_QR_HMS,      DRAW_INIT_PARTIAL, qrInit,             qrCycle,             0}
 };
 
 // Local function prototypes
+void animAlarmSwitchCheck(void);
 void animDateTimeCopy(void);
 
 //
@@ -250,7 +257,7 @@ u08 animClockNext(void)
 {
   // Select the next clock
   mcMchronClock++;
-  if (mcMchronClock >= sizeof(monochron)/sizeof(clockDriver_t))
+  if (mcMchronClock >= sizeof(monochron) / sizeof(clockDriver_t))
   {
     // End of clock pool reached: continue at beginning
     mcMchronClock = 0;

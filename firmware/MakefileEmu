@@ -34,8 +34,8 @@ MARIO = -DMARIO
 CSRC = emulator/stub.c emulator/lcd.c emulator/lcdglut.c emulator/lcdncurses.c \
   emulator/scanutil.c emulator/mchronutil.c emulator/mchron.c \
   ratt.c ks0108.c glcd.c config.c anim.c \
-  clock/analog.c clock/digital.c clock/mosquito.c clock/nerd.c clock/pong.c \
-  clock/puzzle.c clock/slider.c \
+  clock/analog.c clock/bigdigit.c clock/digital.c clock/mosquito.c clock/nerd.c \
+  clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c clock/slider.c \
   clock/spotfire.c clock/cascade.c clock/speeddial.c clock/spiderplot.c \
   clock/trafficlight.c
 FSRC = emulator/expr.l
@@ -60,19 +60,21 @@ all:	$(TARGET)
 # Clean project
 clean:	
 	$(REMOVE) $(TARGET); \
-	$(REMOVE) $(COBJ); \
-	$(REMOVE) $(CDEP); \
-	$(REMOVE) $(FOBJ); \
-	$(REMOVE) $(BOBJ); \
-	$(REMOVE) $(BOBJH); \
-	$(REMOVE) $(EVALOBJ); \
-	$(REMOVE) $(EVALDEP);
+	$(REMOVE) $(COBJ) $(EVALOBJ); \
+	$(REMOVE) $(CDEP) $(EVALDEP); \
+	$(REMOVE) $(FOBJ) $(BOBJ) $(BOBJH);
 
 # Rebuild project
 rebuild:	clean all
 
 # Build expression evaluator
 expr:	$(EVALOBJ)
+
+# Report relevant compiler and tool version information
+version: 
+	@echo "- $(CC)"; $(CC) --version; \
+	echo "- $(FLEX)"; $(FLEX) --version; echo; \
+	echo "- $(BISON)"; $(BISON) --version
 
 # ---------------------------------------------------------------------------
 
@@ -100,5 +102,5 @@ $(TARGET):	$(COBJ) $(EVALOBJ)
 -include $(CDEP) $(EVALDEP)
 
 # Listing of phony targets
-.PHONY : all clean rebuild expr
+.PHONY : all clean rebuild expr version
 

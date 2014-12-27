@@ -18,6 +18,7 @@
 // Specifics for digital clock
 #define DIGI_ALARM_X_START	2
 #define DIGI_ALARM_Y_START	57
+#define DIGI_DATE_X_START	18
 
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
@@ -39,10 +40,11 @@ extern unsigned char *days[7];
 u08 digiSecShow;
 u08 digiTimeXScale, digiTimeYScale;
 u08 digiTimeXStart, digiTimeYStart;
-u08 digiDateXStart, digiDateYStart;
+u08 digiDateYStart;
 
 // Local function prototypes
 void digitalInit(u08 mode);
+void digitalTimeValDraw(u08 val, u08 factor);
 void digitalAlarmAreaUpdate(void);
 
 //
@@ -67,9 +69,9 @@ void digitalCycle(void)
   if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
        mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
   {
-    glcdPutStr2(digiDateXStart, digiDateYStart, FONT_5X7N,
+    glcdPutStr2(DIGI_DATE_X_START, digiDateYStart, FONT_5X7N,
       (char *)days[dotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)], mcFgColor);
-    glcdPutStr2(digiDateXStart + 24, digiDateYStart, FONT_5X7N,
+    glcdPutStr2(DIGI_DATE_X_START + 24, digiDateYStart, FONT_5X7N,
       (char *)months[mcClockNewDM - 1], mcFgColor);
     animValToStr(mcClockNewDD, clockInfo);
     clockInfo[2] = ',';
@@ -77,32 +79,18 @@ void digitalCycle(void)
     clockInfo[4] = '2';
     clockInfo[5] = '0';
     animValToStr(mcClockNewDY, &(clockInfo[6]));
-    glcdPutStr2(digiDateXStart + 48, digiDateYStart, FONT_5X7N, clockInfo,
+    glcdPutStr2(DIGI_DATE_X_START + 48, digiDateYStart, FONT_5X7N, clockInfo,
       mcFgColor);
   }
 
   // Verify changes in time
   if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-  {
-    animValToStr(mcClockNewTH, clockInfo);
-    glcdPutStr3(digiTimeXStart, digiTimeYStart, FONT_5X7N, clockInfo,
-      digiTimeXScale, digiTimeYScale, mcFgColor);
-  }
+    digitalTimeValDraw(mcClockNewTH, 0);
   if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-  {
-    animValToStr(mcClockNewTM, clockInfo);
-    glcdPutStr3(digiTimeXStart + 3 * 6 * digiTimeXScale + digiTimeXScale,
-      digiTimeYStart, FONT_5X7N, clockInfo, digiTimeXScale, digiTimeYScale,
-      mcFgColor);
-  }
+    digitalTimeValDraw(mcClockNewTM, 1);
   if (digiSecShow == GLCD_TRUE &&
       (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE))
-  {
-    animValToStr(mcClockNewTS, clockInfo);
-    glcdPutStr3(digiTimeXStart + 6 * 6 * digiTimeXScale + 2 * digiTimeXScale,
-      digiTimeYStart, FONT_5X7N, clockInfo, digiTimeXScale, digiTimeYScale,
-      mcFgColor);
-  }
+    digitalTimeValDraw(mcClockNewTS, 2);
 }
 
 //
@@ -118,7 +106,6 @@ void digitalHmInit(u08 mode)
   digiTimeYStart = 2;
   digiTimeXScale = 4;
   digiTimeYScale = 5;
-  digiDateXStart = 18;
   digiDateYStart = 44;
 
   // Do the actual initialization
@@ -138,7 +125,6 @@ void digitalHmsInit(u08 mode)
   digiTimeYStart = 12;
   digiTimeXScale = 2;
   digiTimeYScale = 2;
-  digiDateXStart = 18;
   digiDateYStart = 37;
 
   // Do the actual initialization
@@ -241,3 +227,16 @@ void digitalAlarmAreaUpdate(void)
       ALIGN_AUTO, FILL_INVERSE, mcBgColor);
 }
 
+//
+// Function: digitalTimeValDraw
+//
+// Draw a time element (hh, mm or ss)
+//
+void digitalTimeValDraw(u08 val, u08 factor)
+{
+  char clockInfo[3];
+
+  animValToStr(val, clockInfo);
+  glcdPutStr3(digiTimeXStart + factor * 19 * digiTimeXScale, digiTimeYStart,
+    FONT_5X7N, clockInfo, digiTimeXScale, digiTimeYScale, mcFgColor);
+}

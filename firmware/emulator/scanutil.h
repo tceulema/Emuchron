@@ -59,7 +59,7 @@
 
 // This macro makes an interface towards argScan() so we cannot make
 // a mistake in the argCount parameter or its default error handling
-#define _argScan(a,b) \
+#define ARGSCAN(a,b) \
   if (argScan(a,sizeof(a)/sizeof(argItem_t),b,GLCD_FALSE) != CMD_RET_OK) \
     return CMD_RET_ERROR
 
@@ -138,6 +138,7 @@ int varClear(char *var);
 void varReset(void);
 int varStateGet(char *var, int *active);
 int varValGet(char *var, int *value);
+int varValPrint(char *var, char *argName);
 int varValSet(char *var, int value);
 #endif
 

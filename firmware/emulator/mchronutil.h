@@ -7,6 +7,7 @@
 #define MCHRONUTIL_H
 
 #include "lcd.h"
+#include "scanutil.h"
 
 // Definition of a structure to hold the main() arguments
 typedef struct _argcArgv_t
@@ -22,12 +23,12 @@ typedef struct _argcArgv_t
 // mchron utility function prototypes
 int emuArgcArgv(int argc, char *argv[], argcArgv_t *argcArgv);
 void emuClockRelease(int echoCmd);
+void emuClockUpdate(void);
 int emuColorGet(char colorId, int *color);
 int emuListExecute(cmdLine_t *cmdLineRoot, char *source, int echoCmd,
   int (*cmdHandler)(cmdInput_t *, int));
 void emuLogfileClose(void);
 void emuLogfileOpen(char debugFile[]);
-void emuPrefixEcho(void);
 void emuSigSetup(void);
 int emuStartModeGet(char startId, int *start);
 void emuTimePrint(void);

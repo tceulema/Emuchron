@@ -7,7 +7,6 @@
 #define SCANPROFILE_H
 
 #include "../ks0108conf.h"
-#include "../anim.h"
 #include "../glcd.h"
 #include "scanutil.h"
 
@@ -38,10 +37,6 @@ argItemDomain_t argNumFillPattern =
 // Circle radius: max 31
 argItemDomain_t argNumRadius =
 { DOM_NUM_MAX, "", 0, 31 };
-
-// Clock Id: max CHRON_MAX_VALUE
-argItemDomain_t argNumClockId =
-{ DOM_NUM_MAX, "", 0, CHRON_MAX_VALUE };
 
 // Date day: max 31
 argItemDomain_t argNumDay =
@@ -161,7 +156,7 @@ argItem_t argClockFeed[] =
   { ARG_END,    "",            0 } };
 // Additional argument profile for clock select
 argItem_t argClockSelect[] =
-{ { ARG_UINT,   "clock",       &argNumClockId },
+{ { ARG_UINT,   "clock",       0 },
   { ARG_END,    "",            0 } };
 
 // Command 'd*'

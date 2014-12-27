@@ -21,8 +21,10 @@
 #define CHRON_SPEEDDIAL		11
 #define CHRON_SPIDERPLOT	12
 #define CHRON_TRAFLIGHT		13
-// Set CHRON_MAX_VALUE to the highest value in use above
-#define CHRON_MAX_VALUE		13
+#define CHRON_BIGDIG_ONE	14
+#define CHRON_BIGDIG_TWO	15
+#define CHRON_QR_HMS		16
+#define CHRON_QR_HM		17
 
 // Define how visualizations draw themselves
 #define DRAW_INIT_NONE		0
@@ -48,7 +50,6 @@ typedef struct _clockDriver_t
 } clockDriver_t;
 
 // Generic clock wrapper functions
-void animAlarmSwitchCheck(void);
 u08 animClockButton(u08 pressedButton);
 void animClockDraw(u08 type);
 u08 animClockNext(void);

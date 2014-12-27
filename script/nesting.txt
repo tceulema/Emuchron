@@ -1,0 +1,63 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test whether lots of nested repeat-while loops works.
+#          Consider this a performance test for the interpreter/CPU.
+#
+# Result : x = 2^20 = 1048576
+#
+
+# Clear all variables and init loop counter
+vr *
+vs x 0
+
+# Report start time
+tp
+
+# Nest 20 repeat-while loops where each loop runs twice
+rw aa <= 1 0 1
+ rw ab <= 1 0 1
+  rw ac <= 1 0 1
+   rw ad <= 1 0 1
+    rw ae <= 1 0 1
+     rw af <= 1 0 1
+      rw ag <= 1 0 1
+       rw ah <= 1 0 1
+        rw ai <= 1 0 1
+         rw aj <= 1 0 1
+          rw ak <= 1 0 1
+           rw al <= 1 0 1
+            rw am <= 1 0 1
+             rw an <= 1 0 1
+              rw ao <= 1 0 1
+               rw ap <= 1 0 1
+                rw aq <= 1 0 1
+                 rw ar <= 1 0 1
+                  rw as <= 1 0 1
+                   rw at <= 1 0 1
+                    vs x x+1
+                   rn
+                  rn
+                 rn
+                rn
+               rn
+              rn
+             rn
+            rn
+           rn
+          rn
+         rn
+        rn
+       rn
+      rn
+     rn
+    rn
+   rn
+  rn
+ rn
+rn
+
+# Report end time and show all variables from this script
+tp
+vp *
+

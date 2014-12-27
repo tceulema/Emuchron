@@ -40,15 +40,18 @@ SRC = $(BASE) \
 #SRC = $(BASE) \
 #  clock/mosquito.c clock/nerd.c clock/pong.c clock/slider.c
 
+# Monochron clocks - III
+#SRC = $(BASE) \
+#  clock/analog.c clock/bigdigit.c clock/digital.c clock/qr.c clock/qrencode.c
+
 # All clocks
 # Note: This will build a much too big firmware file but serves as a test
 # to verify whether everything will build cleanly
 #SRC = $(BASE) \
-#  clock/analog.c clock/digital.c clock/mosquito.c clock/nerd.c clock/pong.c \
-#  clock/puzzle.c clock/slider.c \
+#  clock/analog.c clock/bigdigit.c clock/digital.c clock/mosquito.c clock/nerd.c \
+#  clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c clock/slider.c \
 #  clock/spotfire.c clock/cascade.c clock/speeddial.c clock/spiderplot.c \
-#  clock/trafficlight.c clock/barchart.c clock/crosstable.c clock/linechart.c \
-#  clock/piechart.c
+#  clock/trafficlight.c
 
 # List Assembler source files here.
 # Make them always end in a capital .S. Files ending in a lowercase .s
@@ -169,7 +172,7 @@ MSG_CLEANING = Cleaning project:
 OBJ = $(SRC:.c=.o) $(ASRC:.S=.o) 
 
 # Define all listing files
-LST = $(ASRC:.S=.lst) $(SRC:.c=.lst)
+LST = $(SRC:.c=.lst) $(ASRC:.S=.lst)
 
 # Combine all necessary flags and optional flags.
 # Add target processor to flags.
@@ -225,7 +228,7 @@ sizeafter:
 	@if [ -f $(TARGET).elf ]; then echo; echo $(MSG_SIZE_AFTER); $(ELFSIZE); fi
 
 # Display compiler version information
-gccversion : 
+gccversion: 
 	@$(CC) --version
 
 # ---------------------------------------------------------------------------

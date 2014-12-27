@@ -17,17 +17,21 @@
 #include "../ratt.h"
 #include "../anim.h"
 
+// Dedicated clock defines
+#include "../clock/qr.h"
+
 // Mchron utilities
 #include "expr.h"
-#include "scanutil.h"
 #include "mchronutil.h"
 
 // Monochron defined data
+extern volatile uint8_t time_event;
 extern volatile uint8_t time_s, time_m, time_h;
 extern volatile uint8_t date_d, date_m, date_y;
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
+extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
@@ -77,6 +81,7 @@ argItem_t argRepeatNext[] =
   { ARG_END,    "",            0 } };
 
 // Local function prototypes
+void emuPrefixEcho(void);
 int cmdRepeatArgsGet(cmdRepeat_t *cmdRepeat, int *valVar, int *valEnd,
   int *valStep);
 int emuRepeatInit(cmdRepeat_t *cmdRepeat, char *input);
@@ -327,7 +332,6 @@ void emuClockRelease(int echoCmd)
   mcClockOldTS=mcClockOldTM=mcClockOldTH=mcClockOldDD=mcClockOldDM=mcClockOldDY=0;
   if (mcClockPool[mcMchronClock].clockId != CHRON_NONE && echoCmd == CMD_ECHO_YES)
   {
-    emuPrefixEcho();
     printf("released clock\n");
   }
   mcMchronClock = 0;
@@ -335,6 +339,55 @@ void emuClockRelease(int echoCmd)
   // Kill alarm (if sounding anyway) and reset it
   alarmSoundKill();
   alarmClear();
+}
+
+//
+// Function: emuClockUpdate
+//
+// Most clocks update their layout in a single clock cycle.
+// However, consider the QR clock. This clock requires multiple clock cycles
+// to update its layout due to the above average computing power needed to
+// do so.
+// For specific clocks, like the QR clock, this function generates multiple
+// clock cycles, enough to update its layout.
+// By default for any other clock, only a single clock cycle is generated,
+// which should suffice.
+//
+void emuClockUpdate(void)
+{
+  // Nothing to be done when no clock is active
+  if (mcClockPool[mcMchronClock].clockId == CHRON_NONE)
+    return;
+
+  // We have specific draw requirements for the QR clock
+  if (mcClockPool[mcMchronClock].clockId == CHRON_QR_HM ||
+      mcClockPool[mcMchronClock].clockId == CHRON_QR_HMS)
+  {
+    int i = 0;
+
+    // Generate the clock cycles needed to display a new QR
+    for (i = 0; i < QR_GEN_CYCLES; i++)
+    {
+      animClockDraw(DRAW_CYCLE);
+      if (i == 0)
+      {
+        mcClockTimeEvent = GLCD_FALSE;
+        DEBUGP("Clear time event");
+      }
+    }
+  }
+  else
+  {
+    // For a clock by default a single clock cycle is needed
+    // to update its layout.
+    animClockDraw(DRAW_CYCLE);
+    mcClockTimeEvent = GLCD_FALSE;
+    DEBUGP("Clear time event");
+  }
+
+  // Update clock layout
+  lcdDeviceFlush(0);
+  time_event = GLCD_FALSE;
 }
 
 //
@@ -606,7 +659,7 @@ int emuRepeatArgsGet(cmdRepeat_t *cmdRepeat, int *valVar, int *valEnd,
     printf("%s? parse error\n", argRepeatWhile[5].argName);
     return CMD_RET_ERROR;
   }
-  else if (retVal ==1)
+  else if (retVal == 1)
   {
     printf("%s? syntax error\n", argRepeatWhile[5].argName);
     return CMD_RET_ERROR;
@@ -629,7 +682,7 @@ int emuRepeatInit(cmdRepeat_t *cmdRepeat, char *input)
 
   // Scan the command line for the repeat parameters
   argInit(&input);
-  _argScan(argRepeatWhile, &input);
+  ARGSCAN(argRepeatWhile, &input);
 
   // Validate repeat var name
   retVal = varStateGet(argWord[1], &varActive);
@@ -697,7 +750,7 @@ int emuRepeatNext(cmdLine_t *cmdLine, int *doNextLoop)
 
   // Scan the command line for the repeat parameters
   argInit(&input);
-  _argScan(argRepeatNext, &input);
+  ARGSCAN(argRepeatNext, &input);
 
   *doNextLoop = GLCD_TRUE;
   retVal = emuRepeatArgsGet(cmdRepeat, &valVar, &valEnd, &valStep);
@@ -924,14 +977,9 @@ int emuStartModeGet(char startId, int *start)
 //
 void emuTimePrint(void)
 {
-  emuPrefixEcho();
   printf("time  : %02d:%02d:%02d (hh:mm:ss)\n", time_h, time_m, time_s);
-  emuPrefixEcho();
   printf("date  : %02d/%02d/%04d (dd/mm/yyyy)\n", date_d, date_m, date_y + 2000);
-  emuPrefixEcho();
   printf("alarm : %02d:%02d (hh:mm)\n", emuAlarmH, emuAlarmM);
-  emuPrefixEcho();
-  alarmSwitchShow();
 }
 
 //

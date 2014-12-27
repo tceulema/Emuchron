@@ -79,7 +79,7 @@ void argInit(char **input)
   *input = argInput;
 
   // Reset the contents of the scan result arrays and scan string
-  for (i = 0; i < 10; i++)
+  for (i = 0; i < ARG_TYPE_COUNT_MAX; i++)
   {
     argChar[i] = '\0';
     argInt[i] = 0;
@@ -1220,6 +1220,98 @@ int varValGet(char *var, int *value)
   {
     // Get the value of the variable
     *value = varVal[varIdx1][varIdx2].varValue;
+  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: varValPrint
+//
+// Print the value of a single or all named variables
+//
+int varValPrint(char *var, char *argName)
+{
+  const int tabCountMax = 8;
+  int varActive = GLCD_TRUE;
+  int varValue = 0;
+  int retVal = CMD_RET_OK;
+
+  // Get and print the value of one or all variables
+  if (strcmp(var, "*") == 0)
+  {
+    // Get and print the value of all used variables
+    int tabCount = 0;
+    char valString[50];
+
+    var[1] = '\0';
+    var[2] = '\0';
+
+    // First the single character variables
+    for (var[0] = 'a'; var[0] <= 'z'; var[0]++)
+    {
+      varStateGet(var, &varActive);
+      if (varActive == GLCD_TRUE)
+      {
+        varValGet(var, &varValue);
+        printf("%s=%d", var, varValue);
+        sprintf(valString, "%s=%d", var, varValue);
+        tabCount = tabCount + strlen(valString) / 8 + 1;
+        if (tabCount < tabCountMax)
+        {
+          printf("\t");
+        }
+        else
+        {
+          tabCount = 0;
+          printf("\n");
+        }
+      }
+    }
+    // Then the two character variables
+    for (var[0] = 'a'; var[0] <= 'z'; var[0]++)
+    {
+      for (var[1] = 'a'; var[1] <= 'z'; var[1]++)
+      {
+        varStateGet(var, &varActive);
+        if (varActive == GLCD_TRUE)
+        {
+          varValGet(var, &varValue);
+          printf("%s=%d", var, varValue);
+          sprintf(valString, "%s=%d", var, varValue);
+          tabCount = tabCount + strlen(valString) / 8 + 1;
+          if (tabCount < tabCountMax)
+          {
+            printf("\t");
+          }
+          else
+          {
+            tabCount = 0;
+            printf("\n");
+          }
+        }
+      }
+    }
+    // End on newline if needed
+    if (tabCount != 0)
+      printf("\n");
+  }
+  else
+  {
+    // Get and print the value of a single variable, when active
+    retVal = varStateGet(var, &varActive);
+    if (retVal != CMD_RET_OK)
+    {
+      printf("%s? invalid value: %s\n", argName, var);
+      return retVal;
+    }
+    if (varActive == GLCD_FALSE)
+    {
+      printf("variable not in use: %s\n", var);
+      return CMD_RET_ERROR;
+    }    
+    varValGet(var, &varValue);
+    printf("%s=%d\n", var, varValue);
   }
 
   return CMD_RET_OK;

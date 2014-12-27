@@ -4,7 +4,7 @@
 # Purpose: Put all clocks through the emulator
 #
 
-vs mc 13
+vs mc 17
 le
 rw cl <= mc 1 1
   cs cl
