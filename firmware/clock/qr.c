@@ -94,7 +94,7 @@ extern unsigned char qrframe[];
 // therefore believed that the actual numbers per cycle are slightly lower than
 // shown here, so consider them worst-case scenario values.
 //
-// CPU time to complete a single mask (+/- 1 msec):
+// CPU time to complete a single mask (+/- 1 msec), using avr-gcc 4.3.5.
 // Mask 0: (not relevant; can easily be combined with other tasks in state 1)
 // Mask 1: 30 msec
 // Mask 2: 29 msec
@@ -107,11 +107,11 @@ extern unsigned char qrframe[];
 // We can see from this that mask 5 and 6 take the longest to complete. Therefor
 // combining these two masks in the same calculation state should be avoided.
 // It is chosen that in state 2, 3 and 4 we will combine resp. mask 1+4, 2+5 and
-// 4+6, spreading the relatively long CPU time of mask 5 and 6 over separate
+// 3+6, spreading the relatively long CPU time of mask 5 and 6 over separate
 // states.
 // Combining two mask calculations in a single clock cycle of 75 msec, where
 // state 4 (combining mask 3+6) will consume the most CPU, leaves us about 15 to
-// 12 msec spare CPU time for other tasks, 
+// 12 msec spare CPU time for other tasks.
 // In practice there is only one task remaining, which is inverting the alarm
 // time when alarming/snoozing. It turns out this takes about 5 msec to complete
 // and may appear in one of the cycles as additional time cost. Even including

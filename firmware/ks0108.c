@@ -325,6 +325,8 @@ void glcdSetAddress(u08 x, u08 yLine)
 {
   // Set addresses
 #ifdef EMULIN
+  extern long long lcdLcdSetAddress;
+  lcdLcdSetAddress++;
   if (x >= GLCD_XPIXELS || yLine >= GLCD_YPIXELS / 8)
   {
     // We should never get here

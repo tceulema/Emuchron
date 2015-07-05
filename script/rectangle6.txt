@@ -1,22 +1,22 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Test the auto align type for fill types in glcdFillRectangle2()
+# Purpose: Test the top align type for fill types in glcdFillRectangle2()
 #
 
-# Variables defining the screen size, rectangle size, speed and align type (auto)
+# Variables defining the screen size, rectangle size, speed and align type (top)
 vs h 127
 vs v 63
-vs sz 19
+vs sz 18
 vs w 3
-vs al 2
+vs al 0
 
 # Move rectangle top->right->bottom->left in the display
 le
 
 # Paint this in the center of the display
 pa f 32 26 5x5p h 1 1 glcdfillrectangle2
-pa f 40 32 5x5p h 1 1 - auto align -
+pa f 42 32 5x5p h 1 1 - top align -
 
 # Repeat for each fill type (1..3)
 rw ft < 4 1 1
@@ -51,7 +51,7 @@ le
 
 # Paint this top right of the display
 pa f 60 1 5x5p h 1 1 glcdfillrectangle2
-pa f 68 8 5x5p h 1 1 - auto align -
+pa f 70 8 5x5p h 1 1 - top align -
 
 # Repeat for each fill type (1..3)
 rw ft < 4 1 1
@@ -71,7 +71,7 @@ le
 
 # Paint this bottom right of the display
 pa f 60 50 5x5p h 1 1 glcdfillrectangle2
-pa f 68 57 5x5p h 1 1 - auto align -
+pa f 70 57 5x5p h 1 1 - top align -
 
 # Repeat for each fill type (1..3)
 rw ft < 4 1 1

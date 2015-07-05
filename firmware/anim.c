@@ -24,6 +24,7 @@
 #include "clock/nerd.h"
 #include "clock/pong.h"
 #include "clock/puzzle.h"
+#include "clock/perftest.h"
 #include "clock/qr.h"
 #include "clock/slider.h"
 #include "clock/cascade.h"
@@ -106,6 +107,7 @@ char animYear[] = "Year";
 // files in SRC in Makefile [firmware].
 clockDriver_t monochron[] =
 {
+   //{CHRON_PERFTEST,    DRAW_INIT_FULL,    perfInit,           perfCycle,           0}
    {CHRON_CASCADE,     DRAW_INIT_FULL,    spotCascadeInit,    spotCascadeCycle,    0}
   ,{CHRON_SPEEDDIAL,   DRAW_INIT_PARTIAL, spotSpeedDialInit,  spotSpeedDialCycle,  0}
   ,{CHRON_SPIDERPLOT,  DRAW_INIT_PARTIAL, spotSpiderPlotInit, spotSpiderPlotCycle, 0}

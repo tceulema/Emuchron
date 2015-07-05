@@ -31,6 +31,7 @@ Commands:
           Arguments: <hour> <min>
               hour: 0..23
               min: 0..59
+  'at'  - Toggle alarm switch position
   'b'   - Play audible beep
           Arguments: <frequency> <duration>
               frequency: 150..10000 (Hz)
@@ -44,7 +45,7 @@ Commands:
                      4 = digitalHM, 5 = mosquito, 6 = nerd, 7 = pong,
                      8 = puzzle, 9 = slider, 10 = cascade, 11 = speed,
                      12 = spider, 13 = traffic, 14 = bigdigOne, 15 = bigdigTwo,
-                     16 = qrHMS, 17 = qrHM
+                     16 = qrHMS, 17 = qrHM, 18 = perftest
   'dr'  - Reset clock date to system date
   'ds'  - Set clock date
           Arguments: <day> <month> <year>

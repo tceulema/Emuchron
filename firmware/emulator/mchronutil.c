@@ -274,18 +274,19 @@ int emuArgcArgv(int argc, char *argv[], argcArgv_t *argcArgv)
     if (home == NULL)
     {
       printf("%s: Cannot get $HOME\n", __progname);
-      printf("Use switch '-o <tty>' to set LCD output device\n");
+      printf("Use switch '-t <tty>' to set LCD output device\n");
       return CMD_RET_ERROR;
     }
     strcpy(fullPath, home);
-    strcat(fullPath, "/.mchron");
+    strcat(fullPath, NCURSES_TTYFILE);
 
     // Open the file with the tty device
     fp = fopen(fullPath, "r");
     if (fp == NULL)
     {
-      printf("%s: Cannot open file \"%s\".\n", __progname, "$HOME/.mchron");
-      printf("Use switch '-t <tty>' to set ncurses LCD output device\n");
+      printf("%s: Cannot open file \"%s%s\".\n", __progname, "$HOME", NCURSES_TTYFILE);
+      printf("Start a new Monochron ncurses terminal or use switch '-t <tty>' to set\n");
+      printf("ncurses LCD output device\n");
       return CMD_RET_ERROR;
     }
 
@@ -309,8 +310,8 @@ int emuArgcArgv(int argc, char *argv[], argcArgv_t *argcArgv)
     // Verify if the tty is actually in use
     if (stat(argcArgv->lcdDeviceParam.lcdNcurTty, &buffer) != 0)
     {
-      printf("%s: $HOME/.mchron: tty \"%s\" is not in use\n",
-        __progname, argcArgv->lcdDeviceParam.lcdNcurTty);
+      printf("%s: $HOME%s: tty \"%s\" is not in use\n",
+        __progname, NCURSES_TTYFILE, argcArgv->lcdDeviceParam.lcdNcurTty);
       printf("Start a new Monochron ncurses terminal or use switch '-t <tty>' to set\n");
       printf("ncurses LCD output device\n");
       return CMD_RET_ERROR;
@@ -517,15 +518,11 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source, int echoCmd,
     // Verify if a command interrupt was requested
     if (retVal == CMD_RET_OK)
     {
-      while (kbHit())
+      ch = kbKeypressScan(GLCD_TRUE);
+      if (ch == 'q')
       {
-        ch = getchar();
-        if (ch == 'q' || ch == 'Q')
-        {
-          printf("quit\n");
-          retVal = CMD_RET_INTERRUPT;
-          break;
-        }
+        printf("quit\n");
+        retVal = CMD_RET_INTERRUPT;
       }
     }
 
@@ -891,7 +888,7 @@ void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
     sigAction.sa_flags = SA_SIGINFO;
     if (sigaction(SIGABRT, &sigAction, NULL) < 0)
     {
-      printf("Cannot clear handler %d\n", SIGABRT);
+      printf("Cannot clear handler SIGABRT (%d)\n", SIGABRT);
       printf("Not able to coredump\n");
       exit(-1);
     }
@@ -931,18 +928,18 @@ void emuSigSetup(void)
   sigAction.sa_flags = SA_SIGINFO;
 
   if (sigaction(SIGINT, &sigAction, NULL) < 0)
-    printf("Cannot set handler %d\n", SIGINT);
+    printf("Cannot set handler SIGINT (%d)\n", SIGINT);
   if (sigaction(SIGTSTP, &sigAction, NULL) < 0)
-    printf("Cannot set handler %d\n", SIGTSTP);
+    printf("Cannot set handler SIGTSTP (%d)\n", SIGTSTP);
   if (sigaction(SIGQUIT, &sigAction, NULL) < 0)
-    printf("Cannot set handler %d\n", SIGQUIT);
+    printf("Cannot set handler SIGQUIT (%d)\n", SIGQUIT);
   if (sigaction(SIGABRT, &sigAction, NULL) < 0)
-    printf("Cannot set handler %d\n", SIGABRT);
+    printf("Cannot set handler SIGABRT (%d)\n", SIGABRT);
   // For SIGWINCH force to restart system calls, mainly meant for fgets()
   // in main loop (that otherwise will end with EOF)
   sigAction.sa_flags = sigAction.sa_flags | SA_RESTART;
   if (sigaction(SIGWINCH, &sigAction, NULL) < 0)
-    printf("Cannot set handler %d\n", SIGWINCH);
+    printf("Cannot set handler SIGWINCH (%d)\n", SIGWINCH);
 }
 
 //
@@ -973,13 +970,14 @@ int emuStartModeGet(char startId, int *start)
 //
 // Function: emuTimePrint
 //
-// Print the time/dat/alarm
+// Print the time/date/alarm
 //
 void emuTimePrint(void)
 {
   printf("time  : %02d:%02d:%02d (hh:mm:ss)\n", time_h, time_m, time_s);
   printf("date  : %02d/%02d/%04d (dd/mm/yyyy)\n", date_d, date_m, date_y + 2000);
   printf("alarm : %02d:%02d (hh:mm)\n", emuAlarmH, emuAlarmM);
+  alarmSwitchShow();
 }
 
 //
@@ -993,7 +991,7 @@ void emuTimePrint(void)
 // application unless a glut handler is setup to exit gracefully.
 // We need such a handler, or else our mchron terminal may need to be
 // 'reset' when it no longer echoes characters due to an active keypress
-// mode or an unproperly closed readline session. In addition to that,
+// mode or an incorrectly closed readline session. In addition to that,
 // audible alarm may keep playing. So, this handler should attempt to exit
 // gracefully.
 //

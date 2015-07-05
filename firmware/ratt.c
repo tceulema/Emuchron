@@ -87,7 +87,8 @@ extern clockDriver_t monochron[];
 extern clockDriver_t *mcClockPool;
 
 // Time dividers
-uint8_t t2divider1 = 0, t2divider2 = 0;
+uint8_t t2divider1 = 0;
+//uint8_t t2divider2 = 0;
 
 // Local function prototypes
 void rtcTimeInit(void);
@@ -336,8 +337,11 @@ int main(void)
 #ifndef EMULIN
 SIGNAL(TIMER0_COMPA_vect)
 {
+  // Countdown timers
   if (animTicker)
     animTicker--;
+  if (buttonholdcounter)
+    buttonholdcounter--;
 
   if (alarming == GLCD_TRUE && snoozeTimer == 0)
   {
@@ -502,6 +506,8 @@ SIGNAL (TIMER2_OVF_vect)
   if (time_s != last_s)
   {
     // Do admin on countdown timers
+    if (timeoutcounter)
+      timeoutcounter--;
     if (alarming == GLCD_TRUE && snoozeTimer > 0)
     {
       if (snoozeTimer == 1)
@@ -515,10 +521,9 @@ SIGNAL (TIMER2_OVF_vect)
 #else
         alarmTone = 0;
 #endif
+        DEBUGP("Alarm -> Snooze timeout");
       }
       snoozeTimer--;
-      if (snoozeTimer == 0)
-        DEBUGP("Alarm -> Snooze timeout");
     }
     if (alarming == GLCD_TRUE && alarmTimer > 0)
     {
@@ -541,11 +546,11 @@ SIGNAL (TIMER2_OVF_vect)
        displaymode == SET_DISPLAY) && !screenmutex)
   {
     glcdSetAddress(MENU_INDENT + 12 * 6, 2);
-    glcdPrintNumber(time_h, mcFgColor);
-    glcdWriteChar(':', mcFgColor);
-    glcdPrintNumber(time_m, mcFgColor);
-    glcdWriteChar(':', mcFgColor);
-    glcdPrintNumber(time_s, mcFgColor);
+    glcdPrintNumberFg(time_h);
+    glcdWriteCharFg(':');
+    glcdPrintNumberFg(time_m);
+    glcdWriteCharFg(':');
+    glcdPrintNumberFg(time_s);
   }
 
   // Signal a clock time event only when the previous has not been
@@ -583,10 +588,13 @@ SIGNAL (TIMER2_OVF_vect)
     alarmTimer = MAXALARM;
   }
   
-  // Control a bunch of timeout counters. Note this is tricky stuff
-  // since it is also influenced by the t2divider1 counter at the top
-  // of this function.
-  if (t2divider2 == TIMER2_RETURN_2)
+  // Control timeout counters. Note this is tricky stuff since entering
+  // this code section is also influenced by the t2divider1 counter at
+  // the top of this function. With the current settings this code section
+  // is entered about once per second.
+  // To use this, uncomment the t2divider2 declaration at the top of this
+  // file, the code section below and then add timeout counter logic.
+  /*if (t2divider2 == TIMER2_RETURN_2)
   {
     t2divider2 = 0;
   }
@@ -595,10 +603,8 @@ SIGNAL (TIMER2_OVF_vect)
     t2divider2++;
     return;
   }
-  if (buttonholdcounter)
-    buttonholdcounter--;
-  if (timeoutcounter)
-    timeoutcounter--;
+  // Add your timeout counter functionality here
+  */
 }
 
 #ifndef EMULIN
@@ -811,7 +817,7 @@ inline uint8_t i2bcd(uint8_t x)
 //
 void init_eeprom(void)
 {
-  //Set eeprom to a default state.
+  // Set eeprom to a default state.
   if (eeprom_read_byte((uint8_t *)EE_INIT) != EE_INITIALIZED)
   {
     eeprom_write_byte((uint8_t *)EE_ALARM_HOUR, 8);
@@ -953,7 +959,7 @@ void rtcTimeInit(void)
   if (readi2ctime())
   {
     DEBUGP("Uh oh, RTC was off, lets reset it!");
-    writei2ctime(00, 00, 12, 0, 1, 1, 14); // Noon Jan 1 2014
+    writei2ctime(00, 00, 12, 0, 1, 1, 15); // Noon Jan 1 2015
   }
 
   readi2ctime();
@@ -1009,7 +1015,7 @@ void writei2ctime(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
 {
   uint8_t clockdata[8] = {0,0,0,0,0,0,0,0};
 
-  clockdata[0] = 0; // address
+  clockdata[0] = 0;           // address
   clockdata[1] = i2bcd(sec);  // s
   clockdata[2] = i2bcd(min);  // m
   clockdata[3] = i2bcd(hr);   // h

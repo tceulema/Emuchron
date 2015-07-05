@@ -6,6 +6,9 @@
 #ifndef LCD_H
 #define LCD_H
 
+// The file in $HOME holding the ncurses tty
+#define NCURSES_TTYFILE		"/.mchron"
+
 // Definition of a structure to hold LCD device init related data
 typedef struct _lcdDeviceParam_t
 {

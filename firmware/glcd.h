@@ -67,12 +67,16 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType, u08 col
 // Write a standard ascii character (values 20-127)
 // to the display at current cursor location
 void glcdWriteChar(unsigned char c, u08 color);
+void glcdWriteCharFg(unsigned char c);
 
 // Write a string at current cursor location
 void glcdPutStr(char *data, u08 color);
+void glcdPutStrFg(char *data);
 
 // Write a number in two digits at current cursor location
 void glcdPrintNumber(u08 n, u08 color);
+void glcdPrintNumberBg(u08 n);
+void glcdPrintNumberFg(u08 n);
 
 // Write a horizontal string at pixel position [x,y]
 u08 glcdPutStr2(u08 x, u08 y, u08 font, char *data, u08 color);
@@ -84,4 +88,5 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
 
 // Get the pixel width of a string
 u08 glcdGetWidthStr(u08 font, char *data);
+
 #endif

@@ -21,13 +21,17 @@
 #define ANA_Y_START		31
 #define ANA_RADIUS		30
 #define ANA_DOT_RADIUS		(ANA_RADIUS - 1.9L)
-#define ANA_SEC_RADIUS		(ANA_RADIUS - 5.9L)
+#define ANA_SEC_RADIUS_LINE	(ANA_RADIUS - 4.9L)
+#define ANA_SEC_RADIUS_ARROW	(ANA_RADIUS - 2.3L)
 #define ANA_MIN_RADIUS		(ANA_RADIUS - 2.9L)
 #define ANA_HOUR_RADIUS		(ANA_RADIUS - 9.9L)
+#define ANA_SEC_LEG_RADIUS	(ANA_RADIUS - 7.0L)
 #define ANA_MIN_LEG_RADIUS	8
 #define ANA_HOUR_LEG_RADIUS	5
-#define ANA_SECMIN_STEPS	60L
+#define ANA_SEC_STEPS		60L
+#define ANA_MIN_STEPS		60L
 #define ANA_HOUR_STEPS		12L
+#define ANA_SEC_LEG_RADIAL_OFFSET	(0.10L)
 #define ANA_MIN_LEG_RADIAL_OFFSET	(2L * M_PI / 2.50L)
 #define ANA_HOUR_LEG_RADIAL_OFFSET	(2L * M_PI / 2.50L)
 
@@ -39,6 +43,16 @@
 #define ANA_DATE_X_START	2
 #define ANA_DATE_Y_START	57
 #define ANA_DATE_X_SIZE		23
+
+// Determine the second indicator shape.
+// 0 = Needle
+// 1 = Floating arrow
+#define ANA_SEC_TYPE		1
+
+// Determine how the second indicator moves.
+// 0 = Only at a full second stop
+// 1 = Whenever the (x,y) position of a leg changes
+#define ANA_SEC_MOVE		1
 
 // Determine how the minute arrow moves.
 // 0 = Only at a full minute stop
@@ -59,6 +73,11 @@ extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern unsigned char *months[12];
 
+// Clock cycle counter since last time event/init for smooth second indicator move
+extern volatile uint8_t mcU8Util2;
+// Indicator whether to show the second needle/arrow
+extern volatile uint8_t mcU8Util3;
+
 // Local function prototypes
 void analogAlarmAreaUpdate(void);
 u08 analogElementCalc(s08 position[], s08 positionNew[], float radial, float radialOffset,
@@ -66,9 +85,6 @@ u08 analogElementCalc(s08 position[], s08 positionNew[], float radial, float rad
 void analogElementDraw(s08 position[], u08 color);
 void analogElementSync(s08 position[], s08 positionNew[]);
 void analogInit(u08 mode);
-
-// Indicator whether to show the seconds needle
-u08 anaSecShow;
 
 // Arrays holding the [x,y] positions of the three arrow points
 // for the hour and minute arrows and the seconds needle
@@ -89,11 +105,26 @@ void analogCycle(void)
   // Update alarm info in clock
   analogAlarmAreaUpdate();
 
-  // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
-    return;
-
-  DEBUGP("Update Analog");
+  if (ANA_SEC_MOVE == 0)
+  {
+    // Only if a time event or init is flagged we need to update the clock
+    if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+      return;
+    DEBUGP("Update Analog");
+  }
+  else
+  {
+    // Smooth second indicator so we may update every clock cycle
+    if (mcClockTimeEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+    {
+      DEBUGP("Update Analog");
+      mcU8Util2 = 0;
+    }
+    else
+    {
+      mcU8Util2++;
+    }
+  }
 
   // Local data
   float radElement;
@@ -103,36 +134,54 @@ void analogCycle(void)
   u08 hourElementChanged = GLCD_FALSE;
 
   // Calculate (potential) changes in seconds needle
-  if (anaSecShow == GLCD_TRUE)
+  if (mcU8Util3 == GLCD_TRUE)
   {
-    radElement = (2L * M_PI / ANA_SECMIN_STEPS) * (float)mcClockNewTS;
-    secElementChanged = analogElementCalc(posSec, posSecNew, radElement,
-      0L, ANA_SEC_RADIUS, 0, 1);
+    if (ANA_SEC_MOVE == 0)
+      // Move at time event (once per second or init)
+      radElement = (2L * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS;
+    else
+      // Move when leg position changes
+      radElement = (2L * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS +
+        (2L * M_PI / ANA_SEC_STEPS / (1000L / ANIMTICK_MS + 0.5)) * mcU8Util2;
+
+    if (ANA_SEC_TYPE == 0)
+      // Needle indicator
+      secElementChanged = analogElementCalc(posSec, posSecNew, radElement,
+        0L, ANA_SEC_RADIUS_LINE, 0, 2);
+    else
+      // Floating arrow indicator
+      secElementChanged = analogElementCalc(posSec, posSecNew, radElement,
+        ANA_SEC_LEG_RADIAL_OFFSET, ANA_SEC_RADIUS_ARROW, ANA_SEC_LEG_RADIUS, 6);
   }
 
-  // Calculate (potential) changes in minute arrow
-  if (ANA_MIN_MOVE == 0)
-    radElement = (2L * M_PI / ANA_SECMIN_STEPS) * (float)mcClockNewTM;
-  else
-    radElement = (2L * M_PI / ANA_SECMIN_STEPS) * (float)mcClockNewTM  +
-      (2L * M_PI / ANA_SECMIN_STEPS / ANA_SECMIN_STEPS) * (float)mcClockNewTS;
-  minElementChanged = analogElementCalc(posMin, posMinNew, radElement,
-    ANA_MIN_LEG_RADIAL_OFFSET, ANA_MIN_RADIUS, ANA_MIN_LEG_RADIUS, 1);
-
-  // Calculate (potential) changes in hour arrow. In normal operation only
-  // change the hour arrow if the minute arrow moves as well.
-  // Note: Include progress in minutes during the hour.
-  if (minElementChanged == GLCD_TRUE || mcClockOldTH != mcClockNewTH ||
-      mcClockInit == GLCD_TRUE)
+  if (mcClockTimeEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
   {
-    radElement = (2L * M_PI / ANA_HOUR_STEPS) * (float)(mcClockNewTH % 12) +
-      (2L * M_PI / ANA_SECMIN_STEPS / ANA_HOUR_STEPS) * (float)mcClockNewTM;
-    hourElementChanged = analogElementCalc(posHour, posHourNew, radElement,
-      ANA_HOUR_LEG_RADIAL_OFFSET, ANA_HOUR_RADIUS, ANA_HOUR_LEG_RADIUS, 3);
+    // Calculate (potential) changes in minute arrow
+    if (ANA_MIN_MOVE == 0)
+      // Move once per minute
+      radElement = (2L * M_PI / ANA_MIN_STEPS) * (float)mcClockNewTM;
+    else
+      // Move when tip position changes
+      radElement = (2L * M_PI / ANA_MIN_STEPS) * (float)mcClockNewTM  +
+        (2L * M_PI / ANA_SEC_STEPS / ANA_MIN_STEPS) * (float)mcClockNewTS;
+    minElementChanged = analogElementCalc(posMin, posMinNew, radElement,
+      ANA_MIN_LEG_RADIAL_OFFSET, ANA_MIN_RADIUS, ANA_MIN_LEG_RADIUS, 2);
+
+    // Calculate (potential) changes in hour arrow. In normal operation only
+    // change the hour arrow if the minute arrow moves as well.
+    // Note: Include progress in minutes during the hour.
+    if (minElementChanged == GLCD_TRUE || mcClockOldTH != mcClockNewTH ||
+        mcClockInit == GLCD_TRUE)
+    {
+      radElement = (2L * M_PI / ANA_HOUR_STEPS) * (float)(mcClockNewTH % 12) +
+        (2L * M_PI / ANA_MIN_STEPS / ANA_HOUR_STEPS) * (float)mcClockNewTM;
+      hourElementChanged = analogElementCalc(posHour, posHourNew, radElement,
+        ANA_HOUR_LEG_RADIAL_OFFSET, ANA_HOUR_RADIUS, ANA_HOUR_LEG_RADIUS, 6);
+    }
   }
 
   // Redraw seconds needle if needed
-  if (anaSecShow == GLCD_TRUE &&
+  if (mcU8Util3 == GLCD_TRUE &&
       (secElementChanged == GLCD_TRUE || mcClockInit == GLCD_TRUE))
   {
     // Remove the old seconds needle, sync with new position and redraw
@@ -151,7 +200,7 @@ void analogCycle(void)
 
     // Redraw the seconds needle as it got distorted by the minute
     // arrow draw
-    if (anaSecShow == GLCD_TRUE)
+    if (mcU8Util3 == GLCD_TRUE)
       analogElementDraw(posSec, mcFgColor);
   }
   else if (secElementChanged == GLCD_TRUE)
@@ -172,7 +221,7 @@ void analogCycle(void)
 
     // Redraw the seconds needle and minute arrow as they get distorted
     // by the arrow redraw
-    if (anaSecShow == GLCD_TRUE)
+    if (mcU8Util3 == GLCD_TRUE)
       analogElementDraw(posSec, mcFgColor);
     analogElementDraw(posMin, mcFgColor);
   }
@@ -193,7 +242,7 @@ void analogCycle(void)
 //
 void analogHmInit(u08 mode)
 {
-  anaSecShow = GLCD_FALSE;
+  mcU8Util3 = GLCD_FALSE;
   analogInit(mode);
 }
 
@@ -205,7 +254,7 @@ void analogHmInit(u08 mode)
 //
 void analogHmsInit(u08 mode)
 {
-  anaSecShow = GLCD_TRUE;
+  mcU8Util3 = GLCD_TRUE;
   analogInit(mode);
 }
 
@@ -231,11 +280,11 @@ void analogAlarmAreaUpdate(void)
       float radM, radH;
 
       // Prepare the analog alarm clock
-      radM = (2L * M_PI / ANA_SECMIN_STEPS) * (float)mcAlarmM;
+      radM = (2L * M_PI / ANA_MIN_STEPS) * (float)mcAlarmM;
       dxM = (s08)(sin(radM) * ANA_ALARM_MIN_RADIUS);
       dyM = (s08)(-cos(radM) * ANA_ALARM_MIN_RADIUS);
       radH = (2L * M_PI / ANA_HOUR_STEPS) * (float)(mcAlarmH % 12) +
-        (2L * M_PI / ANA_SECMIN_STEPS / ANA_HOUR_STEPS) * (float)mcAlarmM;
+        (2L * M_PI / ANA_MIN_STEPS / ANA_HOUR_STEPS) * (float)mcAlarmM;
       dxH = (s08)(sin(radH) * ANA_ALARM_HOUR_RADIUS);
       dyH = (s08)(-cos(radH) * ANA_ALARM_HOUR_RADIUS);
 
@@ -321,7 +370,7 @@ u08 analogElementCalc(s08 position[], s08 positionNew[], float radial, float rad
   positionNew[5] = (s08)(-cos(radial - radialOffset) * legRadius) + ANA_Y_START;
 
   // Provide info if the needle or arrow has changed position  
-  for (i = 0; i < legsCheck * 2; i++)
+  for (i = 0; i < legsCheck; i++)
   {    
     if (position[i] != positionNew[i])
       return GLCD_TRUE;
@@ -355,7 +404,8 @@ void analogElementDraw(s08 position[], u08 color)
 //
 void analogElementSync(s08 position[], s08 positionNew[])
 {
-  u08 i, posLimit;
+  u08 i;
+  u08 posLimit;
 
   // For the seconds needle we don't want to copy leg info 
   if (position[2] == ANA_X_START && position[3] == ANA_Y_START)
@@ -420,14 +470,17 @@ void analogInit(u08 mode)
     }
 
     // The following inits force the seconds element to become a needle
-    posSec[2] = ANA_X_START;
-    posSec[3] = ANA_Y_START;
+    if (ANA_SEC_TYPE == 0)
+    {
+      posSec[2] = ANA_X_START;
+      posSec[3] = ANA_Y_START;
+    }
 
     // Force the alarm info area to init itself
     mcAlarmSwitch = ALARM_SWITCH_NONE;
     mcU8Util1 = GLCD_FALSE;
   }
-  else if (anaSecShow == GLCD_FALSE)
+  else if (mcU8Util3 == GLCD_FALSE)
   {
     // Assume this is a partial init from an analog HMS clock to an
     // analog HM clock. So, we should remove the seconds needle.

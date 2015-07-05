@@ -66,6 +66,13 @@ u08 lcdBuffer[GLCD_NUM_CONTROLLERS][GLCD_XPIXELS / GLCD_NUM_CONTROLLERS][GLCD_YP
 u08 useGlut = GLCD_FALSE;
 u08 useNcurses = GLCD_FALSE;
 
+// Statistics counters on glcd interface. The ncurses and glut devices
+// have their own dedicated statistics counters that are administered
+// independent from these.
+long long lcdLcdByteRead = 0;   // Nbr of lcd bytes read from lcd
+long long lcdLcdByteWrite = 0;  // Nbr of lcd bytes written to lcd
+long long lcdLcdSetAddress = 0; // Nbr of calls to set cursor in lcd display
+
 //
 // Function: lcdDeviceBacklightSet
 //
@@ -144,10 +151,13 @@ void lcdDeviceRestore(void)
 //
 // Function: lcdStatsPrint
 //
-// Print the LCD device performance statistics 
+// Print the glcd interface and LCD device performance statistics 
 //
 void lcdStatsPrint(void)
 {
+  // Report the LCD interface statistics
+  printf("glcd   : dataWrite=%llu, dataRead=%llu, setAddress=%llu\n",
+    lcdLcdByteWrite, lcdLcdByteRead / 2, lcdLcdSetAddress);
 
   // Report glut statistics
   if (useGlut == GLCD_TRUE)
@@ -223,10 +233,13 @@ void lcdStatsPrint(void)
 //
 // Function: lcdStatsReset
 //
-// Reset the LCD device performance statistics 
+// Reset the LCD interface and device performance statistics 
 //
 void lcdStatsReset(void)
 {
+  lcdLcdByteRead = 0;
+  lcdLcdByteWrite = 0;
+  lcdLcdSetAddress = 0;
   if (useGlut == GLCD_TRUE)
     lcdGlutStatsReset();
   if (useNcurses == GLCD_TRUE)
@@ -263,6 +276,9 @@ u08 lcdReadStub(u08 controller)
 
   // Read from LCD emulator buffer
   data = lcdBuffer[controller][x][GrLcdState.lcdYAddr];
+
+  // Statistics
+  lcdLcdByteRead++;
 
   return data;
 }
@@ -302,5 +318,8 @@ void lcdWriteStub(u08 data)
     lcdGlutDataWrite(GrLcdState.lcdXAddr, GrLcdState.lcdYAddr, data);
   if (useNcurses == 1)
     lcdNcurDataWrite(GrLcdState.lcdXAddr, GrLcdState.lcdYAddr, data);
+
+  // Statistics
+  lcdLcdByteWrite++;
 }
 

@@ -40,10 +40,6 @@
 #define VIZ_AD_Y_START	9
 #define VIZ_AD_WIDTH	24
 
-// Specifics for the menu bar values
-#define MBAR_VAL_DETAIL	0
-#define MBAR_VAL_DFLT	1
-
 // Specifics for the menu bar layout
 #define MBAR_TXT_LEFT	0
 #define MBAR_TXT_CENTER	1
@@ -51,7 +47,6 @@
 // Structure defining the several layouts for a Spotfire menu bar
 typedef struct
 {
-  uint8_t barType;	// Detail or default entry
   uint8_t barText;	// Alignment: left or center
   uint8_t day;		// Message date day
   uint8_t month;	// Message date month
@@ -83,14 +78,14 @@ char barAprFool[] = "*** happy april fool's day ***";
 char barBirthday[] = "** happy birthday ";
 char barMsgDflt[] = "FILE  EDIT  VIEW  INSERT  TOOLS  HELP";
 
-// The menuBarDriver array defines the possible Spotfire menu bars
+// The menuBarDriver array defines the possible Spotfire menu bars.
+// The last entry in the array is considered the default.
 menuBarDriver_t menuBarDriver[] =
 {
-  {MBAR_VAL_DETAIL,  MBAR_TXT_CENTER,  1,  1, barNewYear,  0},
-  {MBAR_VAL_DETAIL,  MBAR_TXT_CENTER,  1,  4, barAprFool,  0},
-  {MBAR_VAL_DETAIL,  MBAR_TXT_CENTER, 14,  3, barBirthday, "albert einstein **"},
-  // Never remove the line below as it defines the end of the array
-  {MBAR_VAL_DFLT,    MBAR_TXT_LEFT,    0,  0, barMsgDflt,  0}
+  {MBAR_TXT_CENTER,  1,  1, barNewYear,  0},
+  {MBAR_TXT_CENTER,  1,  4, barAprFool,  0},
+  {MBAR_TXT_CENTER, 14,  3, barBirthday, "albert einstein **"},
+  {MBAR_TXT_LEFT,    0,  0, barMsgDflt,  0}
 };
 
 // Contains the current message of the Spotfire menu bar
@@ -382,12 +377,12 @@ void spotMenuBarUpdate(void)
   if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
       mcClockInit == GLCD_TRUE)
   {
-    uint8_t i = 0;
+    uint8_t i = 1;
     uint8_t posX;
     menuBarDriver_t *mbDriver = menuBarDriver;
 
     // Find the new menu bar
-    while (mbDriver->barType != MBAR_VAL_DFLT)
+    while (i < sizeof(menuBarDriver) / sizeof(menuBarDriver_t))
     {
       if (mcClockNewDD == mbDriver->day &&
           mcClockNewDM == mbDriver->month)

@@ -15,6 +15,11 @@
 // The cmdline input stream batch size for a single line
 #define CMD_BUILD_LEN	128
 
+// The readline unsaved cache and history file with size parameters
+#define READLINE_CACHESIZE	15
+#define READLINE_HISFILE	"/.mchron_history"
+#define READLINE_MAXHISTORY	250
+
 // A structure to hold runtime information for a named numeric variable
 typedef struct _variable_t
 {
@@ -43,6 +48,13 @@ argItem_t argRepeatCmd[] =
 // External data from expression evaluator
 extern int exprValue;
 extern int varError;
+
+// Our readline history buffer length prior to flushing to history file
+int rlCacheLen = 0;
+char rlHistoryFile[200];
+
+// This is me
+extern const char *__progname;
 
 // Local function prototypes
 int argValidateChar(argItem_t argItem, char argValue, int silent);
@@ -670,12 +682,15 @@ int cmdFileLoad(cmdLine_t **cmdLineRoot, cmdRepeat_t **cmdRepeatRoot,
 //
 void cmdInputCleanup(cmdInput_t *cmdInput)
 {
-  // Add previous read to history when applicable
+  // Add last read to history cache when applicable
   if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
   {
     if (cmdInput->input != NULL && (cmdInput->input)[0] != '\0' && 
         (cmdInput->input)[0] != '\n')
+    {
       add_history(cmdInput->input);
+      rlCacheLen++;
+    }
   }
 
   // Cleanup previous read
@@ -685,9 +700,14 @@ void cmdInputCleanup(cmdInput_t *cmdInput)
     cmdInput->input = NULL;
   }
 
-  // Cleanup the readline interface
+  // Flush pending readline cache and cleanup the readline interface
   if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
   {
+    if (rlHistoryFile[0] != '\0')
+    {
+      append_history(rlCacheLen, rlHistoryFile);
+      history_truncate_file(rlHistoryFile, READLINE_MAXHISTORY);
+    }
     rl_deprep_terminal();
     rl_reset_terminal(NULL);
   }
@@ -697,15 +717,53 @@ void cmdInputCleanup(cmdInput_t *cmdInput)
 // Function: cmdInputInit
 //
 // Open an input stream in preparation to read its input line by line
-// regardless the line size
+// regardless the line size.
+// Note: It is assumed that the readline method is used only once, being
+// the mchron command line.
 //
 void cmdInputInit(cmdInput_t *cmdInput)
 {
   cmdInput->input = NULL;
   if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
   {
+    // Open/create the mchron readline history file to make sure it exists
+    FILE *fp;
+    char *home;
+
+    // Get the full path to $HOME/.mchron
+    home = getenv("HOME");
+    if (home == NULL)
+    {
+      printf("%s: Readline: Cannot get $HOME\n", __progname);
+      rlHistoryFile[0] = '\0';
+    }
+    else
+    {
+      // Combine $HOME and filename, open/create file and close it
+      strcpy(rlHistoryFile, home);
+      strcat(rlHistoryFile, READLINE_HISFILE);
+      fp = fopen(rlHistoryFile, "a");
+      if (fp == NULL)
+      {
+        printf("%s: Readline: Cannot open file \"%s%s\".\n", __progname,
+         "$HOME", READLINE_HISFILE);
+        rlHistoryFile[0] = '\0';
+      }
+      else
+      {
+        fclose(fp);
+      }
+    }
+
     // Disable auto-complete
     rl_bind_key('\t',rl_insert);
+
+    // Truncate saved history and then load it in readline cache
+    if (rlHistoryFile[0] != '\0')
+    {
+      history_truncate_file(rlHistoryFile, READLINE_MAXHISTORY);
+      read_history(rlHistoryFile);
+    }
   }
 }
 
@@ -720,12 +778,22 @@ void cmdInputInit(cmdInput_t *cmdInput)
 //
 void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
 {
-  // Add previous read to history when applicable
+  // Add previous read to readline cache when applicable
   if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
   {
     if (cmdInput->input != NULL && (cmdInput->input)[0] != '\0' && 
         (cmdInput->input)[0] != '\n')
+    {
       add_history(cmdInput->input);
+      rlCacheLen++;
+      // We may need to flush unsaved readline cache into our history file
+      if (rlCacheLen == READLINE_CACHESIZE)
+      {
+        if (rlHistoryFile[0] != '\0')
+          append_history(READLINE_CACHESIZE, rlHistoryFile);
+        rlCacheLen = 0;
+      }
+    }
   }
 
   // Cleanup previous read
@@ -824,7 +892,7 @@ int cmdKeyboardLoad(cmdLine_t **cmdLineRoot, cmdRepeat_t **cmdRepeatRoot,
   cmdLine_t *cmdLineLast = NULL;	// The last cmdline in linked list
   cmdRepeat_t *cmdRepeatLast = NULL;	// The last cmdrepeat in linked list
   int repeatCount = 0;			// rw vs rn command count
-  char prompt[] = ">> ";
+  char prompt[15];
   int init = GLCD_TRUE;
   int lineNum = 1;
   char *input = NULL;
@@ -911,6 +979,10 @@ int cmdKeyboardLoad(cmdLine_t **cmdLineRoot, cmdRepeat_t **cmdRepeatRoot,
     // initial repeat while command. We must now switch to our own
     // command input scanner.
     init = GLCD_FALSE;
+
+    // Create a prompt that includes the linenumber
+    sprintf(prompt, "%d", lineNum);
+    strcat(prompt, ">> ");
 
     // Get the next keyboard input line
     cmdInputRead(prompt, cmdInput);

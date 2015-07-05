@@ -12,6 +12,10 @@ FORMAT = ihex
 # Target file name (without extension)
 TARGET = monochron
 
+# Target file name (with extensions)
+TARGET_EXT = a90 cof eep elf hex lnk lss map obj sym
+TARGET_FILES = $(addprefix $(TARGET).,$(TARGET_EXT))
+
 # Optimization level, can be [0, 1, 2, 3, s]. 0 turns off optimization.
 # Note: Level 3 is not always the best. See avr-libc FAQ.
 OPT = s
@@ -44,14 +48,18 @@ SRC = $(BASE) \
 #SRC = $(BASE) \
 #  clock/analog.c clock/bigdigit.c clock/digital.c clock/qr.c clock/qrencode.c
 
+# Monochron clocks - IV - glcd performance test (that uses analog clock code)
+#SRC = $(BASE) \
+#  clock/perftest.c clock/analog.c
+
 # All clocks
 # Note: This will build a much too big firmware file but serves as a test
 # to verify whether everything will build cleanly
 #SRC = $(BASE) \
 #  clock/analog.c clock/bigdigit.c clock/digital.c clock/mosquito.c clock/nerd.c \
-#  clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c clock/slider.c \
-#  clock/spotfire.c clock/cascade.c clock/speeddial.c clock/spiderplot.c \
-#  clock/trafficlight.c
+#  clock/perftest.c clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c \
+#  clock/slider.c clock/spotfire.c clock/cascade.c clock/speeddial.c \
+#  clock/spiderplot.c clock/trafficlight.c 
 
 # List Assembler source files here.
 # Make them always end in a capital .S. Files ending in a lowercase .s
@@ -276,43 +284,33 @@ extcoff: $(TARGET).elf
 	avr-nm -n $< > $@
 
 # Link: create ELF output file from object files
-.SECONDARY : $(TARGET).elf
-.PRECIOUS : $(OBJ)
+.SECONDARY: $(TARGET).elf
+.PRECIOUS: $(OBJ)
 %.elf: $(OBJ)
 	@echo
 	@echo $(MSG_LINKING) $@
 	$(CC) $(ALL_CFLAGS) $(OBJ) --output $@ $(LDFLAGS)
 
 # Compile: create object files from C source files
-%.o : %.c
+%.o: %.c
 	@echo
 	@echo $(MSG_COMPILING) $<
 	$(CC) -c $(ALL_CFLAGS) $(MARIO) -DTXMODE=$(TXMODE)   $< -o $@
 
 # Compile: create assembler files from C source files
-%.s : %.c
+%.s: %.c
 	$(CC) -S $(ALL_CFLAGS) $< -o $@
 
 # Assemble: create object files from assembler source files
-%.o : %.S
+%.o: %.S
 	@echo
 	@echo $(MSG_ASSEMBLING) $<
 	$(CC) -c $(ALL_ASFLAGS) $< -o $@
 
 # Cleanup: remove project target and intermediate products
-clean_list :
+clean_list:
 	@echo $(MSG_CLEANING)
-	$(REMOVE) $(TARGET).hex
-	$(REMOVE) $(TARGET).eep
-	$(REMOVE) $(TARGET).obj
-	$(REMOVE) $(TARGET).cof
-	$(REMOVE) $(TARGET).elf
-	$(REMOVE) $(TARGET).map
-	$(REMOVE) $(TARGET).obj
-	$(REMOVE) $(TARGET).a90
-	$(REMOVE) $(TARGET).sym
-	$(REMOVE) $(TARGET).lnk
-	$(REMOVE) $(TARGET).lss
+	$(REMOVE) $(TARGET_FILES)
 	$(REMOVE) $(OBJ)
 	$(REMOVE) $(LST)
 	$(REMOVE) $(SRC:.c=.s)
@@ -322,6 +320,6 @@ clean_list :
 -include $(SRC:.c=.d)
 
 # Listing of phony targets
-.PHONY : all begin finish end sizebefore sizeafter gccversion coff extcoff \
+.PHONY: all begin finish end sizebefore sizeafter gccversion coff extcoff \
 	clean clean_list rebuild connect program
 

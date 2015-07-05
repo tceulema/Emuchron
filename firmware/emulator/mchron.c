@@ -29,6 +29,7 @@
 #include "../clock/puzzle.h"
 #include "../clock/slider.h"
 #include "../clock/cascade.h"
+#include "../clock/perftest.h"
 #include "../clock/speeddial.h"
 #include "../clock/spiderplot.h"
 #include "../clock/trafficlight.h"
@@ -136,11 +137,13 @@ clockDriver_t emuMonochron[] =
   {CHRON_BIGDIG_TWO,  DRAW_INIT_FULL, bigdigInit,         bigdigCycle,         bigdigButton},
   {CHRON_QR_HMS,      DRAW_INIT_FULL, qrInit,             qrCycle,             0},
   {CHRON_QR_HM,       DRAW_INIT_FULL, qrInit,             qrCycle,             0},
+  {CHRON_PERFTEST,    DRAW_INIT_FULL, perfInit,           perfCycle,           0}
 };
 
 // Main command handler function prototypes
 int doAlarmPosition(char *input, int echoCmd);
 int doAlarmSet(char *input, int echoCmd);
+int doAlarmToggle(char *input, int echoCmd);
 int doBeep(char *input, int echoCmd);
 int doClockFeed(char *input, int echoCmd);
 int doClockSet(char *input, int echoCmd);
@@ -249,7 +252,7 @@ int main(int argc, char *argv[])
   alarmSwitchSet(GLCD_FALSE, GLCD_FALSE);
   alarmSoundKill();
 
-  // Init emuchron system clock and report time/date/alarm
+  // Init emuchron system clock and report time+date+alarm
   readi2ctime();
   emuTimePrint();
 
@@ -349,7 +352,39 @@ int doAlarmPosition(char *input, int echoCmd)
   // Report the new alarm settings
   if (echoCmd == CMD_ECHO_YES)
   {
-    // Get current time+date
+    // Report current time+date+alarm
+    readi2ctime();
+    emuTimePrint();
+  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doAlarmToggle
+//
+// Toggle alarm switch position
+//
+int doAlarmToggle(char *input, int echoCmd)
+{
+  // The command line may not contain additional arguments
+  ARGSCAN(argEnd, &input);
+
+  // Toggle alarm switch position
+  alarmSwitchToggle(GLCD_FALSE);
+
+  // Update clock when active
+  if (mcClockPool[mcMchronClock].clockId != CHRON_NONE)
+  {
+    alarmStateSet();
+    animClockDraw(DRAW_CYCLE);
+    lcdDeviceFlush(0);
+  }
+
+  // Report the new alarm settings
+  if (echoCmd == CMD_ECHO_YES)
+  {
+    // Report current time+date+alarm
     readi2ctime();
     emuTimePrint();
   }
@@ -412,7 +447,7 @@ int doAlarmSet(char *input, int echoCmd)
   // Report the new alarm settings
   if (echoCmd == CMD_ECHO_YES)
   {
-    // Get current time+date
+    // Report current time+date+alarm
     readi2ctime();
     emuTimePrint();
   }
@@ -605,7 +640,7 @@ int doDate(char *input, int echoCmd, int reset)
   // Update clock when active
   emuClockUpdate();
 
-  // Report the new date settings
+  // Report (new) time+date+alarm
   if (echoCmd == CMD_ECHO_YES)
   {
     emuTimePrint();
@@ -772,6 +807,11 @@ int doInput(cmdInput_t *cmdInput, int echoCmd)
   {
     // Set alarm time
     retVal = doAlarmSet(input, echoCmd);
+  }
+  else if (strcmp(argWord[0], "at") == 0)
+  {
+    // Toggle alarm switch position
+    retVal = doAlarmToggle(input, echoCmd);
   }
   else if (strcmp(argWord[0], "b") == 0)
   {

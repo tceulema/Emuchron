@@ -73,7 +73,7 @@ SIGNAL(ADC_vect)
     // Button 3 "+" pressed
     if (!(last_buttonstate & BTTN_PLUS))
     {
-      // Was not pressed before, debounce by taking a second reading
+      // Was not pressed before, debounce by taking another reading
       _delay_ms(10);
       reading2 = readADC();
       if ( (reading2 > 735) || (reading2 < 610))
@@ -84,9 +84,9 @@ SIGNAL(ADC_vect)
 	return;
       }
 
-      // See if we're press-and-holding
-      buttonholdcounter = 1;
-      // The hold counter is decremented by a timer
+      // See if we're press-and-holding.
+      // The hold counter is decremented by the 1-msec timer.
+      buttonholdcounter = 150;
       while (buttonholdcounter)
       {
 	reading2 = readADC();
@@ -102,7 +102,7 @@ SIGNAL(ADC_vect)
 	  return;
 	}
       }
-      // 1 second later...
+      // 0.15 second later...
       last_buttonstate |= BTTN_PLUS;
       // The button was held down (fast advance)
       pressed |= BTTN_PLUS;
@@ -113,7 +113,7 @@ SIGNAL(ADC_vect)
     // Button 2 "SET" pressed
     if (!(last_buttonstate & BTTN_SET))
     {
-      // Was not pressed before, debounce by taking a second reading
+      // Was not pressed before, debounce by taking another reading
       _delay_ms(10);
       reading2 = readADC();
       if ( (reading2 > 610) || (reading2 < 270))
@@ -135,7 +135,7 @@ SIGNAL(ADC_vect)
     // Button 1 "MENU" pressed
     if (!(last_buttonstate & BTTN_MENU))
     {
-      // Was not pressed before, debounce by taking a second reading
+      // Was not pressed before, debounce by taking another reading
       _delay_ms(10);
       reading2 = readADC();
       if (reading2 > 270)

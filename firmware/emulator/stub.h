@@ -79,7 +79,7 @@ void alarmSwitchShow(void);
 void alarmSwitchToggle(uint8_t show);
 
 // Keyboard input and event Non-wait keypress
-int kbHit(void);
+char kbKeypressScan(u08 quitFind);
 int kbModeGet(void);
 void kbModeSet(int);
 char kbWaitDelay(int delay);

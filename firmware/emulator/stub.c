@@ -35,6 +35,9 @@ extern int16_t alarmTimer;
 volatile uint8_t last_buttonstate, just_pressed, pressed;
 volatile uint8_t buttonholdcounter = 0;
 
+// Data resulting from mchron startup command line processing
+extern argcArgv_t argcArgv;
+
 #ifdef MARIO
 // Mario chiptune alarm data
 extern const unsigned char __attribute__ ((progmem)) MarioTones[];
@@ -42,6 +45,9 @@ extern const unsigned char __attribute__ ((progmem)) MarioBeats[];
 extern const unsigned char __attribute__ ((progmem)) MarioMaster[];
 extern uint16_t marioMasterLen;
 #endif
+
+// The inputhandler structure from mchron
+extern cmdInput_t cmdInput;
 
 // Stubbed hardware related stuff
 uint16_t MCUSR = 0;
@@ -366,11 +372,30 @@ void coreDump(const char *location, u08 controller, u08 x, u08 y, u08 data)
     (int)controller, (int)x, (int)y, (int)data);
   printf("Debug this by loading the coredump file (when created) in a debugger.\n");
 
-  // Flush the LCD device so we get its contents as-is at the time of
-  // the forced coredump: nice for analytic purposes. Works only for
-  // ncurses. 
-  lcdDeviceFlush(1);
-  
+  // Depending on the lcd device(s) used we'll see the latest image or not.
+  // In case we're using ncurses, regardless with or without glut, flush the
+  // screen. After aborting mchron, the ncurses image will be retained.
+  // In case we're only using the glut device, give end-user the means to have
+  // a look at the glut device to get a clue what's going on before its display
+  // is killed by the application that is being aborted. Note that at this
+  // point glut is still running in its own thread and will have its layout
+  // constantly refreshed. This allows a glut screendump to be made if needed.
+  if (argcArgv.lcdDeviceParam.useNcurses == GLCD_TRUE)
+  {
+    // Flush the ncurses device so we get its contents as-is at the time of
+    // the forced coredump
+    lcdDeviceFlush(1);
+  }
+  else // argcArgv.lcdDeviceParam.useGlut == GLCD_TRUE
+  {
+    // Have end-user confirm abort, allowing a screendump to be made
+    kbWaitKeypress(GLCD_FALSE);
+  }
+
+  // Cleanup command line read interface, forcing the readline history (when
+  // active) to be flushed in the history file
+  cmdInputCleanup(&cmdInput);
+
   // Force coredump
   abort();
 }
@@ -395,6 +420,45 @@ int kbHit(void)
   return FD_ISSET(STDIN_FILENO, &rdfs);
 }
 
+//
+// Function: kbKeypressScan
+//
+// Scan keyboard for keypress. The last key in the keyboard buffer
+// is returned. However, if a search for the quit key is requested
+// and that key was pressed, the quit character is returned instead.
+// No keypress returns the null character.
+//
+char kbKeypressScan(u08 quitFind)
+{
+  char ch = '\0';
+  u08 quitFound = GLCD_FALSE;
+  int myKbMode = KB_MODE_LINE;
+
+  // Switch to keyboard scan mode if needed
+  myKbMode = kbModeGet();
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_SCAN);
+
+  // Read pending input buffer
+  while (kbHit())
+  {
+    ch = getchar();
+    if (quitFind == GLCD_TRUE && (ch == 'q' || ch == 'Q'))
+      quitFound = GLCD_TRUE;
+    //stubDelay(2);
+  }
+
+  // Return to line mode if needed
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_LINE);
+
+  // If we found the quit key return that one
+  if (quitFound == GLCD_TRUE)
+    ch = 'q';
+
+  return ch;
+}
+ 
 //
 // Function: kbModeGet
 //
@@ -483,7 +547,10 @@ char kbWaitDelay(int delay)
     {
       ch = getchar();
       if (ch == 'q' || ch == 'Q')
+      {
+        ch = 'q';
         break;
+      }
       stubDelay(2);
     }
 
@@ -577,7 +644,7 @@ void statsPrint(void)
     printf("minSleep=%d msec\n",minSleep);
   }
   
-  // Print LCD device glut and/or ncurses statistics
+  // Print glcd interface and LCD device glut and/or ncurses statistics
   lcdStatsPrint();
 }
 

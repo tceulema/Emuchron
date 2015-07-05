@@ -17,9 +17,6 @@
 # e s ../script/alarm.txt
 #
 
-# Set a time so the alarm will not fire
-ts 22 9 30
-
 # Make sure we'll be seeing the alarm time
 ap 1
 
@@ -27,6 +24,8 @@ ap 1
 rw h < 24 0 1
   # Repeat m(inute) between 0..59 with step 's'
   rw m < 60 0 s
+    # Set a time so the alarm will not fire
+    ts 22 9 30
     # Change the alarm using the 'h' and 'm' variables
     # This will update the layout of the selected clock
     as h m

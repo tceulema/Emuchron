@@ -25,6 +25,7 @@
 #define CHRON_BIGDIG_TWO	15
 #define CHRON_QR_HMS		16
 #define CHRON_QR_HM		17
+#define CHRON_PERFTEST		18
 
 // Define how visualizations draw themselves
 #define DRAW_INIT_NONE		0
