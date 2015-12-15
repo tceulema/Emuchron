@@ -10,10 +10,10 @@
 # - Set the minute step using variable 's'
 # - Set the wait delay between alarm times using variable 'w'
 #
-# Usage example (with analog HM, minute step 1 and delay of 0.03 sec):
+# Usage example (with analog HM, minute step 1 and delay of 30 msec):
 # cs 2
-# vs s 1
-# vs w 3
+# vs s=1
+# vs w=30
 # e s ../script/alarm.txt
 #
 
@@ -21,9 +21,9 @@
 ap 1
 
 # Repeat h(our) between 0..23
-rw h < 24 0 1
+rf h=0 h<24 h=h+1
   # Repeat m(inute) between 0..59 with step 's'
-  rw m < 60 0 s
+  rf m=0 m<60 m=m+s
     # Set a time so the alarm will not fire
     ts 22 9 30
     # Change the alarm using the 'h' and 'm' variables

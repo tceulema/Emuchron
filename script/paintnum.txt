@@ -1,0 +1,43 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Provide examples of the %f, %g and %e format string
+#
+
+le
+
+pa f 1 1 5x5p h 1 1 Examples 'pn' format strings:
+
+# In general, if the format is too small to fit the number to be printed,
+# the size of the field will be expanded to make it fit.
+
+# 1) Full number with default 6 decimal point digits
+pn f 1 8 5x5p h 1 1 123.456 1) %f
+
+# 2) In total 6 characters (including the .) of which 1 decimal point digit
+# that may be rounded. In case the number requires less than 6 digits, prefix
+# the number with '0' characters to make a total of 6 characters.
+pn f 1 14 5x5p h 1 1 123.456 2) %06.1f
+
+# 3) In total 6 characters (including the .) of which 2 decimal point digits.
+# In case the number requires less than 6 characters, prefix with space
+# characters (which does not apply here).
+pn f 1 20 5x5p h 1 1 123.456 3) %6.2f
+
+# 4) In total 4 characters and no decimal point digits. In case the number
+# requires less than 4 characters, prefix with space characters (in this case
+# 1 space).
+pn f 1 26 5x5p h 1 1 123.456 4) %4.0f
+
+# 5) Full number without decimal point digits
+pn f 1 32 5x5p h 1 1 1.23456e7 5) %.0f
+
+# 6) Full number with 3 decimal point digits in exponential format
+pn f 1 38 5x5p h 1 1 1.2345678e7 6) %.3e
+
+# 7) Let %g decide what should be the best format for this number
+pn f 1 44 5x5p h 1 1 1.2345678e7 7) %g
+
+# 8) Let %g decide what should be the best format for this number
+pn f 1 50 5x5p h 1 1 123.45678 8) %g
+

@@ -7,7 +7,7 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <avr/pgmspace.h>
-#include "ratt.h"
+#include "monomain.h"
 #include "util.h"
 
 // Creates a 8N1 UART connect

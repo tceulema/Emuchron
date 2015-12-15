@@ -11,7 +11,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "analog.h"
@@ -79,21 +79,21 @@ extern volatile uint8_t mcU8Util2;
 extern volatile uint8_t mcU8Util3;
 
 // Local function prototypes
-void analogAlarmAreaUpdate(void);
-u08 analogElementCalc(s08 position[], s08 positionNew[], float radial, float radialOffset,
-  u08 arrowRadius, u08 legRadius, u08 legsCheck);
-void analogElementDraw(s08 position[], u08 color);
-void analogElementSync(s08 position[], s08 positionNew[]);
-void analogInit(u08 mode);
+static void analogAlarmAreaUpdate(void);
+static u08 analogElementCalc(s08 position[], s08 positionNew[], float radial,
+  float radialOffset, u08 arrowRadius, u08 legRadius, u08 legsCheck);
+static void analogElementDraw(s08 position[], u08 color);
+static void analogElementSync(s08 position[], s08 positionNew[]);
+static void analogInit(u08 mode);
 
 // Arrays holding the [x,y] positions of the three arrow points
 // for the hour and minute arrows and the seconds needle
 // arr[0+1] = x,y arrow endpoint
 // arr[2+3] = x,y arrow leg endpoint 1 
 // arr[4+5] = x,y arrow leg endpoint 2
-s08 posSec[6];
-s08 posMin[6];
-s08 posHour[6];
+static s08 posSec[6];
+static s08 posMin[6];
+static s08 posHour[6];
 
 //
 // Function: analogCycle
@@ -263,7 +263,7 @@ void analogHmsInit(u08 mode)
 //
 // Draw update in analog clock alarm area
 //
-void analogAlarmAreaUpdate(void)
+static void analogAlarmAreaUpdate(void)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -356,8 +356,8 @@ void analogAlarmAreaUpdate(void)
 //
 // Calculate the position of a needle or three points of an analog clock arrow
 //
-u08 analogElementCalc(s08 position[], s08 positionNew[], float radial, float radialOffset,
-  u08 arrowRadius, u08 legRadius, u08 legsCheck)
+static u08 analogElementCalc(s08 position[], s08 positionNew[], float radial,
+  float radialOffset, u08 arrowRadius, u08 legRadius, u08 legsCheck)
 {
   u08 i;
 
@@ -384,7 +384,7 @@ u08 analogElementCalc(s08 position[], s08 positionNew[], float radial, float rad
 //
 // Draw an arrow or needle in the analog clock
 //
-void analogElementDraw(s08 position[], u08 color)
+static void analogElementDraw(s08 position[], u08 color)
 {
   // An arrow consists of three points, so draw lines between each
   // of them. If it turns out to be a needle only draw the first line.
@@ -402,7 +402,7 @@ void analogElementDraw(s08 position[], u08 color)
 //
 // Sync the current needle or arrow position with the new one
 //
-void analogElementSync(s08 position[], s08 positionNew[])
+static void analogElementSync(s08 position[], s08 positionNew[])
 {
   u08 i;
   u08 posLimit;
@@ -424,7 +424,7 @@ void analogElementSync(s08 position[], s08 positionNew[])
 //
 // Initialize the LCD display of an analog clock
 //
-void analogInit(u08 mode)
+static void analogInit(u08 mode)
 {
   s08 i, dxDot, dyDot;
 

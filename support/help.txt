@@ -8,7 +8,7 @@ Use: mchron [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]
                   Default: "520x264"
                   Examples: "130x66" or "260x132"
   -h            - Give usage help
-  -l <device>   - LCD stub device type
+  -l <device>   - Lcd stub device type
                   Values: "glut" or "ncurses" or "all"
                   Default: "glut"
   -p <position> - Position (x,y) of glut window
@@ -47,7 +47,7 @@ Commands:
                      12 = spider, 13 = traffic, 14 = bigdigOne, 15 = bigdigTwo,
                      16 = qrHMS, 17 = qrHM, 18 = perftest
   'dr'  - Reset clock date to system date
-  'ds'  - Set clock date
+  'ds'  - Set date
           Arguments: <day> <month> <year>
               day: 1..31
               month: 1..12
@@ -57,11 +57,25 @@ Commands:
               echo: 'e' = echo commands, 'i' = inherit, 's' = silent
               filename: full filepath or relative to startup folder mchron
   'h'   - Help
-  'lbs' - Set LCD backlight brightness (glut support only)
+  'hc'  - Help command
+          Argument: <command>
+              command: mchron command or '*' for all commands
+  'he'  - Help expression
+          Argument: <number>
+              number: expression
+  'iei' - If else if then
+          Arguments: <condition>
+              condition: expression determining block execution
+  'iel' - If else
+  'ien' - If end
+  'iif' - If then
+          Arguments: <condition>
+              condition: expression determining block execution
+  'lbs' - Set lcd backlight brightness (glut support only)
           Argument: <backlight>
               backlight: 0..16
-  'le'  - Erase LCD display
-  'li'  - Inverse LCD display
+  'le'  - Erase lcd display
+  'li'  - Inverse lcd display
   'm'   - Start Monochron emulator
           Arguments: <mode> <eeprom>
               mode: 'c' = start in single cycle mode, 'n' = start normal
@@ -75,8 +89,8 @@ Commands:
               font: '5x5p' = 5x5 proportional, '5x7n' = 5x7 non-proportional
               orientation: 'b' = bottom-up vertical, 'h' = horizontal,
                            't' = top-down vertical
-              xscale: >=1
-              yscale: >=1
+              xscale: 1..64
+              yscale: 1..32
               text: ascii text
   'pc'  - Paint circle
           Arguments: <color> <x> <y> <radius> <pattern>
@@ -106,6 +120,19 @@ Commands:
               ystart: 0..63
               xend: 0..127
               yend: 0..63
+  'pn'  - Paint number
+          Arguments: <color> <x> <y> <font> <orientation> <xscale> <yscale>
+                     <number> <format>
+              color: 'f' = foreground, 'b' = background
+              x: 0..127
+              y: 0..63
+              font: '5x5p' = 5x5 proportional, '5x7n' = 5x7 non-proportional
+              orientation: 'b' = bottom-up vertical, 'h' = horizontal,
+                           't' = top-down vertical
+              xscale: 1..64
+              yscale: 1..32
+              number: expression
+              format: 'c'-style format string containing '%f', '%e' or '%g'
   'pr'  - Paint rectangle
           Arguments: <color> <x> <y> <xsize> <ysize>
               color: 'f' = foreground, 'b' = background
@@ -123,23 +150,14 @@ Commands:
               align (for pattern 1-3): 0 = top, 1 = bottom, 2 = auto
               pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
                        4 = inverse, 5 = clear
-  'rn'  - Repeat loop next
-  'rw'  - Repeat loop while
-          Arguments: <variable> <condition> <end> <start> <step>
-              variable: one or two characters 'a'..'z'
-              condition: '<' = variable value is less than end value,
-                         '>' = variable value is greater than end value,
-                         '<=' = variable value is less than or equal to end
-                                value,
-                         '>=' = variable value is greater than or equal to end
-                                value
-                         '<>' = variable value is unequal to end value
-              end: signed 32-bit integer
-              start: signed 32-bit integer
-              step: signed 32-bit integer
-  'q'   - Keypress to interrupt execution of command or command file
-  'sp'  - Print statistics on stub and LCD device
-  'sr'  - Reset statistics on stub and LCD device
+  'rf'  - Repeat for
+          Arguments: <init> <condition> <post>
+              init: expression executed once at initialization
+              condition: expression determining loop continuation
+              post: expression executed after each loop
+  'rn'  - Repeat next
+  'sp'  - Print statistics on stub and lcd device
+  'sr'  - Reset statistics on stub and lcd device
   'tf'  - Flush Monochron time and date to active clock
   'tp'  - Print time/date/alarm
   'tr'  - Reset time to system time
@@ -150,26 +168,23 @@ Commands:
               sec: 0..59
   'vp'  - Print value of variable(s)
           Argument: <variable>
-              variable: one or two characters 'a'..'z'
-                        or '*' for all variables
+              variable: word of [a-zA-Z] characters, '*' = all
   'vr'  - Reset variable(s)
           Argument: <variable>
-              variable: one or two characters 'a'..'z'
-                        or '*' for all variables
+              variable: word of [a-zA-Z] characters, '*' = all
   'vs'  - Set value of variable 
-          Arguments: <variable> <value>
-              variable: one or two characters 'a'..'z'
-              value: signed 32-bit integer
+          Argument: <assignment>
+              assignment: <variable>=<expression>
   'w'   - Wait for keypress or amount of time
           Argument: <delay>
-              delay: 0 = wait for keypress, >0 = wait delay*0.01 sec
+              delay: 0 = wait for keypress, >0 = wait (msec)
           When waiting for keypress, a 'q' will return control back to the
           mchron command prompt
   'x'   - Exit
 
 Examples:
   le
-    Erase LCD display
+    Erase lcd display
   pr f 10 20 15 18
     Paint rectangle -> Foreground color -> Position 10,20 with size 15x18
   pcf f 64 32 20 1
@@ -178,7 +193,8 @@ Examples:
   ts 19 12 34
     Set mchron time -> 19:12:34
 
-Reminder:
+Reminders:
+  - Use keypress 'q' to interrupt execution of command or command file
   - To enable coredump file creation in the current (bash) shell enter the
     following command once prior to running mchron: ulimit -c unlimited
 

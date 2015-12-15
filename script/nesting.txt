@@ -1,41 +1,43 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Test whether lots of nested repeat-while loops works.
+# Purpose: Test whether lots of nested repeat-for loops works.
 #          Consider this a performance test for the interpreter/CPU.
+#          Run this test a few times to average out the result duration.
+#          On a decent Intel machine this script takes 10-15 secs to run.
 #
 # Result : x = 2^20 = 1048576
 #
 
 # Clear all variables and init loop counter
 vr *
-vs x 0
+vs x=0
 
 # Report start time
 tp
 
-# Nest 20 repeat-while loops where each loop runs twice
-rw aa <= 1 0 1
- rw ab <= 1 0 1
-  rw ac <= 1 0 1
-   rw ad <= 1 0 1
-    rw ae <= 1 0 1
-     rw af <= 1 0 1
-      rw ag <= 1 0 1
-       rw ah <= 1 0 1
-        rw ai <= 1 0 1
-         rw aj <= 1 0 1
-          rw ak <= 1 0 1
-           rw al <= 1 0 1
-            rw am <= 1 0 1
-             rw an <= 1 0 1
-              rw ao <= 1 0 1
-               rw ap <= 1 0 1
-                rw aq <= 1 0 1
-                 rw ar <= 1 0 1
-                  rw as <= 1 0 1
-                   rw at <= 1 0 1
-                    vs x x+1
+# Nest 20 repeat-for loops where each loop runs twice
+rf aa=0 aa<=1 aa=aa+1
+ rf ab=0 ab<=1 ab=ab+1
+  rf ac=0 ac<=1 ac=ac+1
+   rf ad=0 ad<=1 ad=ad+1
+    rf ae=0 ae<=1 ae=ae+1
+     rf af=0 af<=1 af=af+1
+      rf ag=0 ag<=1 ag=ag+1
+       rf ah=0 ah<=1 ah=ah+1
+        rf ai=0 ai<=1 ai=ai+1
+         rf aj=0 aj<=1 aj=aj+1
+          rf ak=0 ak<=1 ak=ak+1
+           rf al=0 al<=1 al=al+1
+            rf am=0 am<=1 am=am+1
+             rf an=0 an<=1 an=an+1
+              rf ao=0 ao<=1 ao=ao+1
+               rf ap=0 ap<=1 ap=ap+1
+                rf aq=0 aq<=1 aq=aq+1
+                 rf ar=0 ar<=1 ar=ar+1
+                  rf as=0 as<=1 as=as+1
+                   rf at=0 at<=1 at=at+1
+                    vs x=x+1
                    rn
                   rn
                  rn
@@ -60,4 +62,5 @@ rn
 # Report end time and show all variables from this script
 tp
 vp *
+vp x
 

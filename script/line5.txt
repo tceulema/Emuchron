@@ -1,0 +1,51 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: This script is used for testing gldcdLine() when painting
+#          sin() and cos() based lines.
+#
+
+# Erase LCD display
+le
+
+# Big circle
+
+# Set x and y circle center, radius and radial step
+vs xCentre=37
+vs yCentre=31
+vs radius=31
+vs step=2*pi/36
+
+# Paint enclosing circle
+pc f xCentre yCentre radius 0
+
+# Paint sin and cos line from center
+rf radial=0 radial<2*pi radial=radial+step
+  vs xCircle=sin(radial)*radius+xCentre
+  vs yCircle=cos(radial)*radius+yCentre
+  pl f xCentre yCentre xCircle yCircle
+rn
+
+# Small circle
+
+# Set x and y circle center, radius and radial step
+vs xCentre=96
+vs yCentre=46
+vs radius=16
+vs step=2*pi/24
+
+# Paint enclosing circle
+pc f xCentre yCentre radius 0
+
+# Paint sin and cos line from center
+rf radial=0 radial<2*pi radial=radial+step
+  vs xCircle=sin(radial)*radius+xCentre
+  vs yCircle=cos(radial)*radius+yCentre
+  pl f xCentre yCentre xCircle yCircle
+rn
+
+# Paint the glcdline and sin/cos function names in a rectangle box
+pr f 80 1 34 15
+pa f 83 3 5x5p h 1 1 glcdline
+pa f 82 9 5x5p h 1 1 sin / cos
+

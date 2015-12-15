@@ -15,7 +15,7 @@
 // This may be due to the mixing of stdlib, avr, ncurses and glut code.
 // Even worse, similar issues also pop up in actual monochron firmware built
 // in this environment by showing unexplained erratic behavior.
-// In any case, I don not trust TRUE and FALSE in combination with this
+// In any case, I do not trust TRUE and FALSE in combination with this
 // stdlib, avr, ncurses and glut software environment.
 #define GLCD_FALSE	0
 #define GLCD_TRUE	1
@@ -41,7 +41,7 @@
 // (make sure we round up for partial use of more than one controller)
 #define GLCD_NUM_CONTROLLERS	((GLCD_XPIXELS+GLCD_CONTROLLER_XPIXELS-1)/GLCD_CONTROLLER_XPIXELS)
 
-// typedefs/structures
+// Typedefs/structures
 typedef struct struct_GrLcdCtrlrStateType
 {
   unsigned char xAddr;
@@ -57,22 +57,12 @@ typedef struct struct_GrLcdStateType
 
 // Hardware oriented functons
 void glcdInit(u08 color);
-void glcdInitHW(void);
-void glcdBusyWait(u08 controller);
-void glcdControlWrite(u08 controller, u08 data);
-void glcdDataWrite(u08 data);
 u08  glcdDataRead(void);
+void glcdDataWrite(u08 data);
 
 // Functional oriented functions
-//! Clear the display
 void glcdClearScreen(u08 color);
-//! Reset the display
-void glcdReset(u08 resetState);
-//! Set display memory access point back to upper,left corner
-void glcdHome(void);
-//! Set display memory access point to [x] horizontal pixel and [y] vertical line
+void glcdNextAddress(void);
 void glcdSetAddress(u08 x, u08 yLine);
-//! Set display memory access point to row [line] and column [col] assuming 5x7 font
 void glcdStartLine(u08 start);
-//! Generic delay routine for timed glcd access
 #endif

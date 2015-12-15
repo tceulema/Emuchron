@@ -1,5 +1,5 @@
 //*****************************************************************************
-// Filename : 'ratt.c'
+// Filename : 'monomain.c'
 // Title    : The main clock engine for MONOCHRON
 //*****************************************************************************
 
@@ -17,7 +17,7 @@
 #include "emulator/stub.h"
 #include "emulator/stubrefs.h"
 #endif
-#include "ratt.h"
+#include "monomain.h"
 #include "ks0108.h"
 #include "glcd.h"
 #include "config.h"
@@ -26,18 +26,18 @@
 #include "mariotune.h"
 #endif
 
-// The following variables are for internal use only to drive all
-// mcVariable elements. They are not be used in any Monochron
-// clock as their contents are considered unstable.
-volatile uint8_t time_s, time_m, time_h;
-volatile uint8_t date_d, date_m, date_y;
-volatile uint8_t new_ts, new_tm, new_th;
-volatile uint8_t new_dd, new_dm, new_dy;
-volatile uint8_t old_m, old_h;
-volatile uint8_t time_event = GLCD_FALSE;
-volatile uint8_t displaymode = SHOW_TIME;
-volatile uint8_t alarmOn, alarmSelect;
-volatile uint8_t alarming = GLCD_FALSE;
+// The following global variables are for use in any Monochron clock.
+// In a Monochron clock its contents are defined and stable.
+extern volatile uint8_t mcClockTimeEvent;
+extern volatile uint8_t mcAlarmH, mcAlarmM;
+extern volatile uint8_t mcMchronClock;
+extern volatile uint8_t mcCycleCounter;
+extern volatile uint8_t mcFgColor;
+extern volatile uint8_t mcBgColor;
+
+// The static list of clocks supported in Monochron and its pool pointer
+extern clockDriver_t monochron[];
+extern clockDriver_t *mcClockPool;
 
 // Indicates whether in the config menu something is busy writing
 // to the LCD, thus interfering with the process to update the time
@@ -53,46 +53,47 @@ extern volatile uint8_t buttonholdcounter;
 // Configuration keypress timeout counter
 extern volatile uint8_t timeoutcounter;
 
+// The following variables are for internal use only to drive all
+// mcVariable elements. They are not be used in any Monochron
+// clock as their contents are considered unstable.
+volatile uint8_t time_s, time_m, time_h;
+volatile uint8_t date_d, date_m, date_y;
+volatile uint8_t new_ts, new_tm, new_th;
+volatile uint8_t new_dd, new_dm, new_dy;
+volatile uint8_t time_event = GLCD_FALSE;
+volatile uint8_t displaymode = SHOW_TIME;
+volatile uint8_t alarmOn, alarmSelect;
+volatile uint8_t alarming = GLCD_FALSE;
+
 // How long we have been snoozing and alarming
+volatile uint8_t animTicker;
+volatile uint16_t alarmTicker;
 uint16_t snoozeTimer = 0;
 int16_t alarmTimer = 0;
-volatile uint16_t animTicker, alarmTicker;
+static uint8_t reqAlarmStop = 0;
 
-// Runtime data for two-tone or Mario alarm
+// Runtime data for Mario or two-tone alarm
 #ifdef MARIO
-uint16_t marioFreq = 0;
-uint8_t marioIdx = 0;
-uint8_t marioIdxEnd = 0;
-uint8_t marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-uint8_t marioPauze = GLCD_TRUE;
+#ifndef EMULIN
+static uint16_t marioFreq = 0;
+#endif
+static uint8_t marioIdx = 0;
+static uint8_t marioIdxEnd = 0;
+static uint8_t marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+static uint8_t marioPauze = GLCD_TRUE;
 #else
-uint8_t alarmTone = 0;
+static uint8_t alarmTone = 0;
 #endif
 
-// The following global variables are for use in any Monochron clock.
-// In a Monochron clock its contents are defined and stable.
-extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
-extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
-extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcAlarmH, mcAlarmM;
-extern volatile uint8_t mcMchronClock;
-extern volatile uint8_t mcCycleCounter;
-extern volatile uint8_t mcFgColor;
-extern volatile uint8_t mcBgColor;
-
-// The static list of clocks supported in Monochron and its pool pointer
-extern clockDriver_t monochron[];
-extern clockDriver_t *mcClockPool;
-
 // Time dividers
-uint8_t t2divider1 = 0;
-//uint8_t t2divider2 = 0;
+static uint8_t t2divider1 = 0;
+//static uint8_t t2divider2 = 0;
 
 // Local function prototypes
-void rtcTimeInit(void);
-void snoozeSet(void);
+static uint8_t rtcElementGet(uint8_t element, uint8_t nibbleMask);
+static void rtcFailure(uint8_t code, uint8_t id);
+static void rtcTimeInit(void);
+static void snoozeSet(void);
 
 //
 // Function: main
@@ -102,12 +103,12 @@ void snoozeSet(void);
 // switches between and updates Monochron clocks.
 //
 #ifdef EMULIN
-int stubMain(void)
+int monoMain(void)
 #else
 int main(void)
 #endif
 {
-  u08 doNextClock = GLCD_FALSE;
+  u08 nextClock = GLCD_FALSE;
 
   // Check if we were reset
   MCUSR = 0;
@@ -205,12 +206,16 @@ int main(void)
 
     // Check buttons to see if we have interaction stuff to deal with
 
-    // First, when alarming while showing a clock, any button press will
-    // make us (re)snooze. This rather crude method of button handling turns
-    // out to be end-user friendly as it is simple and easy to comprehend.
+    // When alarming while showing a clock, a +/Set button press will
+    // make us (re)snooze while the Menu button press will stop alarming.
     if (just_pressed && alarming == GLCD_TRUE && displaymode == SHOW_TIME)
     {
-      snoozeSet();
+      // The M button will stop the alarm.
+      // The +/S buttons will invoke/reset snoozing.
+      if (just_pressed & BTTN_MENU)
+        reqAlarmStop = 1;
+      else
+        snoozeSet();
       just_pressed = 0;
     }
 
@@ -247,7 +252,7 @@ int main(void)
         animClockDraw(DRAW_INIT_FULL);
       }
     }
-    else // Handle the set or + button
+    else // Handle the Set or + button
     {
       // Check the Set button
       if (just_pressed & BTTN_SET)
@@ -256,7 +261,7 @@ int main(void)
         {
           // No button method has been defined for the active clock.
           // Default to the action set for the + button.
-          doNextClock = GLCD_TRUE;
+          nextClock = GLCD_TRUE;
           DEBUGP("Set button dflt to +");
         }
         else
@@ -266,8 +271,8 @@ int main(void)
         }
       }
  
-      // Check the + button and default set button action
-      if ((just_pressed & BTTN_PLUS) || doNextClock == GLCD_TRUE)
+      // Check the + button and default Set button action
+      if ((just_pressed & BTTN_PLUS) || nextClock == GLCD_TRUE)
       {
         u08 initType;
         u08 currMchronClock = mcMchronClock;
@@ -287,7 +292,7 @@ int main(void)
           animClockButton(just_pressed);
         }
 
-        doNextClock = GLCD_FALSE;
+        nextClock = GLCD_FALSE;
         just_pressed = 0;
       }
     }
@@ -311,7 +316,7 @@ int main(void)
 
     // Get event(s) while waiting the remaining time of the loop cycle
 #ifdef EMULIN
-    if (stubGetEvent() == 'q')
+    if (stubEventGet() == 'q')
       return 0;
 #else
     while (animTicker);
@@ -330,9 +335,9 @@ int main(void)
 //
 // 1 msec signal handler
 //
-// Used for handling audible alarm and switching between tones in audible
-// alarm. As this is called every 1 msec try to keep its CPU footprint
-// as small as possible.
+// Used for handling msec countdown timers, audible alarm and switching between
+// tones in audible alarm. As this is called every 1 msec try to keep its CPU
+// footprint as small as possible.
 //
 #ifndef EMULIN
 SIGNAL(TIMER0_COMPA_vect)
@@ -456,9 +461,9 @@ SIGNAL(TIMER0_COMPA_vect)
 // dividers.
 //
 #ifdef EMULIN
-void stubTimer (void)
+void monoTimer (void)
 #else
-SIGNAL (TIMER2_OVF_vect)
+SIGNAL(TIMER2_OVF_vect)
 #endif
 {
   wdt_reset();
@@ -481,34 +486,29 @@ SIGNAL (TIMER2_OVF_vect)
   }
 
   // This occurs at approx 5.7Hz or 8.5Hz.
-  // For this refer to defs of TIMER2_RETURN_x in ratt.h.
+  // For this refer to defs of TIMER2_RETURN_x in monomain.h.
   uint8_t last_s = time_s;
-  uint8_t last_m = time_m;
-  uint8_t last_h = time_h;
 
   //DEBUG(putstring_nl("* RTC"));
+
+  // Check alarm/snooze stop request from menu button
+  if (reqAlarmStop == 1)
+  {
+    alarmTimer = 0;
+    reqAlarmStop = 0;
+  }
 
   // Check the alarm switch state
   alarmStateSet();
 
   // Get RTC time and compare with saved one
   readi2ctime();
-  if (time_h != last_h)
-  {
-    old_h = last_h;
-    old_m = last_m;
-  }
-  else if (time_m != last_m)
-  {
-    old_m = last_m;
-  }
-
   if (time_s != last_s)
   {
-    // Do admin on countdown timers
+    // Time has changed. Do admin on countdown timers.
     if (timeoutcounter)
       timeoutcounter--;
-    if (alarming == GLCD_TRUE && snoozeTimer > 0)
+    if (alarming == GLCD_TRUE)
     {
       if (snoozeTimer == 1)
       {
@@ -523,12 +523,13 @@ SIGNAL (TIMER2_OVF_vect)
 #endif
         DEBUGP("Alarm -> Snooze timeout");
       }
-      snoozeTimer--;
+      if (snoozeTimer)
+        snoozeTimer--;
+      if (alarmTimer > 0)
+        alarmTimer--;
     }
-    if (alarming == GLCD_TRUE && alarmTimer > 0)
-    {
-      alarmTimer--;
-    }
+
+    // Log new time
     DEBUG(putstring("**** "));
     DEBUG(uart_putw_dec(time_h));
     DEBUG(uart_putchar(':'));
@@ -536,21 +537,21 @@ SIGNAL (TIMER2_OVF_vect)
     DEBUG(uart_putchar(':'));
     DEBUG(uart_putw_dec(time_s));
     DEBUG(putstring_nl(""));
-  }
 
-  // If we're in the setup menu we have a continuous time update
-  // except when editing time itself or when we're changing
-  // menu (screenmutex)
-  if ((displaymode == SET_ALARM || displaymode == SET_DATE ||
-       displaymode == SET_REGION || displaymode == SET_BRIGHTNESS ||
-       displaymode == SET_DISPLAY) && !screenmutex)
-  {
-    glcdSetAddress(MENU_INDENT + 12 * 6, 2);
-    glcdPrintNumberFg(time_h);
-    glcdWriteCharFg(':');
-    glcdPrintNumberFg(time_m);
-    glcdWriteCharFg(':');
-    glcdPrintNumberFg(time_s);
+    // If we're in the setup menu we have a continuous time update
+    // except when editing time itself or when we're changing
+    // menu (screenmutex)
+    if ((displaymode == SET_ALARM || displaymode == SET_DATE ||
+         displaymode == SET_REGION || displaymode == SET_BRIGHTNESS ||
+         displaymode == SET_DISPLAY) && screenmutex == 0)
+    {
+      glcdSetAddress(MENU_INDENT + 12 * 6, 2);
+      glcdPrintNumberFg(time_h);
+      glcdWriteCharFg(':');
+      glcdPrintNumberFg(time_m);
+      glcdWriteCharFg(':');
+      glcdPrintNumberFg(time_s);
+    }
   }
 
   // Signal a clock time event only when the previous has not been
@@ -570,24 +571,28 @@ SIGNAL (TIMER2_OVF_vect)
     time_event = GLCD_TRUE;
   }
 
-  // Check if alarm has timed out (people sometimes do not wake up by alarm)
-  if (alarmOn == GLCD_TRUE && alarming == GLCD_TRUE && alarmTimer == 0)
+  // When the alarm switch is set to On we need to check a few things
+  if (alarmOn == GLCD_TRUE)
   {
-    DEBUG(putstring_nl("Alarm -> Timeout"));
-    alarming = GLCD_FALSE;
-    snoozeTimer = 0;
-    alarmTimer = -1;
-  }
+    // Check if audible alarm has timed out (some may not wake up by an alarm)
+    if (alarming == GLCD_TRUE && alarmTimer == 0)
+    {
+      DEBUG(putstring_nl("Alarm -> Timeout"));
+      alarming = GLCD_FALSE;
+      snoozeTimer = 0;
+      alarmTimer = -1;
+    }
     
-  // Check if we have an alarm set
-  if (alarmOn == GLCD_TRUE && alarming == GLCD_FALSE &&
-       time_s == 0 && time_m == mcAlarmM && time_h == mcAlarmH)
-  {
-    DEBUG(putstring_nl("Alarm -> Tripped"));
-    alarming = GLCD_TRUE;
-    alarmTimer = MAXALARM;
+    // Check if the active alarm time is tripped
+    if (alarming == GLCD_FALSE && time_s == 0 && time_m == mcAlarmM &&
+        time_h == mcAlarmH)
+    {
+      DEBUG(putstring_nl("Alarm -> Tripped"));
+      alarming = GLCD_TRUE;
+      alarmTimer = MAXALARM;
+    }
   }
-  
+
   // Control timeout counters. Note this is tricky stuff since entering
   // this code section is also influenced by the t2divider1 counter at
   // the top of this function. With the current settings this code section
@@ -608,7 +613,8 @@ SIGNAL (TIMER2_OVF_vect)
 }
 
 #ifndef EMULIN
-SIGNAL(TIMER1_OVF_vect) {
+SIGNAL(TIMER1_OVF_vect)
+{
   PIEZO_PORT ^= _BV(PIEZO);
 }
 #endif
@@ -692,20 +698,10 @@ void alarmTimeGet(uint8_t alarmId, volatile uint8_t *hour, volatile uint8_t *min
     aHour = (uint8_t *)EE_ALARM_HOUR;
     aMin = (uint8_t *)EE_ALARM_MIN;
   }
-  else if (alarmId == 1)
-  {
-    aHour = (uint8_t *)EE_ALARM_HOUR2;
-    aMin = (uint8_t *)EE_ALARM_MIN2;
-  }
-  else if (alarmId == 2)
-  {
-    aHour = (uint8_t *)EE_ALARM_HOUR3;
-    aMin = (uint8_t *)EE_ALARM_MIN3;
-  }
   else
   {
-    aHour = (uint8_t *)EE_ALARM_HOUR4;
-    aMin = (uint8_t *)EE_ALARM_MIN4;
+    aHour = (uint8_t *)(EE_ALARM_HOUR2) + (alarmId - 1) * 2;
+    aMin = aHour + 1;
   }
 
   *hour = eeprom_read_byte(aHour) % 24;
@@ -726,20 +722,10 @@ void alarmTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min)
     aHour = (uint8_t *)EE_ALARM_HOUR;
     aMin = (uint8_t *)EE_ALARM_MIN;
   }
-  else if (alarmId == 1)
-  {
-    aHour = (uint8_t *)EE_ALARM_HOUR2;
-    aMin = (uint8_t *)EE_ALARM_MIN2;
-  }
-  else if (alarmId == 2)
-  {
-    aHour = (uint8_t *)EE_ALARM_HOUR3;
-    aMin = (uint8_t *)EE_ALARM_MIN3;
-  }
   else
   {
-    aHour = (uint8_t *)EE_ALARM_HOUR4;
-    aMin = (uint8_t *)EE_ALARM_MIN4;
+    aHour = (uint8_t *)(EE_ALARM_HOUR2) + (alarmId - 1) * 2;
+    aMin = aHour + 1;
   }
 
   eeprom_write_byte(aHour, hour);    
@@ -875,7 +861,7 @@ void mchronTimeInit(void)
   time_event = GLCD_FALSE;
   new_ts = 60;
   while (time_event == GLCD_FALSE)
-    stubTimer();
+    monoTimer();
 #endif
   mcClockTimeEvent = GLCD_TRUE;
 }
@@ -890,60 +876,67 @@ uint8_t readi2ctime(void)
   uint8_t regaddr = 0, r;
   uint8_t clockdata[8];
   
-  // Check the time from the RTC
+  // Get the time from the RTC
   cli();
   r = i2cMasterSendNI(0xD0, 1, &regaddr);
-
   if (r != 0)
-  {
-    DEBUG(putstring("Reading i2c data: "));
-    DEBUG(uart_putw_dec(r));
-    DEBUG(putstring_nl(""));
-    while(1)
-    {
-      sei();
-      beep(4000, 100);
-      _delay_ms(100);
-      beep(4000, 100);
-      _delay_ms(1000);
-    }
-  }
-
+    rtcFailure(r, 0);
   r = i2cMasterReceiveNI(0xD0, 7, &clockdata[0]);
   sei();
-
   if (r != 0)
-  {
-    DEBUG(putstring("Reading i2c data: "));
-    DEBUG(uart_putw_dec(r));
-    DEBUG(putstring_nl(""));
-    while(1)
-    {
-      beep(4000, 100);
-      _delay_ms(100);
-      beep(4000, 100);
-      _delay_ms(1000);
-    }
-  }
+    rtcFailure(r, 1);
 
-  time_s = ((clockdata[0] >> 4) & 0x7) * 10 + (clockdata[0] & 0xF);
-  time_m = ((clockdata[1] >> 4) & 0x7) * 10 + (clockdata[1] & 0xF);
+  // Process the time from the RTC
+  time_s = rtcElementGet(clockdata[0], 0x7);
+  time_m = rtcElementGet(clockdata[1], 0x7);
   if (clockdata[2] & _BV(6))
   {
     // "12 hr" mode
     time_h = ((clockdata[2] >> 5) & 0x1) * 12 + 
-      ((clockdata[2] >> 4) & 0x1) * 10 + (clockdata[2] & 0xF);
+      rtcElementGet(clockdata[2], 0x1);
   }
   else
   {
-    time_h = ((clockdata[2] >> 4) & 0x3) * 10 + (clockdata[2] & 0xF);
-  }
-  
-  date_d = ((clockdata[4] >> 4) & 0x3) * 10 + (clockdata[4] & 0xF);
-  date_m = ((clockdata[5] >> 4) & 0x1) * 10 + (clockdata[5] & 0xF);
-  date_y = ((clockdata[6] >> 4) & 0xF) * 10 + (clockdata[6] & 0xF);
+    time_h = rtcElementGet(clockdata[2], 0x3);
+  }  
+  date_d = rtcElementGet(clockdata[4], 0x3);
+  date_m = rtcElementGet(clockdata[5], 0x1);
+  date_y = rtcElementGet(clockdata[6], 0xF);
 
   return clockdata[0] & 0x80;
+}
+
+//
+// Function: rtcElementGet
+//
+// Get a time element value from the rtc readout.
+//
+static uint8_t rtcElementGet(uint8_t element, uint8_t nibbleMask)
+{
+  return ((element >> 4) & nibbleMask) * 10 + (element & 0xF);
+}
+
+//
+// Function: rtcFailure
+//
+// Report i2c RTC interface error
+//
+static void rtcFailure(uint8_t code, uint8_t id)
+{
+  // Not able to instruct/read/set RTC. Beep forever since we're screwed.
+  DEBUG(putstring("i2c data: "));
+  DEBUG(uart_putw_dec(id));
+  DEBUG(putstring(", "));
+  DEBUG(uart_putw_dec(code));
+  DEBUG(putstring_nl(""));
+  sei();
+  while(1)
+  {
+    beep(4000, 100);
+    _delay_ms(100);
+    beep(4000, 100);
+    _delay_ms(1000);
+  }
 }
 
 //
@@ -951,7 +944,7 @@ uint8_t readi2ctime(void)
 //
 // Initialize RTC time data for first time use
 //
-void rtcTimeInit(void)
+static void rtcTimeInit(void)
 {
   // Talk to clock
   i2cInit();
@@ -959,7 +952,7 @@ void rtcTimeInit(void)
   if (readi2ctime())
   {
     DEBUGP("Uh oh, RTC was off, lets reset it!");
-    writei2ctime(00, 00, 12, 0, 1, 1, 15); // Noon Jan 1 2015
+    writei2ctime(00, 00, 12, 1, 1, 16); // Noon Jan 1 2016
   }
 
   readi2ctime();
@@ -993,7 +986,7 @@ void rtcTimeInit(void)
 //
 // Make the alarm go snoozing
 //
-void snoozeSet(void)
+static void snoozeSet(void)
 {
   DEBUGP("Alarm -> Snooze");
   snoozeTimer = MAXSNOOZE;
@@ -1010,34 +1003,24 @@ void snoozeSet(void)
 //
 // Set the real-time clock (RTC)
 //
-void writei2ctime(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
-		  uint8_t date, uint8_t mon, uint8_t yr)
+void writei2ctime(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
+  uint8_t mon, uint8_t yr)
 {
-  uint8_t clockdata[8] = {0,0,0,0,0,0,0,0};
+  uint8_t clockdata[8];
 
   clockdata[0] = 0;           // address
   clockdata[1] = i2bcd(sec);  // s
   clockdata[2] = i2bcd(min);  // m
   clockdata[3] = i2bcd(hr);   // h
-  clockdata[4] = i2bcd(day);  // day
+  clockdata[4] = 0;           // day
   clockdata[5] = i2bcd(date); // date
   clockdata[6] = i2bcd(mon);  // month
   clockdata[7] = i2bcd(yr);   // year
-  
+
   cli();
   uint8_t r = i2cMasterSendNI(0xD0, 8, &clockdata[0]);
   sei();
-
-  // Not able to set the RTC. Beep forever to indicate we're screwed.
   if (r != 0)
-  {
-    while(1)
-    {
-      beep(4000, 100);
-      _delay_ms(100);
-      beep(4000, 100);
-      _delay_ms(1000);
-    }
-  }
+    rtcFailure(r, 2);
 }
 

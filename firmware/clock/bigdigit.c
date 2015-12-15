@@ -10,7 +10,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "bigdigit.h"
@@ -58,14 +58,14 @@ extern volatile uint8_t mcU8Util2;
 extern volatile uint8_t mcU8Util3;
 
 // Labels for clock
-char labelTime[] = "HH:MM:SS";
-char labelDate[] = "DD:MM:YYYY";
+static char labelTime[] = "HH:MM:SS";
+static char labelDate[] = "DD:MM:YYYY";
 
 // The y offsets for each of the 14 elements in time+date for the
 // bigdigit clock.
 // Yes, we can apply logic to calculate them at runtime but this
 // cost us lots of code logic when compared to this very small array.
-const unsigned char __attribute__ ((progmem)) bigdigYPos[] =
+static const unsigned char __attribute__ ((progmem)) bigdigYPos[] =
 {
   /* H   X. */ BIGDIG_HMS_Y_START - 0 * (BIGDIG_FONT_WIDTH + 1),
   /* H   .X */ BIGDIG_HMS_Y_START - 1 * (BIGDIG_FONT_WIDTH + 1),
@@ -86,12 +86,12 @@ const unsigned char __attribute__ ((progmem)) bigdigYPos[] =
 // Store the item identifier per clock. This allows to re-init on the
 // last active item upon re-initializing a big digit clock. You will
 // appreciate it mostly when returning from the configuration menu.
-uint8_t bigdigOneState = 0;
-uint8_t bigdigTwoState = 0;
+static uint8_t bigdigOneState = 0;
+static uint8_t bigdigTwoState = 0;
 
 // Local function prototypes
-void bigdigAlarmAreaUpdate(void);
-void bigdigItemInvert(void);
+static void bigdigAlarmAreaUpdate(void);
+static void bigdigItemInvert(void);
 
 //
 // Function: bigdigButton
@@ -299,7 +299,7 @@ void bigdigInit(u08 mode)
 //
 // Draw update in bigdigit clock alarm area
 //
-void bigdigAlarmAreaUpdate(void)
+static void bigdigAlarmAreaUpdate(void)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -358,7 +358,7 @@ void bigdigAlarmAreaUpdate(void)
 //
 // Invert time/date item.
 //
-void bigdigItemInvert(void)
+static void bigdigItemInvert(void)
 {
   u08 x;
   u08 y;

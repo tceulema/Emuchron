@@ -83,7 +83,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "perftest.h"
@@ -96,7 +96,9 @@
 #define PERF_DOT_1		30
 #define PERF_DOT_2		39
 #define PERF_LINE_1		1
+#define PERF_LINE_2		8
 #define PERF_FILLCIRCLE2_1	92
+#define PERF_FILLCIRCLE2_2	300
 #define PERF_FILLRECTANGLE2_1	455
 #define PERF_FILLRECTANGLE2_2	2900
 #define PERF_FILLRECTANGLE2_3	1985
@@ -151,31 +153,31 @@ extern volatile uint8_t new_ts, new_tm, new_th;
 extern volatile uint8_t just_pressed;
 
 // Generic test utility function prototypes
-u08 perfButtonGet(void);
-u08 perfButtonWait(u08 type);
-void perfLongValToStr(long value, char valString[]);
-u08 perfSuiteWelcome(char *label);
-void perfTestBegin(void);
-u08 perfTestEnd(u08 interruptTest);
-u08 perfTestInit(char *label, u08 testId);
-void perfTestTimeInit(void);
-u08 perfTestTimeNext(void);
-void perfTextCreate(u08 length, char *value);
+static u08 perfButtonGet(void);
+static u08 perfButtonWait(u08 type);
+static void perfLongValToStr(long value, char valString[]);
+static u08 perfSuiteWelcome(char *label);
+static void perfTestBegin(void);
+static u08 perfTestEnd(u08 interruptTest);
+static u08 perfTestInit(char *label, u08 testId);
+static void perfTestTimeInit(void);
+static u08 perfTestTimeNext(void);
+static void perfTextCreate(u08 length, char *value);
 
 // The actual performance test function prototypes
-u08 perfTestCircle2(void);
-u08 perfTestDot(void);
-u08 perfTestFillCircle2(void);
-u08 perfTestFillRectangle2(void);
-u08 perfTestLine(void);
-u08 perfTestPutStr3(void);
-u08 perfTestPutStr3v(void);
+static u08 perfTestCircle2(void);
+static u08 perfTestDot(void);
+static u08 perfTestFillCircle2(void);
+static u08 perfTestFillRectangle2(void);
+static u08 perfTestLine(void);
+static u08 perfTestPutStr3(void);
+static u08 perfTestPutStr3v(void);
 
 // Runtime environment for the performance test
-testStats_t testStats;
+static testStats_t testStats;
 
 // Text string for glcdPutStr3/glcdPutStr3v tests
-char textLine[33];
+static char textLine[33];
 
 //
 // Function: perfCycle
@@ -249,7 +251,7 @@ void perfInit(u08 mode)
 //
 // Performance test of glcdCircle2()
 //
-u08 perfTestCircle2(void)
+static u08 perfTestCircle2(void)
 {
   u08 button;
   u08 interruptTest;
@@ -377,7 +379,7 @@ u08 perfTestCircle2(void)
 //
 // Performance test of glcdDot()
 //
-u08 perfTestDot(void)
+static u08 perfTestDot(void)
 {
   u08 button;
   u08 interruptTest;
@@ -521,11 +523,12 @@ u08 perfTestDot(void)
 //
 // Performance test of glcdLine()
 //
-u08 perfTestLine(void)
+static u08 perfTestLine(void)
 {
   u08 button;
   u08 interruptTest;
-  int i;
+  u08 xA, yA, xB, yB;
+  int i, j;
 
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdLine");
@@ -546,7 +549,7 @@ u08 perfTestLine(void)
     mcUpdAlarmSwitch = GLCD_TRUE;
     mcAlarmSwitch = GLCD_TRUE;
 
-    // Draw ines using the analog clock layout
+    // Draw lines using the analog clock layout
     interruptTest = GLCD_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_LINE_1; i++)
@@ -579,6 +582,54 @@ u08 perfTestLine(void)
     button = perfTestEnd(interruptTest);
   }
 
+  // Test 2: Non-overlapping lines with varying length and draw angle.
+  button = perfTestInit("glcdLine", 2);
+  while (button == BTTN_PLUS)
+  {
+    // Prepare display for test
+    glcdClearScreen(mcBgColor);
+
+    // Paint filled circles with same radius values at different locations
+    interruptTest = GLCD_FALSE;
+    perfTestBegin();
+    for (i = 0; i < PERF_LINE_2; i++)
+    {
+      for (j = 0; j < 30 * 29; j = j + 1)
+      {
+        // Get begin and end points of line
+        xA = (u08)(sin(2 * M_PI / 30 * (j % 30)) * 30 + 64);
+        yA = (u08)(-cos(2 * M_PI / 30 * (j % 30)) * 30 + 32);
+        xB = (u08)(sin(2 * M_PI / 29 * (j % 29)) * 30 + 64);
+        yB = (u08)(-cos(2 * M_PI / 29 * (j % 29)) * 30 + 32);
+
+        // Draw and remove the line
+        glcdLine(xA, yA, xB, yB, mcFgColor);
+#ifdef EMULIN
+        lcdDeviceFlush(0);
+#endif
+        glcdLine(xA, yA, xB, yB, mcBgColor);
+#ifdef EMULIN
+        lcdDeviceFlush(0);
+#endif
+      }
+
+      // Do statistics
+      testStats.loopsDone++;
+      testStats.elementsDrawn = testStats.elementsDrawn + j * 2;
+
+      // Check for keypress interrupt
+      button = perfButtonGet();
+      if (button != 0)
+      {
+        interruptTest = GLCD_TRUE;
+        break;
+      }
+    }
+
+    // End test and report statistics
+    button = perfTestEnd(interruptTest);
+  }
+
   return GLCD_FALSE;
 }
 
@@ -587,10 +638,13 @@ u08 perfTestLine(void)
 //
 // Performance test of glcdFillCircle2()
 //
-u08 perfTestFillCircle2(void)
+static u08 perfTestFillCircle2(void)
 {
   u08 button;
   u08 interruptTest;
+  u08 pattern;
+  u08 color;
+  u08 x, y;
   int i,j;
   int counter = 0;
 
@@ -643,6 +697,67 @@ u08 perfTestFillCircle2(void)
     button = perfTestEnd(interruptTest);
   }
 
+  // Test 2: Non-overlapping small filled circles.
+  // The circles are identical to the ones drawn in puzzle.c, allowing a
+  // good real-life measurement of draw optimizations.
+  button = perfTestInit("glcdFillCircle2", 2);
+  while (button == BTTN_PLUS)
+  {
+    // Prepare display for test
+    glcdClearScreen(mcBgColor);
+
+    // Paint filled circles with same radius values at different locations
+    interruptTest = GLCD_FALSE;
+    pattern = 0;
+    color = mcFgColor;
+    perfTestBegin();
+    for (i = 0; i < PERF_FILLCIRCLE2_2; i++)
+    {
+      for (x = 9; x < 120; x = x + 12)
+      {
+        // Paint small circles
+        for (y = 8; y < 58; y = y + 12)
+        {
+          glcdFillCircle2(x, y, 5, pattern, color);
+        }
+#ifdef EMULIN
+        lcdDeviceFlush(0);
+#endif
+      }
+
+      // Do statistics
+      testStats.loopsDone++;
+      testStats.elementsDrawn = testStats.elementsDrawn + 10 * 5;
+
+      // Set draw parameters for next iteration
+      if (pattern == 3)
+      {
+        // Skip pattern inverse (as it is not supported) and pattern clear
+        // and restart. However, at restarting swap draw color.
+        pattern = 0;
+        if (color == mcFgColor)
+          color = mcBgColor;
+        else
+          color = mcFgColor;
+      }
+      else
+      {
+        pattern++;
+      }
+
+      // Check for keypress interrupt
+      button = perfButtonGet();
+      if (button != 0)
+      {
+        interruptTest = GLCD_TRUE;
+        break;
+      }
+    }
+
+    // End test and report statistics
+    button = perfTestEnd(interruptTest);
+  }
+
   return GLCD_FALSE;
 }
 
@@ -651,7 +766,7 @@ u08 perfTestFillCircle2(void)
 //
 // Performance test of glcdFillRectangle2()
 //
-u08 perfTestFillRectangle2(void)
+static u08 perfTestFillRectangle2(void)
 {
   u08 button;
   u08 interruptTest;
@@ -866,7 +981,7 @@ u08 perfTestFillRectangle2(void)
 //
 // Performance test of glcdPutStr3()
 //
-u08 perfTestPutStr3(void)
+static u08 perfTestPutStr3(void)
 {
   u08 button;
   u08 interruptTest;
@@ -1098,7 +1213,7 @@ u08 perfTestPutStr3(void)
 //
 // Performance test of glcdPutStr3v()
 //
-u08 perfTestPutStr3v(void)
+static u08 perfTestPutStr3v(void)
 {
   u08 button;
   u08 interruptTest;
@@ -1293,7 +1408,7 @@ u08 perfTestPutStr3v(void)
 //
 // Get button when pressed
 //
-u08 perfButtonGet(void)
+static u08 perfButtonGet(void)
 {
 #ifndef EMULIN
   u08 button;
@@ -1313,7 +1428,7 @@ u08 perfButtonGet(void)
 //
 // Wait for any button to be pressed
 //
-u08 perfButtonWait(u08 type)
+static u08 perfButtonWait(u08 type)
 {
   u08 button = 0;
 
@@ -1370,7 +1485,7 @@ u08 perfButtonWait(u08 type)
 //
 // Make a string out of a positive long integer value
 //
-void perfLongValToStr(long value, char valString[])
+static void perfLongValToStr(long value, char valString[])
 {
   u08 index = 0;
   u08 i;
@@ -1400,7 +1515,7 @@ void perfLongValToStr(long value, char valString[])
 //
 // Provide welcome of test suite
 //
-u08 perfSuiteWelcome(char *label)
+static u08 perfSuiteWelcome(char *label)
 {
   u08 length;
 
@@ -1421,13 +1536,13 @@ u08 perfSuiteWelcome(char *label)
 //
 // Clear previous test statistics and mark test start time
 //
-void perfTestBegin(void)
+static void perfTestBegin(void)
 {
 #ifdef EMULIN
   // In case we're using glut, give the lcd device some time to catch up
   _delay_ms(250);
-  // Reset emulator statistics
-  statsReset();
+  // Reset glcd/lcd statistics
+  lcdStatsReset();
 #endif
 
   // Clear previous test statistics
@@ -1449,7 +1564,7 @@ void perfTestBegin(void)
 //
 // Mark test end time and report final test statistics
 //
-u08 perfTestEnd(u08 interruptTest)
+static u08 perfTestEnd(u08 interruptTest)
 {
   char number[20];
   u08 length;
@@ -1467,8 +1582,8 @@ u08 perfTestEnd(u08 interruptTest)
   // In case we're using glut, give the lcd device some time to catch up
   _delay_ms(250);
 
-  // Give emulator statistics
-  statsPrint();
+  // Give glcd/lcd statistics
+  lcdStatsPrint();
   printf("test   : %s - %02d\n", testStats.text, testStats.testId);
   if (interruptTest == GLCD_FALSE)
     printf("status : %s\n", "completed");
@@ -1530,7 +1645,7 @@ u08 perfTestEnd(u08 interruptTest)
 //
 // Init test id and provide test prompt
 //
-u08 perfTestInit(char *label, u08 testId)
+static u08 perfTestInit(char *label, u08 testId)
 {
   u08 length;
   char strTestId[3];
@@ -1554,7 +1669,7 @@ u08 perfTestInit(char *label, u08 testId)
 //
 // Initialize functional Monochron time.
 //
-void perfTestTimeInit(void)
+static void perfTestTimeInit(void)
 {
   mcClockOldTS = mcClockNewTS = mcClockOldTM = mcClockNewTM = 0;
   mcClockOldTH = mcClockNewTH = 0;
@@ -1568,7 +1683,7 @@ void perfTestTimeInit(void)
 //
 // Get next timestamp up to 23 minutes after start
 //
-u08 perfTestTimeNext(void)
+static u08 perfTestTimeNext(void)
 {
   mcClockOldTS = mcClockNewTS;
   mcClockOldTM = mcClockNewTM;
@@ -1607,7 +1722,7 @@ u08 perfTestTimeNext(void)
 // These characters are chosen as in the 5x5p font they both have width 3,
 // which is more or less average.
 //
-void perfTextCreate(u08 length, char *value)
+static void perfTextCreate(u08 length, char *value)
 {
   u08 i;
   char text = *value;

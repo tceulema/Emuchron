@@ -22,7 +22,7 @@ OPT = s
 
 # The base source files for creating Monochron firmware. What needs to be
 # added are the required clock plugins.
-BASE = anim.c buttons.c config.c glcd.c i2c.c ks0108.c ratt.c util.c
+BASE = anim.c buttons.c config.c glcd.c i2c.c ks0108.c monomain.c util.c
 
 # Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
 # There is a similar switch in MakefileEmu that should be in sync with this one.
@@ -149,7 +149,7 @@ CC = avr-gcc
 OBJCOPY = avr-objcopy
 OBJDUMP = avr-objdump
 SIZE = avr-size
-REMOVE = rm -f
+REMOVE = rm --force
 COPY = cp
 
 # Programming support using avrdude

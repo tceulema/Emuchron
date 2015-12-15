@@ -1,0 +1,81 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Draw a filled circle step by step using only integer math.
+# This script replicates the base logic of the glcdFillCircle2() function
+# in Emuchron scripting language.
+# Why? Because we can! It also helps in understanding the draw logic
+# and testing out optimizations prior to implementing them in the actual
+# function in glcd.c. In fact, this script is actually used in creating
+# the optimized glcdFillCircle2() in Emuchron v2.0. So, the optimized
+# glcdFillCircle2() function is modelled after this script, and not vice
+# versa!
+#
+# Prerequisites:
+# - Set circle center location and radius
+#
+# Usage example:
+# vs xCenter=64
+# vs yCenter=32
+# vs radius=20
+# e s ../script/circle5.txt
+#
+
+le
+
+vs x=0
+vs y=radius
+vs tswitch=3-2*radius
+vs firstDraw=true
+vs drawSize=0
+
+rf true x<=y true
+  vp x
+  vp y
+  vp tswitch
+  vp drawSize
+
+  iif x!=y
+    iif tswitch>=0
+      iif firstDraw==true
+        vs drawSize=2*drawSize
+      ien
+      he 1
+      prf f xCenter-x yCenter-y drawSize+1 y*2 2 0
+      iif x!=0
+        he 2
+        prf f xCenter+y yCenter-x 1 x*2 2 0
+      ien
+    ien
+  ien
+
+  iif x!=0
+    iif tswitch>=0&&firstDraw==false
+      he 3
+      prf f xCenter+x-drawSize yCenter-y drawSize+1 y*2 2 0
+    ien
+    iif tswitch>=0
+      iif x!=y
+        vs drawSize=0
+      ien
+      he 4
+      prf f xCenter-y yCenter-x drawSize+1 x*2 2 0
+    ien
+  ien
+
+  iif tswitch<0
+    vs tswitch=tswitch+4*x+6
+    vs drawSize=drawSize+1
+  iel
+    vs tswitch=tswitch+4*(x-y)+10
+    vs firstDraw=false
+    vs drawSize=0
+    vs y=y-1
+  ien
+
+  vs x=x+1
+
+  # Build up filled circle step by step
+  w 0
+rn
+

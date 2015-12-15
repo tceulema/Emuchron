@@ -1,0 +1,64 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Draw a bunch of circles using only integer math. This script
+# replicates the base logic of the glcdCircle() function in Emuchron
+# scripting language.
+# Why? Because we can! It also helps in understanding the draw logic
+# and testing out optimizations prior to implementing them in the
+# actual function in glcd.c
+#
+# This demo runs continuously.
+# Quit the demo by pressing the 'q' key.
+#
+
+# Center coordinates and radius of circle
+vs xCenter=64
+vs yCenter=32
+
+# First paint circles, then clear them, then rinse and repeat
+rf null true null
+
+  # Clear screen
+  le
+
+  # Paint in total 11 circles with increasing radius value
+  rf radius=3 radius<=30 radius=radius+3
+
+    # Set start values for circle 
+    vs x=0
+    vs y=radius
+    vs ts=3-2*radius
+
+    # Paint circles dot by dot
+    rf x=0 x<=y x=x+1
+      iif x!=0&&x!=y
+        pd f xCenter+x yCenter-y
+        pd f xCenter-y yCenter+x
+        pd f xCenter+y yCenter+x
+      ien
+      iif x!=y
+        pd f xCenter-x yCenter-y
+      ien
+      iif x!=0
+        pd f xCenter+x yCenter+y
+      ien
+      pd f xCenter-x yCenter+y
+      pd f xCenter+y yCenter-x
+      pd f xCenter-y yCenter-x
+
+      # After painting a set of dots wait a while so we can
+      # see how a circle is actually drawn on the lcd
+      w 90-2*radius
+
+      iif ts<0
+        vs ts=ts+4*x+6
+      iel
+        vs ts=ts+4*(x-y)+10
+        vs y=y-1
+      ien
+    rn
+  rn
+
+  w 1000
+rn

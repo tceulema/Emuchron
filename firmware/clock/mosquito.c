@@ -11,7 +11,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "mosquito.h"
@@ -77,28 +77,25 @@ extern char animMin[];
 extern char animSec[];
 extern unsigned char *months[12];
 
-// Local function prototypes
-void mosquitoAlarmAreaUpdate(void);
-void mosquitoDirectionSet(u16 seed);
-void mosquitoElementDirectionSet(u16 angle, u08 quadrant, timeElement_t *element);
-void mosquitoElementDraw(timeElement_t *element, u08 value);
-void mosquitoElementMovePrep(timeElement_t *element);
-u16 mosquitoRandGet(u16 seed);
+// Random value for determining the direction of the elements
+static u16 mosRandBase = M_PI * M_PI * 1000;
+static const float mosRandSeed = 3.9147258617;
+static u16 mosRandVal = 0xA5C3;
 
 // Init data for the hr/min/sec mosquite time elements
-timeElement_t elementSecInit = 
+static timeElement_t elementSecInit = 
 {
   MOS_SEC_START_DELAY, MOS_SEC_X_START, MOS_TIME_Y_START, MOS_SEC_X_WIDTH,
   (float)MOS_SEC_X_START, (float)MOS_TIME_Y_START, 0, 0, MOS_SEC_TXT_X_OFFSET,
   animSec
 };
-timeElement_t elementMinInit = 
+static timeElement_t elementMinInit = 
 {
   MOS_MIN_START_DELAY, MOS_MIN_X_START, MOS_TIME_Y_START, MOS_MIN_X_WIDTH,
   (float)MOS_MIN_X_START, (float)MOS_TIME_Y_START, 0, 0, MOS_MIN_TXT_X_OFFSET,
   animMin
 };
-timeElement_t elementHourInit =
+static timeElement_t elementHourInit =
 {
   MOS_HOUR_START_DELAY, MOS_HOUR_X_START, MOS_TIME_Y_START, MOS_HOUR_X_WIDTH,
   (float)MOS_HOUR_X_START, (float)MOS_TIME_Y_START, 0, 0, MOS_HOUR_TXT_X_OFFSET,
@@ -106,12 +103,16 @@ timeElement_t elementHourInit =
 };
 
 // Runtime environment for the mosquito elements
-timeElement_t elementSec;
-timeElement_t elementMin;
-timeElement_t elementHour;
+static timeElement_t elementSec;
+static timeElement_t elementMin;
+static timeElement_t elementHour;
 
-// Random value for determining the direction of the elements
-u16 randVal = 0xA5C3;
+// Local function prototypes
+static void mosquitoAlarmAreaUpdate(void);
+static void mosquitoDirectionSet(void);
+static void mosquitoElementDirectionSet(timeElement_t *element);
+static void mosquitoElementDraw(timeElement_t *element, u08 value);
+static void mosquitoElementMovePrep(timeElement_t *element);
 
 //
 // Function: mosquitoCycle
@@ -123,13 +124,10 @@ void mosquitoCycle(void)
   // Update alarm info in clock
   mosquitoAlarmAreaUpdate();
 
+  // Each minute change the direction of the elements
   if (mcClockTimeEvent == GLCD_TRUE &&
       (mcClockNewTM != mcClockOldTM || mcClockNewTH != mcClockOldTH))
-  {
-    // Each minute change the direction of the elements
-    randVal = mosquitoRandGet(randVal);
-    mosquitoDirectionSet(randVal);
-  }
+    mosquitoDirectionSet();
 
   // Question: Why not move all elements in every clock cycle?
   // Answer: Well my friend, from a cpu point of view we're fast enough to draw
@@ -190,8 +188,7 @@ void mosquitoInit(u08 mode)
   mcU8Util1 = GLCD_FALSE;
 
   // Init the initial direction of each element
-  randVal = mosquitoRandGet(randVal);
-  mosquitoDirectionSet(randVal);
+  mosquitoDirectionSet();
 }
 
 //
@@ -199,7 +196,7 @@ void mosquitoInit(u08 mode)
 //
 // Draw update in mosquito clock alarm area
 //
-void mosquitoAlarmAreaUpdate(void)
+static void mosquitoAlarmAreaUpdate(void)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -217,14 +214,17 @@ void mosquitoAlarmAreaUpdate(void)
       animValToStr(mcAlarmH, msg);
       msg[2] = ':';
       animValToStr(mcAlarmM, &(msg[3]));
-      pxDone = glcdPutStr2(MOS_AD_X_START, MOS_AD_Y_START, FONT_5X5P, msg, mcFgColor);
+      pxDone = glcdPutStr2(MOS_AD_X_START, MOS_AD_Y_START, FONT_5X5P, msg,
+        mcFgColor);
     }
     else
     {
-      // Prior to showing the date clear border of inverse alarm area (if needed)
+      // Prior to showing the date clear border of inverse alarm area
+      // (if needed)
       if (mcU8Util1 == GLCD_TRUE)
       {
-        glcdRectangle(MOS_AD_X_START - 1, MOS_AD_Y_START - 1, 19, 7, mcBgColor);
+        glcdRectangle(MOS_AD_X_START - 1, MOS_AD_Y_START - 1, 19, 7,
+          mcBgColor);
         mcU8Util1 = GLCD_FALSE;
       }
 
@@ -233,8 +233,8 @@ void mosquitoAlarmAreaUpdate(void)
       pxDone = glcdPutStr2(MOS_AD_X_START, MOS_AD_Y_START, FONT_5X5P,
         (char *)months[mcClockNewDM - 1], mcFgColor) + MOS_AD_X_START;
       animValToStr(mcClockNewDD, &(msg[1]));
-      pxDone = pxDone + glcdPutStr2(pxDone, MOS_AD_Y_START, FONT_5X5P, msg, mcFgColor) -
-        MOS_AD_X_START;
+      pxDone = pxDone + glcdPutStr2(pxDone, MOS_AD_Y_START, FONT_5X5P, msg,
+        mcFgColor) - MOS_AD_X_START;
     }
 
     // Clean up any trailing remnants of previous text
@@ -273,24 +273,11 @@ void mosquitoAlarmAreaUpdate(void)
 //
 // Set the direction of the elements
 //
-void mosquitoDirectionSet(u16 seed)
+static void mosquitoDirectionSet(void)
 {
-  u16 angle;
-
-  // Direction for sec element
-  angle = seed % (90 - MOS_DIRECTION_ANGLE_MIN * 2) +
-    MOS_DIRECTION_ANGLE_MIN;
-  mosquitoElementDirectionSet(angle, (seed >> 3) % 4, &elementSec);
-
-  // Direction for min element
-  angle = ((seed >> 5) + (seed << 12)) % (90 - MOS_DIRECTION_ANGLE_MIN * 2) +
-    MOS_DIRECTION_ANGLE_MIN;
-  mosquitoElementDirectionSet(angle, (seed >> 7) % 4, &elementMin);
-
-  // Direction for hour element
-  angle = ((seed >> 9) + (seed << 7)) % (90 - MOS_DIRECTION_ANGLE_MIN * 2) +
-    MOS_DIRECTION_ANGLE_MIN;
-  mosquitoElementDirectionSet(angle, (seed >> 13) % 4, &elementHour);
+  mosquitoElementDirectionSet(&elementSec);
+  mosquitoElementDirectionSet(&elementMin);
+  mosquitoElementDirectionSet(&elementHour);
 }
 
 //
@@ -298,12 +285,22 @@ void mosquitoDirectionSet(u16 seed)
 //
 // Set the direction of a single time element
 //
-void mosquitoElementDirectionSet(u16 angle, u08 quadrant, timeElement_t *element)
+static void mosquitoElementDirectionSet(timeElement_t *element)
 {
   float elementRad;
+  u16 angle;
 
-  // New direction for the time element
-  elementRad = (float)(angle + 90 * quadrant) / 180L * M_PI;
+  // Generate a random number of most likely abysmal quality
+  mosRandBase = (int)(mosRandSeed * (mosRandVal + mcClockNewTM) * 213);
+  mosRandVal = mcCycleCounter * mosRandSeed + mosRandBase;
+
+  // Get an angle while preventing too shallow/steep values
+  angle = mosRandVal % (90 - MOS_DIRECTION_ANGLE_MIN * 2) + 
+    MOS_DIRECTION_ANGLE_MIN;
+
+  // New direction for the time element by putting angle in a quadrant
+  elementRad = (float)(angle + 90 * (((mosRandVal >> 3) + angle) % 4)) /
+    180L * M_PI;
   element->dx = sin(elementRad) * MOS_ELEMENT_SPEED;
   element->dy = -cos(elementRad) * MOS_ELEMENT_SPEED;
 }
@@ -313,7 +310,7 @@ void mosquitoElementDirectionSet(u16 angle, u08 quadrant, timeElement_t *element
 //
 // Draw time element in mosquito clock
 //
-void mosquitoElementDraw(timeElement_t *element, u08 value)
+static void mosquitoElementDraw(timeElement_t *element, u08 value)
 {
   char msg[3];
   u08 pxDone;
@@ -339,11 +336,12 @@ void mosquitoElementDraw(timeElement_t *element, u08 value)
 // Set new position of element in mosquito clock and remove stuff that
 // won't be overwritten by the element redraw
 //
-void mosquitoElementMovePrep(timeElement_t *element)
+static void mosquitoElementMovePrep(timeElement_t *element)
 {
   float mathPosXNew = element->mathPosX + element->dx;
   float mathPosYNew = element->mathPosY + element->dy;
   s08 dx, dy;
+  u08 textPosX;
 
   // Check bouncing on left and right wall
   if (mathPosXNew + element->textOffset - 1.01 <= 0L)
@@ -366,7 +364,8 @@ void mosquitoElementMovePrep(timeElement_t *element)
   }
   else if (mathPosYNew + 13.01 >= MOS_AD_BAR_Y_START)
   {
-    mathPosYNew = MOS_AD_BAR_Y_START - (mathPosYNew + 13.01 - MOS_AD_BAR_Y_START) - 13.01;
+    mathPosYNew = MOS_AD_BAR_Y_START -
+      (mathPosYNew + 13.01 - MOS_AD_BAR_Y_START) - 13.01;
     element->dy = -element->dy;
   }
 
@@ -374,32 +373,39 @@ void mosquitoElementMovePrep(timeElement_t *element)
   dx = (s08)mathPosXNew - (s08)element->posX;
   dy = (s08)mathPosYNew - (s08)element->posY;
 
+  // Shortcut for calcs below
+  textPosX = element->posX + element->textOffset;
+
   if (dx > 1)
   {
     // Clear left side of element value and text
-    glcdFillRectangle(element->posX, element->posY, (u08)(dx - 1), 7, mcBgColor);
-    glcdFillRectangle(element->posX + element->textOffset, element->posY + 8,
-      (u08)(dx - 1), 5, mcBgColor);
+    glcdFillRectangle(element->posX, element->posY, (u08)(dx - 1), 7,
+      mcBgColor);
+    glcdFillRectangle(textPosX, element->posY + 8, (u08)(dx - 1), 5,
+      mcBgColor);
   }
   else if (dx < -1)
   {
     // Clear right side of element value and text
-    glcdFillRectangle(element->posX + 12 - (-dx), element->posY, (u08)(-dx - 1), 7, mcBgColor);
-    glcdFillRectangle(element->posX + element->textOffset + element->width - (-dx) + 1,
+    glcdFillRectangle((u08)(element->posX + 12 + dx), element->posY,
+      (u08)(-dx - 1), 7, mcBgColor);
+    glcdFillRectangle((u08)(textPosX + element->width + dx + 1),
       element->posY + 8, (u08)(-dx - 1), 5, mcBgColor);
   }
   if (dy > 1)
   {
     // Clear top side of element value and text
-    glcdFillRectangle(element->posX, element->posY, 11, (u08)(dy - 1), mcBgColor);
-    glcdFillRectangle(element->posX + element->textOffset, element->posY + 8,
-      element->width, (u08)(dy - 1), mcBgColor);
+    glcdFillRectangle(element->posX, element->posY, 11, (u08)(dy - 1),
+      mcBgColor);
+    glcdFillRectangle(textPosX, element->posY + 8, element->width,
+      (u08)(dy - 1), mcBgColor);
   }
   else if (dy < -1)
   {
     // Clear bottom side of element value and text
-    glcdFillRectangle(element->posX, element->posY + 8 - (-dy), 11, (u08)(-dy - 1), mcBgColor);
-    glcdFillRectangle(element->posX + element->textOffset, element->posY + 13 - ((-dy) - 1),
+    glcdFillRectangle(element->posX, element->posY + 8 + dy, 11,
+      (u08)(-dy - 1), mcBgColor);
+    glcdFillRectangle(textPosX, (u08)(element->posY + 13 - (-dy - 1)),
       element->width, (u08)(-dy - 1), mcBgColor);
   }
 
@@ -408,26 +414,5 @@ void mosquitoElementMovePrep(timeElement_t *element)
   element->posY = (u08)mathPosYNew;
   element->mathPosX = mathPosXNew;
   element->mathPosY = mathPosYNew;
-}
-
-//
-// Function: mosquitoRandGet
-//
-// A simple random generator of (most likely) abysmal quality
-//
-u16 mosquitoRandGet(u16 seed)
-{
-  u16 retVal =
-    (seed << 4) + (seed >> 6) +
-    ((u16)mcClockOldTS << 8) + ~mcClockOldTS +
-    ((u16)mcClockOldTM << 7) + ((u16)mcClockOldTM << 2) + ((u16)~mcClockOldTM >> 1) +
-    ((u16)~mcClockOldTH << 6) + ~mcClockOldTH +
-    ((u16)~mcClockNewTS << 5) + ((u16)mcClockNewTS << 4) + ((u16)~mcClockNewTS >> 2) +
-    ((u16)mcClockNewTM << 4) + ~mcClockNewTM +
-    ((u16)mcClockNewTH << 3) + ((u16)mcClockNewTH << 6) + ((u16)~mcClockNewTH >> 3) +
-    ((u16)mcAlarmH << 8) + ~mcAlarmH +
-    ((u16)~mcAlarmM << 8) + mcAlarmM +
-    ((u16)mcCycleCounter << 8) + ~mcCycleCounter;
-  return retVal;
 }
 

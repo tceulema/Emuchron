@@ -12,7 +12,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "pong.h"
@@ -21,25 +21,15 @@
 #define MAX_BALL_SPEED	5 // Note this is in vector arith.
 #define BALL_RADIUS	2 // In pixels
 
-// If the angle is too shallow or too narrow, the game is boring
-#define MIN_BALL_ANGLE	20
+// This reduces the random angle degree range to 0+range .. 180-range
+// per pi rad
+#define MIN_BALL_ANGLE	35
 
 // Pixel location of HOUR10 HOUR1 MINUTE10 and MINUTE1 digits
 #define DISPLAY_H10_X	30
 #define DISPLAY_H1_X	45
 #define DISPLAY_M10_X	70
 #define DISPLAY_M1_X	85
-
-#define DISPLAY_DOW1_X	35
-#define DISPLAY_DOW2_X	50
-#define DISPLAY_DOW3_X	70
-
-#define DISPLAY_MON1_X	20
-#define DISPLAY_MON2_X	35
-#define DISPLAY_MON3_X	50
-
-#define DISPLAY_DAY10_X	70
-#define DISPLAY_DAY1_X	85
 
 // How big our screen is in pixels
 #define SCREEN_W	128
@@ -80,6 +70,9 @@
 // Time in app cycles (representing ~3 secs) for non-time info to be displayed
 #define SCORE_TIMEOUT	(u08)(1000L / ANIMTICK_MS * 3 + 0.5)
 
+// Time in app cycles (representing ~2 sec) to wait before starting a new game
+#define PLAY_COUNTDOWN	(u08)(1000L / ANIMTICK_MS * 2 + 0.5)
+
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -98,45 +91,45 @@ extern volatile uint8_t mcU8Util1, mcU8Util2, mcU8Util3, mcU8Util4;
 // mcU8Util4 = score display timeout timer
 
 // Specific stuff for the pong clock
-uint8_t left_score, right_score;
-float ball_x, ball_y;
-float oldball_x, oldball_y;
-float ball_dx, ball_dy;
-int8_t rightpaddle_y, leftpaddle_y;
-int8_t oldleftpaddle_y, oldrightpaddle_y;
-int8_t rightpaddle_dy, leftpaddle_dy;
-uint8_t redraw_score = 0;
-uint8_t minute_changed, hour_changed;
+static uint8_t left_score, right_score;
+static float ball_x, ball_y;
+static float oldball_x, oldball_y;
+static float ball_dx, ball_dy;
+static int8_t rightpaddle_y, leftpaddle_y;
+static int8_t oldleftpaddle_y, oldrightpaddle_y;
+static int8_t rightpaddle_dy, leftpaddle_dy;
+static uint8_t redraw_score = 0;
+static uint8_t minute_changed, hour_changed;
+static uint8_t countdown = 0;
 
-// Data used for generating random number
-uint32_t rval[2]={0,0};
-uint32_t key[4];
+// Random value for determining the direction of the elements
+static uint16_t pongRandBase = M_PI * M_PI * 1000;
+static const float pongRandSeed = 3.9147258617;
+static uint16_t pongRandVal = 0x5A3C;
 
 // The keepout is used to know where to -not- put the paddle.
 // The 'bouncepos' is where we expect the ball's y-coord to be when
 // it intersects with the paddle area.
-uint8_t right_keepout_top, right_keepout_bot, right_bouncepos, right_endpos;
-uint8_t left_keepout_top, left_keepout_bot, left_bouncepos, left_endpos;
-int8_t right_dest, left_dest, ticksremaining;
+static uint8_t right_keepout_top, right_keepout_bot, right_bouncepos, right_endpos;
+static uint8_t left_keepout_top, left_keepout_bot, left_bouncepos, left_endpos;
+static int8_t right_dest, left_dest, ticksremaining;
 
 // Local function prototypes
-void initdisplay(void);
-void initanim(void);
-void step(void);
-void draw(void);
-void setscore(void);
-void draw_score(uint8_t redraw_digits);
-uint8_t intersectrect(uint8_t x1, uint8_t y1, uint8_t w1, uint8_t h1,
+static void initdisplay(void);
+static void initanim(void);
+static void step(void);
+static void draw(void);
+static void setscore(void);
+static void draw_score(uint8_t redraw_digits);
+static uint8_t intersectrect(uint8_t x1, uint8_t y1, uint8_t w1, uint8_t h1,
   uint8_t x2, uint8_t y2, uint8_t w2, uint8_t h2);
-uint8_t calculate_keepout(float theball_x, float theball_y, float theball_dx,
-  float theball_dy, uint8_t *keepout1, uint8_t *keepout2);
-void drawbigdigit(uint8_t x, uint8_t y, uint8_t n);
-void drawmidline(void);
-float random_angle_rads(void);
-void init_crand(void);
-void encipher(void);
-uint16_t crand(uint8_t type);
-void pongAlarmUpdate(void);
+static uint8_t calculate_keepout(float theball_x, float theball_y,
+  float theball_dx, float theball_dy, uint8_t *keepout1, uint8_t *keepout2);
+static void drawbigdigit(uint8_t x, uint8_t y, uint8_t n);
+static void drawmidline(void);
+static float random_angle_rads(void);
+static uint16_t crand(uint8_t type);
+static void pongAlarmUpdate(void);
 
 //
 // Function: pongButton
@@ -218,94 +211,32 @@ void pongInit(u08 mode)
 {
   mcAlarmSwitch = ALARM_SWITCH_NONE;
   mcU8Util1 = GLCD_FALSE;
-  init_crand();
   initanim();
   initdisplay();
   pongAlarmUpdate();
 }
 
-void init_crand(void)
+//
+// Function: crand
+//
+// A random generator of (most likely) low quality that is yet simple and small
+//
+static uint16_t crand(uint8_t type)
 {
-  uint32_t temp;
-  key[0] = 0x2DE9716E;  //Initial XTEA key. Grabbed from the first 16 bytes
-  key[1] = 0x993FDDD1;  //of grc.com/password.  1 in 2^128 chance of seeing
-  key[2] = 0x2A77FB57;  //that key again there.
-  key[3] = 0xB172E6B0;
-  rval[0] = 0;
-  rval[1] = 0;
-  encipher();
-  temp = mcAlarmH;
-  temp<<=8;
-  temp |= mcClockNewTH;
-  temp<<=8;
-  temp |= mcClockNewTM;
-  temp<<=8;
-  temp |= mcClockNewTS;
-  key[0] ^= rval[1]<<1;
-  encipher();
-  key[1] ^= temp<<1;
-  encipher();
-  key[2] ^= temp>>1;
-  encipher();
-  key[3] ^= rval[1]>>1;
-  encipher();
-  temp = mcAlarmM;
-  temp<<=8;
-  temp |= mcClockNewDM;
-  temp<<=8;
-  temp |= mcClockNewDD;
-  temp<<=8;
-  temp |= mcClockNewDY;
-  key[0] ^= temp<<1;
-  encipher();
-  key[1] ^= rval[0]<<1;
-  encipher();
-  key[2] ^= rval[0]>>1;
-  encipher();
-  key[3] ^= temp>>1;
-  rval[0] = 0;
-  rval[1] = 0;
-  encipher();  //And at this point, the PRNG is now seeded, based on power on/date/time reset.
-}
+  pongRandBase = (int)(pongRandSeed * (pongRandVal + mcClockNewTM) * 213);
+  pongRandVal = mcCycleCounter * pongRandSeed + pongRandBase;
 
-void encipher(void)
-{
-  // Using 32 rounds of XTea encryption as a PRNG.
-  unsigned int i;
-  uint32_t v0=rval[0], v1=rval[1], sum=0, delta=0x9E3779B9;
-  for (i = 0; i < 32; i++)
-  {
-    v0 += (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + key[sum & 3]);
-    sum += delta;
-    v1 += (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + key[(sum>>11) & 3]);
-  }
-  rval[0] = v0; rval[1] = v1;
-}
-
-uint16_t crand(uint8_t type)
-{
-  uint16_t tempRand;
-
-  if (type == 0 || type > 2)
-  {
-    encipher();
-    tempRand = (rval[0]^rval[1]) + (((uint16_t)(~mcCycleCounter))<<8) + mcCycleCounter;
-    return tempRand & RAND_MAX;
-  }
-  else if (type == 1)
-  {
-    tempRand = ((rval[0]^rval[1])>>15) + mcCycleCounter;
-    return tempRand & 0x3; 
-  }
+  if (type == 1)
+    return pongRandVal & 0x3; 
   else if (type == 2)
-  {
-    tempRand = ((rval[0]^rval[1])>>17) + ~mcCycleCounter;
-    return tempRand & 0x1;
-  }
+    return (pongRandVal >> 1) & 0x1;
+  else
+    return pongRandVal;
+
   return 0;
 }
 
-void setscore(void)
+static void setscore(void)
 {
   if (mcU8Util2 != mcU8Util3)
   {
@@ -340,7 +271,7 @@ void setscore(void)
   }
 }
 
-void initanim(void)
+static void initanim(void)
 {
   float angle = random_angle_rads();
 
@@ -360,19 +291,20 @@ void initanim(void)
   left_keepout_top = left_keepout_bot = left_bouncepos = left_endpos = 0;
   right_dest = left_dest = 0;
   ticksremaining = 0;
+  countdown = PLAY_COUNTDOWN;
 
   // Start position of paddles
   leftpaddle_y = oldleftpaddle_y = 25;
   rightpaddle_y = oldrightpaddle_y = 25;
 
   // Start position of ball and its x/y speed
-  ball_x = oldball_x = (SCREEN_W / 2) - 1;
-  ball_y = oldball_y = (SCREEN_H / 2) - 1;
-  ball_dx = MAX_BALL_SPEED * cos(angle);
-  ball_dy = MAX_BALL_SPEED * sin(angle);
+  ball_x = oldball_x = (SCREEN_W / 2) - 2;
+  ball_y = oldball_y = (SCREEN_H / 2) - 2;
+  ball_dx = MAX_BALL_SPEED * sin(angle);
+  ball_dy = MAX_BALL_SPEED * cos(angle);
 }
 
-void initdisplay(void)
+static void initdisplay(void)
 {
   u08 newAlmDisplayState = GLCD_FALSE;
   
@@ -419,8 +351,12 @@ void initdisplay(void)
   drawmidline();
 }
 
-void step(void)
+static void step(void)
 {
+  float angle = 0;
+  float dx, dy;
+  int8_t distance;
+
   // Signal a change in minutes or hours
   if (mcClockTimeEvent == GLCD_TRUE && minute_changed == 0 &&
       hour_changed == 0)
@@ -444,6 +380,11 @@ void step(void)
   //DEBUG(putstring(", ")); 
   //DEBUG(uart_putw_dec(hour_changed)); 
   //DEBUG(putstring_nl("")); 
+
+  // If we're waiting for a new game to start we don't want to calculate
+  // new positions
+  if (countdown > 0)
+    return;
 
   // Save old ball location so we can do some vector stuff 
   oldball_x = ball_x;
@@ -481,8 +422,6 @@ void step(void)
   // The ball hits either wall, the ball resets location & angle
   if ((ball_x  > (SCREEN_W - BALL_RADIUS * 2)) || ((int8_t)ball_x <= 0))
   {
-    float angle = random_angle_rads();
-
     if (DEBUGGING)
     {
       if ((int8_t)ball_x <= 0)
@@ -503,11 +442,10 @@ void step(void)
       }
     }
 
-    // Place ball in the middle of the screen
-    ball_x = (SCREEN_W / 2) - 1;
-    ball_y = (SCREEN_H / 2) - 1;
-    ball_dx = MAX_BALL_SPEED * cos(angle);
-    ball_dy = MAX_BALL_SPEED * sin(angle);
+    // Place ball in the middle of the screen and re-use the same
+    // x/y angles (so the ball moves to the paddle that just 'lost') 
+    ball_x = (SCREEN_W / 2) - 2;
+    ball_y = (SCREEN_H / 2) - 2;
 
     // Draw paddles
     glcdFillRectangle(LEFTPADDLE_X, left_keepout_top, PADDLE_W,
@@ -524,6 +462,10 @@ void step(void)
 
     // Set values for score display 
     setscore();
+
+    // New serve: the game will be static for a few moment before it starts
+    countdown = PLAY_COUNTDOWN;
+    return;
   }
 
   // Save old paddle position
@@ -541,11 +483,11 @@ void step(void)
       DEBUG(putstring_nl("coll?"));
 
       // Determine the exact position at which it would collide
-      float dx = RIGHTPADDLE_X - (oldball_x + BALL_RADIUS * 2);
+      dx = RIGHTPADDLE_X - (oldball_x + BALL_RADIUS * 2);
       // Now figure out what fraction that is of the motion and multiply
       // that by the dy
 
-      float dy = (dx / ball_dx) * ball_dy;
+      dy = (dx / ball_dx) * ball_dy;
     
       if (intersectrect((oldball_x + dx), (oldball_y + dy), BALL_RADIUS * 2,
            BALL_RADIUS * 2, RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H))
@@ -568,10 +510,20 @@ void step(void)
         // Set the ball right up against the paddle and bounce it
         ball_x = oldball_x + dx;
         ball_y = oldball_y + dy;
-        ball_dx *= -1;
+
+        // Bounce ball but set new angles for x and y
+        // Put x in opposite direction and keep y in same direction
+        angle = random_angle_rads();
+        ball_dx = MAX_BALL_SPEED * sin(angle);
+        if (ball_dx > 0)
+          ball_dx *= -1;
+        angle = MAX_BALL_SPEED * cos(angle);
+        if (angle * ball_dy < 0)
+          ball_dy = -angle;
+        else
+          ball_dy = angle;
       
         right_bouncepos = right_dest = right_keepout_top = right_keepout_bot = 0;
-        left_bouncepos = left_dest = left_keepout_top = left_keepout_bot = 0;
       }
 
       // Otherwise, it didn't bounce... will probably hit the right wall
@@ -595,12 +547,12 @@ void step(void)
         if (right_bouncepos > right_endpos)
         {
           right_keepout_top = right_endpos;
-          right_keepout_bot = right_bouncepos + BALL_RADIUS*2;
+          right_keepout_bot = right_bouncepos + BALL_RADIUS * 2;
         }
         else
         {
           right_keepout_top = right_bouncepos;
-          right_keepout_bot = right_endpos + BALL_RADIUS*2;
+          right_keepout_bot = right_endpos + BALL_RADIUS * 2;
         }
 
         /*if(DEBUGGING)
@@ -637,7 +589,7 @@ void step(void)
           else
           {
             //DEBUG(putstring_nl("in the middle"));
-            if (((uint8_t)crand(2)) & 0x1)
+            if (crand(2))
               right_dest = right_keepout_top - PADDLE_H - 1;
             else
               right_dest = right_keepout_bot + 1;
@@ -652,8 +604,8 @@ void step(void)
       // Draw the keepout area (for debugging)
       //glcdRectangle(RIGHTPADDLE_X, right_keepout_top, PADDLE_W,
       //  right_keepout_bot - right_keepout_top);
-    
-      int8_t distance = rightpaddle_y - right_dest;
+
+      distance = rightpaddle_y - right_dest;
     
       /*if(DEBUGGING)
       {
@@ -696,11 +648,11 @@ void step(void)
 
       // Check if we collided
       // Determine the exact position at which it would collide
-      float dx = (LEFTPADDLE_X + PADDLE_W) - oldball_x;
+      dx = (LEFTPADDLE_X + PADDLE_W) - oldball_x;
 
       // Now figure out what fraction that is of the motion and multiply
       // that by the dy
-      float dy = (dx / ball_dx) * ball_dy;
+      dy = (dx / ball_dx) * ball_dy;
 
       if (intersectrect((oldball_x + dx), (oldball_y + dy), BALL_RADIUS * 2,
            BALL_RADIUS * 2, LEFTPADDLE_X, leftpaddle_y, PADDLE_W, PADDLE_H))
@@ -719,8 +671,17 @@ void step(void)
           uart_putw_dec(leftpaddle_y); putstring("]");
         }
 
-        // Bounce it
-        ball_dx *= -1;
+        // Bounce ball but set new angles for x and y
+        // Put x in opposite direction and keep y in same direction
+        angle = random_angle_rads();
+        ball_dx = MAX_BALL_SPEED * sin(angle);
+        if (ball_dx < 0)
+          ball_dx *= -1;
+        angle = MAX_BALL_SPEED * cos(angle);
+        if (angle * ball_dy < 0)
+          ball_dy = -angle;
+        else
+          ball_dy = angle;
 
         if ((uint8_t)ball_x != LEFTPADDLE_X + PADDLE_W)
         {
@@ -794,7 +755,7 @@ void step(void)
           else
           {
             DEBUG(putstring_nl("in the middle"));
-            if ( ((uint8_t)crand(2)) & 0x1)
+            if (crand(2))
               left_dest = left_keepout_top - PADDLE_H - 1;
             else
               left_dest = left_keepout_bot + 1;
@@ -813,7 +774,7 @@ void step(void)
       //glcdRectangle(LEFTPADDLE_X, left_keepout_top, PADDLE_W,
       //  left_keepout_bot - left_keepout_top);
 
-      int8_t distance = ABS((leftpaddle_y - left_dest));
+      distance = ABS((leftpaddle_y - left_dest));
   
       /*if (DEBUGGING)
       {
@@ -861,7 +822,7 @@ void step(void)
     rightpaddle_y = (SCREEN_H - PADDLE_H - BOTBAR_H - 1);
 }
 
-void drawmidline(void)
+static void drawmidline(void)
 {
   uint8_t i;
   for (i = 0; i < (SCREEN_H / 8 - 1); i++)
@@ -879,7 +840,7 @@ void drawmidline(void)
     glcdDataWrite(0xCF);  
 }
 
-void draw(void)
+static void draw(void)
 {
   uint8_t redraw_digits = 0;
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -888,21 +849,43 @@ void draw(void)
     intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2,
     RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H);
 
+  // The flashing state of the paddles in case of alarming
   if ((mcCycleCounter & 0x0F) >= 8)
     newAlmDisplayState = GLCD_TRUE;
 
-  // Erase old ball
-  glcdFillRectangle(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2, mcBgColor);
-
-  // Draw new ball
-  glcdFillRectangle(ball_x, ball_y, BALL_RADIUS * 2, BALL_RADIUS * 2, mcFgColor);
-
-  // Draw middle lines around where the ball may have intersected it?
-  if (intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2,
-      SCREEN_W / 2 - MIDLINE_W, 0, MIDLINE_W, SCREEN_H))
+  // Decide what to do with the ball
+  if (countdown > 0)
   {
-    // Redraw it since we had an intersection
-    drawmidline();
+    // We're waiting for a new serve
+    countdown--;
+
+    // When needed remove the old ball at the edge of the display
+    if (oldball_x != ball_x || oldball_y != ball_y)
+    {
+      // Clear old ball and sync with new location (at center of display)
+      glcdFillRectangle(oldball_x, oldball_y, BALL_RADIUS * 2,
+        BALL_RADIUS * 2, mcBgColor);
+      oldball_x = ball_x;
+      oldball_y = ball_y;
+    }
+  }
+  else
+  {
+    // Regular game play so the ball moved from a to b
+
+    // Erase old ball
+    glcdFillRectangle(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2, mcBgColor);
+
+    // Draw new ball
+    glcdFillRectangle(ball_x, ball_y, BALL_RADIUS * 2, BALL_RADIUS * 2, mcFgColor);
+
+    // Draw middle lines around where the ball may have intersected it?
+    if (intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2,
+        SCREEN_W / 2 - MIDLINE_W, 0, MIDLINE_W, SCREEN_H))
+    {
+      // Redraw it since we had an intersection
+      drawmidline();
+    }
   }
 
   // Clear left paddle when needed
@@ -1020,7 +1003,7 @@ void draw(void)
   glcdFillRectangle(ball_x, ball_y, BALL_RADIUS * 2, BALL_RADIUS * 2, mcFgColor);
 }
 
-uint8_t intersectrect(uint8_t x1, uint8_t y1, uint8_t w1, uint8_t h1,
+static uint8_t intersectrect(uint8_t x1, uint8_t y1, uint8_t w1, uint8_t h1,
   uint8_t x2, uint8_t y2, uint8_t w2, uint8_t h2)
 {
   // Yer everyday intersection tester
@@ -1040,7 +1023,7 @@ uint8_t intersectrect(uint8_t x1, uint8_t y1, uint8_t w1, uint8_t h1,
 }
 
 // 8 pixels high
-const unsigned char __attribute__ ((progmem)) BigFont[] =
+static const unsigned char __attribute__ ((progmem)) BigFont[] =
 {
   0xFF, 0x81, 0x81, 0xFF,// 0
   0x00, 0x00, 0x00, 0xFF,// 1
@@ -1055,7 +1038,7 @@ const unsigned char __attribute__ ((progmem)) BigFont[] =
   0x00, 0x00, 0x00, 0x00,// SPACE
 };
 
-void draw_score(uint8_t redraw_digits)
+static void draw_score(uint8_t redraw_digits)
 {
   // Draw digits for 'hours'
   if (redraw_digits || intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2,
@@ -1082,7 +1065,7 @@ void draw_score(uint8_t redraw_digits)
   }
 }
 
-void drawbigdigit(uint8_t x, uint8_t y, uint8_t n)
+static void drawbigdigit(uint8_t x, uint8_t y, uint8_t n)
 {
   uint8_t i, j;
   
@@ -1099,49 +1082,41 @@ void drawbigdigit(uint8_t x, uint8_t y, uint8_t n)
   }
 }
 
-float random_angle_rads(void)
+static float random_angle_rads(void)
 {
-  // create random vector MEME seed it ok???
   uint16_t angleRand = crand(0);
-  //float angle = (float)crand(0);
+  uint8_t side = crand(2);
   float angle;
 
-  //angle = 31930; // MEME DEBUG
   if (DEBUGGING)
   {
     putstring("\n\rrand = "); uart_putw_dec(angleRand);
   }
-  //angle = (angle * (90.0 - MIN_BALL_ANGLE * 2) / RAND_MAX) + MIN_BALL_ANGLE;
-  angleRand = angleRand % (90 - MIN_BALL_ANGLE * 2) + MIN_BALL_ANGLE;
-
-  //pick the quadrant
-  uint8_t quadrant = (crand(1)) % 4; 
-  //quadrant = 2; // MEME DEBUG
+  angleRand = angleRand % (180 - MIN_BALL_ANGLE * 2) + MIN_BALL_ANGLE;
 
   if (DEBUGGING)
   {
-    putstring(" quad = "); uart_putw_dec(quadrant);
+    putstring(" side = "); uart_putw_dec(side);
   }
-  angle = (float)angleRand + quadrant * 90;
+  angle = (float)angleRand + side * 180;
   if (DEBUGGING)
   {
     putstring(" new ejection angle = "); uart_putw_dec(angle); putstring_nl("");
   }
+  angle = angle * M_PI / 180;
 
-  angle *= 3.1415;
-  angle /= 180;
   return angle;
 }
 
-uint8_t calculate_keepout(float theball_x, float theball_y, float theball_dx,
-  float theball_dy, uint8_t *keepout1, uint8_t *keepout2)
+static uint8_t calculate_keepout(float theball_x, float theball_y,
+  float theball_dx, float theball_dy, uint8_t *keepout1, uint8_t *keepout2)
 {
   // "simulate" the ball bounce...its not optimized (yet)
   float sim_ball_y = theball_y;
   float sim_ball_x = theball_x;
   float sim_ball_dy = theball_dy;
   float sim_ball_dx = theball_dx;
-  
+  float dx, dy; 
   uint8_t tix = 0, collided = 0;
 
   while ((sim_ball_x < (RIGHTPADDLE_X + PADDLE_W)) &&
@@ -1170,9 +1145,9 @@ uint8_t calculate_keepout(float theball_x, float theball_y, float theball_dx,
       // check if we collided with the right paddle
       
       // first determine the exact position at which it would collide
-      float dx = RIGHTPADDLE_X - (old_sim_ball_x + BALL_RADIUS*2);
+      dx = RIGHTPADDLE_X - (old_sim_ball_x + BALL_RADIUS * 2);
       // now figure out what fraction that is of the motion and multiply that by the dy
-      float dy = (dx / sim_ball_dx) * sim_ball_dy;
+      dy = (dx / sim_ball_dx) * sim_ball_dy;
     
       if (DEBUGGING)
       {
@@ -1189,9 +1164,9 @@ uint8_t calculate_keepout(float theball_x, float theball_y, float theball_dx,
       // check if we collided with the left paddle
 
       // first determine the exact position at which it would collide
-      float dx = (LEFTPADDLE_X + PADDLE_W) - old_sim_ball_x;
+      dx = (LEFTPADDLE_X + PADDLE_W) - old_sim_ball_x;
       // now figure out what fraction that is of the motion and multiply that by the dy
-      float dy = (dx / sim_ball_dx) * sim_ball_dy;
+      dy = (dx / sim_ball_dx) * sim_ball_dy;
     
       /*if (DEBUGGING)
       {
@@ -1223,7 +1198,7 @@ uint8_t calculate_keepout(float theball_x, float theball_y, float theball_dx,
 //
 // Prepare updates in pong due to change in alarm switch
 //
-void pongAlarmUpdate(void)
+static void pongAlarmUpdate(void)
 {
   if (mcUpdAlarmSwitch == GLCD_TRUE)
   {

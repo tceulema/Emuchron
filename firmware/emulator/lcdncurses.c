@@ -31,27 +31,27 @@
 #define NCUR_Y_PIXELS 	66
 
 // A private copy of the window image to optimize ncurses window updates 
-unsigned char lcdNcurImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
+static unsigned char lcdNcurImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 
 // A copy of the init parameters.
-char winNcurTty[50];            // The ncurses tty
-void (*winNcurWinClose)(void);  // The mchron callback when end user closes ncurses window
+static char winNcurTty[75];            // The ncurses tty
+static void (*winNcurWinClose)(void);  // The mchron callback upon ncurses window close
 
 // Data needed for ncurses stub LCD device
-FILE *winNcurFile;
-SCREEN *winNcurScreen;
-WINDOW *winNcurWindow;
-unsigned char doWinNcurFlush = NCUR_FALSE;
-unsigned char winNcurReverse = NCUR_FALSE;
+static FILE *winNcurFile;
+static SCREEN *winNcurScreen;
+static WINDOW *winNcurWindow;
+static unsigned char doWinNcurFlush = NCUR_FALSE;
+static unsigned char winNcurReverse = NCUR_FALSE;
 
 // Definition of an LCD pixel in ncurses
-char winNcurPixel[] = "  ";
+static char winNcurPixel[] = "  ";
 
 // Statistics on the ncurses interface
-long long lcdNcurBitReq = 0;    // Nbr of LCD bits processed (from bytes with ncur update)
-long long lcdNcurBitCnf = 0;    // Nbr of LCD bits leading to ncurses update
-long long lcdNcurByteReq = 0;   // Nbr of LCD bytes processed
-long long lcdNcurByteCnf = 0;   // Nbr of LCD bytes leading to ncurses update
+static long long lcdNcurBitReq = 0;    // Nbr of LCD bits processed (from update bytes)
+static long long lcdNcurBitCnf = 0;    // Nbr of LCD bits leading to ncurses update
+static long long lcdNcurByteReq = 0;   // Nbr of LCD bytes processed
+static long long lcdNcurByteCnf = 0;   // Nbr of LCD bytes leading to ncurses update
 
 //
 // Function: lcdNcurBacklightSet
@@ -150,6 +150,7 @@ void lcdNcurEnd(void)
 
   // End the ncurses session
   endwin();
+  delscreen(winNcurScreen);
 }
 
 //

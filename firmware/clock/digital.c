@@ -10,7 +10,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "digital.h"
@@ -37,15 +37,15 @@ extern unsigned char *months[12];
 extern unsigned char *days[7];
 
 // The following globals control the layout of the digital clock
-u08 digiSecShow;
-u08 digiTimeXScale, digiTimeYScale;
-u08 digiTimeXStart, digiTimeYStart;
-u08 digiDateYStart;
+static u08 digiSecShow;
+static u08 digiTimeXScale, digiTimeYScale;
+static u08 digiTimeXStart, digiTimeYStart;
+static u08 digiDateYStart;
 
 // Local function prototypes
-void digitalInit(u08 mode);
-void digitalTimeValDraw(u08 val, u08 factor);
-void digitalAlarmAreaUpdate(void);
+static void digitalAlarmAreaUpdate(void);
+static void digitalInit(u08 mode);
+static void digitalTimeValDraw(u08 val, u08 factor);
 
 //
 // Function: digitalCycle
@@ -136,7 +136,7 @@ void digitalHmsInit(u08 mode)
 //
 // Initialize the LCD display of a very simple digital clock
 //
-void digitalInit(u08 mode)
+static void digitalInit(u08 mode)
 {
   DEBUGP("Init Digital");
 
@@ -174,7 +174,7 @@ void digitalInit(u08 mode)
 //
 // Draw update in digital clock alarm area
 //
-void digitalAlarmAreaUpdate(void)
+static void digitalAlarmAreaUpdate(void)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -232,7 +232,7 @@ void digitalAlarmAreaUpdate(void)
 //
 // Draw a time element (hh, mm or ss)
 //
-void digitalTimeValDraw(u08 val, u08 factor)
+static void digitalTimeValDraw(u08 val, u08 factor)
 {
   char clockInfo[3];
 

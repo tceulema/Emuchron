@@ -25,8 +25,8 @@ pl f 84 43 114 61
 pl f 84 61 114 43
 
 # Draw the six filled rectangles
-rw x < 3 0 1
-  rw y < 2 0 1
+rf x=0 x<3 x=x+1
+  rf y=0 y<2 y=y+1
     prf f (10+40*x) (15+y*28) 19 19 0 (y*3+x)
   rn
 rn

@@ -63,65 +63,66 @@ typedef struct _winGlutMsg_t
 
 // The glut window thread we create that opens and manages the OpenGL/Glut
 // window and processes messages in the glut message queue 
-pthread_t winGlutThread;
+static pthread_t winGlutThread;
 
 // Start and end of glut message queue
-winGlutMsg_t *winGlutQueueStart = NULL;
-winGlutMsg_t *winGlutQueueEnd = NULL;
+static winGlutMsg_t *winGlutQueueStart = NULL;
+static winGlutMsg_t *winGlutQueueEnd = NULL;
 
 // Mutex to access the glut message queue and statistics counters
 // WARNING:
 // To prevent deadlock never ever lock winGlutQueueMutex within a
 // winGlutStatsMutex lock
-pthread_mutex_t winGlutQueueMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t winGlutStatsMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t winGlutQueueMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t winGlutStatsMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // A private copy of the window image to optimize glut window updates 
-unsigned char lcdGlutImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
+static unsigned char lcdGlutImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 
 // Identifiers to signal certain glut tasks
-int doWinGlutExit = GLUT_FALSE;
-int doWinGlutFlush = GLUT_TRUE;
+static int doWinGlutExit = GLUT_FALSE;
+static int doWinGlutFlush = GLUT_TRUE;
 
 // A copy of the init parameters
-int winGlutPosX;		// The initial glut x position
-int winGlutPosY;		// The initial glut y position
-int winGlutSizeX;		// The initial glut x size
-int winGlutSizeY;		// The initial glut y size
-void (*winGlutWinClose)(void);  // The mchron callback when end user closes glut window
+static int winGlutPosX;			// The initial glut x position
+static int winGlutPosY;			// The initial glut y position
+static int winGlutSizeX;		// The initial glut x size
+static int winGlutSizeY;		// The initial glut y size
+static void (*winGlutWinClose)(void);  	// The mchron callback upon glut window close
 
 // The (dummy) message we use upon creating the glut thread 
-char *createMsg = "Monochron (glut)";
+static char *createMsg = "Monochron (glut)";
 
 // The brightness of the pixels we draw
-float winGlutBrightness = 1.0L;
+static float winGlutBrightness = 1.0L;
 
 // The number of black vs white pixels.
 // <0 more black than white pixels
 // =0 evently spread
 // >0 more white than black pixels
-int winPixMajority = -GLCD_XPIXELS * GLCD_YPIXELS / 2;
+static int winPixMajority = -GLCD_XPIXELS * GLCD_YPIXELS / 2;
 
 // Statistics counters on glut and the glut message queue
-long long lcdGlutMsgSend = 0;   // Nbr of msgs sent
-long long lcdGlutMsgRcv = 0;    // Nbr of msgs received
-long long lcdGlutBitReq = 0;    // Nbr of LCD bits processed (from bytes with glut update)
-long long lcdGlutBitCnf = 0;    // Nbr of LCD bits leading to glut update
-long long lcdGlutByteReq = 0;   // Nbr of LCD bytes processed
-long long lcdGlutByteCnf = 0;   // Nbr of LCD bytes leading to glut update
-int lcdGlutRedraws = 0;	        // Nbr of glut window redraws (by internal glut event)
-int lcdGlutQueueMax = 0;        // Max length of glut message queue
-int lcdGlutQueueEvents = 0;     // Nbr of times the glut message queue is processed
-struct timeval lcdGlutTimeStart;// Timestamp start of glut interface
-long long lcdGlutTicks = 0;     // Nbr of glut thread cycles
+static long long lcdGlutMsgSend = 0;   // Nbr of msgs sent
+static long long lcdGlutMsgRcv = 0;    // Nbr of msgs received
+static long long lcdGlutBitReq = 0;    // Nbr of LCD bits processed (from update bytes)
+static long long lcdGlutBitCnf = 0;    // Nbr of LCD bits leading to glut update
+static long long lcdGlutByteReq = 0;   // Nbr of LCD bytes processed
+static long long lcdGlutByteCnf = 0;   // Nbr of LCD bytes leading to glut update
+static int lcdGlutRedraws = 0;	       // Nbr of glut window redraws (by internal glut event)
+static int lcdGlutQueueMax = 0;        // Max length of glut message queue
+static int lcdGlutQueueEvents = 0;     // Nbr of times the glut message queue is processed
+static struct timeval lcdGlutTimeStart;// Timestamp start of glut interface
+static long long lcdGlutTicks = 0;     // Nbr of glut thread cycles
 
 // Local function prototypes
-void winGlutDelay(int x);
-void *winGlutMain(void *ptr);
-void winGlutMsgQueueAdd(int x, int y, unsigned char data, unsigned char cmd);
-void winGlutMsgQueueProcess(void);
-void winGlutRender(void);
-void winGlutKeyboard(unsigned char key, int x, int y);
+static void winGlutDelay(int x);
+static void *winGlutMain(void *ptr);
+static void winGlutMsgQueueAdd(int x, int y, unsigned char data,
+  unsigned char cmd);
+static void winGlutMsgQueueProcess(void);
+static void winGlutRender(void);
+static void winGlutKeyboard(unsigned char key, int x, int y);
 
 //
 // Function: lcdGlutBacklightSet
@@ -205,7 +206,7 @@ void lcdGlutDataWrite(unsigned char x, unsigned char y, unsigned char data)
 //
 // Delay time in milliseconds
 //
-void winGlutDelay(int x)
+static void winGlutDelay(int x)
 {
   struct timeval sleepThis;
 
@@ -222,7 +223,7 @@ void winGlutDelay(int x)
 // briefly 'blink' the screen to gently indicate that focus should
 // be put on the mchron command line terminal window.
 //
-void winGlutKeyboard(unsigned char key, int x, int y)
+static void winGlutKeyboard(unsigned char key, int x, int y)
 {
   int k,l;
 
@@ -266,7 +267,7 @@ void winGlutKeyboard(unsigned char key, int x, int y)
 //
 // Main function for glut thread
 //
-void *winGlutMain(void *ptr)
+static void *winGlutMain(void *ptr)
 {
   unsigned char x,y;
   char *myArgv[1];
@@ -330,7 +331,8 @@ void *winGlutMain(void *ptr)
 //
 // Add message to glut message queue
 //
-void winGlutMsgQueueAdd(int x, int y, unsigned char data, unsigned char cmd)
+static void winGlutMsgQueueAdd(int x, int y, unsigned char data,
+  unsigned char cmd)
 {
   void *mallocPtr;
 
@@ -373,7 +375,7 @@ void winGlutMsgQueueAdd(int x, int y, unsigned char data, unsigned char cmd)
 //
 // Process all messages in the glut message queue
 //
-void winGlutMsgQueueProcess(void)
+static void winGlutMsgQueueProcess(void)
 {
   void *freePtr;
   winGlutMsg_t *glutMsg = winGlutQueueStart;
@@ -470,7 +472,7 @@ void winGlutMsgQueueProcess(void)
 //
 // Render a full redraw of glut window in alternating buffer
 //
-void winGlutRender(void)
+static void winGlutRender(void)
 {
   unsigned char x,y,lcdByte;
   unsigned char pixel, pixValDraw;

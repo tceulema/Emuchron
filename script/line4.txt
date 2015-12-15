@@ -9,24 +9,24 @@
 le
 
 # Set horizontal and vertical display size
-vs h 127
-vs v 63
+vs hor=127
+vs ver=63
 # Set number of lines to draw minus 1
-vs li 6
+vs lines=6
 
 # Paint in total 5x5 lines twice
-rw a <= li-1 1 1
+rf factor=1 factor<=lines-1 factor=factor+1
   # From left to top and left to bottom
-  pl f 0 v/li*a (h-(h/li*a))/2 0
-  pl f 0 v/li*a (h/li*a)/2 v
-  pl f 64 v/li*a (h-(h/li*a))/2+64 0
-  pl f 64 v/li*a (h/li*a)/2+64 v
+  pl f 0 ver/lines*factor (hor-(hor/lines*factor))/2 0
+  pl f 0 ver/lines*factor (hor/lines*factor)/2 ver
+  pl f 64 ver/lines*factor (hor-(hor/lines*factor))/2+64 0
+  pl f 64 ver/lines*factor (hor/lines*factor)/2+64 ver
 
   # From right to top and right to bottom
-  pl f h/2 v-(v/li*a) (h-(h/li*a))/2 0
-  pl f h/2 v-(v/li*a) (h/li*a)/2 v
-  pl f h v-(v/li*a) (h-(h/li*a))/2+64 0
-  pl f h v-(v/li*a) (h/li*a)/2+64 v
+  pl f hor/2 ver-(ver/lines*factor) (hor-(hor/lines*factor))/2 0
+  pl f hor/2 ver-(ver/lines*factor) (hor/lines*factor)/2 ver
+  pl f hor ver-(ver/lines*factor) (hor-(hor/lines*factor))/2+64 0
+  pl f hor ver-(ver/lines*factor) (hor/lines*factor)/2+64 ver
 rn
 
 # Paint the glcdline function name in a rectangle box

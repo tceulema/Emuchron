@@ -1,14 +1,17 @@
 #
 # For instructions refer to section 3.4 of the Emuchron pdf manual.
 #
+# !! Run this script with root privileges !!
+# !! Prior to running this script execute "apt-get update" as root once !!
+#
 # This command script will install everything you need to be able to:
 # - Build Monochron firmware
 # - Build Emuchron and the mchron command line tool
 # - Connect and upload firmware to Monochron via the FTDI port
 # - Read Monochron debug strings from the FTDI port
 # - Debug clock and high-level graphics code
-#
-# !! Run this script with root privileges !!
+# - Interrupt/halt debugger in Debian 8 (Jessie) without being warned
+#   or prompted about sourcefile 'syscall-template.S' not being found
 #
 
 # Compiler and AVR stuff
@@ -40,3 +43,25 @@ apt-get install libreadline-dev
 # Read Monochron debug strings from FTDI port
 apt-get install minicom
 
+# For non-annoying debugging experience in Debian 8 (Jessie) we require a
+# specific glibc source file named syscall-template.S
+myDebianVersion=`lsb_release -c`
+if [[ $myDebianVersion == *"jessie"* ]];
+then
+  if [ -f /build/glibc/glibc-2.19/sysdeps/unix/syscall-template.S ];
+  then
+    echo "glibc sources already available"
+  else
+    echo "Installing/replacing glibc sources in /build/glibc"
+    apt-get install dpkg-dev
+    mkdir -p /build/glibc
+    rm -rf /build/glibc/glibc-2.19
+    cd /build/glibc
+    apt-get source glibc
+    cd -
+  fi
+  echo "Installing/replacing glibc source symbolic links"
+  rm -f /build/glibc-Ir_s5K /build/glibc-I9DIZl
+  ln -s /build/glibc /build/glibc-Ir_s5K
+  ln -s /build/glibc /build/glibc-I9DIZl
+fi

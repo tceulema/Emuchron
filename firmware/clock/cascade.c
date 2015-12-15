@@ -10,7 +10,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -39,8 +39,8 @@ extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
-void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft, u08 oldValRight,
-  u08 newValRight);
+static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
+  u08 oldValRight, u08 newValRight);
 
 //
 // Function: spotCascadeCycle
@@ -123,8 +123,8 @@ void spotCascadeInit(u08 mode)
 //
 // Update a single QV cascade delta bar
 //
-void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft, u08 oldValRight,
-  u08 newValRight)
+static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
+  u08 oldValRight, u08 newValRight)
 {
   u08 oldDeltaBarHeight;
   u08 newDeltaBarHeight;

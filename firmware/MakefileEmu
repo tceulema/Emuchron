@@ -10,7 +10,7 @@
 CC = gcc
 CFLAGS = -g -std=gnu99 -Wall -MMD
 EVALFLAGS = -g -MMD
-CLIB = -lm -lncurses -lreadline -lglut -lGLU -lpthread
+CLIB = -lm -lncurses -lreadline -lglut -lGLU -lGL -lpthread
 FLEX = flex
 FLIB = -lfl
 BISON = bison
@@ -32,8 +32,9 @@ MARIO = -DMARIO
 
 # The clock and emulator source files and target
 CSRC = emulator/stub.c emulator/lcd.c emulator/lcdglut.c emulator/lcdncurses.c \
-  emulator/scanutil.c emulator/mchronutil.c emulator/mchron.c \
-  ratt.c ks0108.c glcd.c config.c anim.c \
+  emulator/scanutil.c emulator/mchronutil.c emulator/listvarutil.c \
+  emulator/mchron.c \
+  monomain.c ks0108.c glcd.c config.c anim.c \
   clock/analog.c clock/bigdigit.c clock/digital.c clock/mosquito.c clock/nerd.c \
   clock/perftest.c clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c \
   clock/slider.c clock/spotfire.c clock/cascade.c clock/speeddial.c \

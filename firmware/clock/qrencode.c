@@ -68,7 +68,7 @@ unsigned char strinbuf[100];
 unsigned char qrframe[600];
 unsigned char rlens[26];
 
-const unsigned char framebase[] PROGMEM =
+static const unsigned char framebase[] PROGMEM =
 {
   0xfe,0x00,0x3f,0x80,
   0x82,0x00,0x20,0x80,
@@ -97,7 +97,7 @@ const unsigned char framebase[] PROGMEM =
   0xfe,0x00,0x00,0x00
 };
 
-const unsigned char framask[] PROGMEM =
+static const unsigned char framask[] PROGMEM =
 {
   0xff,0xff,0xff,0xff,
   0xff,0xf8,0x10,0x04,
@@ -170,9 +170,9 @@ static const unsigned char N3 = 40;
 static const unsigned char N4 = 10;
 
 // Best mask and badness found for QR so far
-unsigned mindem;
-unsigned char best;
-unsigned char lastMask;
+static unsigned mindem;
+static unsigned char best;
+static unsigned char lastMask;
 
 // Local function prototypes
 static unsigned modnn(unsigned x);

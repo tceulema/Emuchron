@@ -11,7 +11,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -73,14 +73,14 @@ extern char animMin[];
 extern char animSec[];
 
 // The several menu bar templates we're going to use
-char barNewYear[] = "*** happy new year ***";
-char barAprFool[] = "*** happy april fool's day ***";
-char barBirthday[] = "** happy birthday ";
-char barMsgDflt[] = "FILE  EDIT  VIEW  INSERT  TOOLS  HELP";
+static char barNewYear[] = "*** happy new year ***";
+static char barAprFool[] = "*** happy april fool's day ***";
+static char barBirthday[] = "** happy birthday ";
+static char barMsgDflt[] = "FILE  EDIT  VIEW  INSERT  TOOLS  HELP";
 
 // The menuBarDriver array defines the possible Spotfire menu bars.
 // The last entry in the array is considered the default.
-menuBarDriver_t menuBarDriver[] =
+static menuBarDriver_t menuBarDriver[] =
 {
   {MBAR_TXT_CENTER,  1,  1, barNewYear,  0},
   {MBAR_TXT_CENTER,  1,  4, barAprFool,  0},
@@ -89,11 +89,11 @@ menuBarDriver_t menuBarDriver[] =
 };
 
 // Contains the current message of the Spotfire menu bar
-u08 menuBarId;
+static u08 menuBarId;
 
 // Local function prototypes
-void spotMenuBarUpdate(void);
-void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal);
+static void spotMenuBarUpdate(void);
+static void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal);
 
 //
 // Function: spotAlarmAreaUpdate
@@ -371,7 +371,7 @@ void spotCommonUpdate(void)
 //
 // Put a (not so special) header in a Spotfire clock menu bar
 //
-void spotMenuBarUpdate(void)
+static void spotMenuBarUpdate(void)
 {
   // Only get a new menu bar when the date has changed or when we're initializing
   if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
@@ -434,7 +434,7 @@ void spotMenuBarUpdate(void)
 //
 // Update a single filter panel range slider
 //
-void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal)
+static void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal)
 {
   u08 sliderXPosOld;
   u08 sliderXPosNew;
@@ -452,11 +452,9 @@ void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal)
     glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET + sliderXPosOld,
       y + FP_RS_Y_OFFSET + 1, 2, 1, mcBgColor);
 
-    // Add new range slider location marker
+    // Add new range slider location markers
     glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET + sliderXPosNew,
-      y + FP_RS_Y_OFFSET - 1, 2, 1, mcFgColor);
-    glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET + sliderXPosNew,
-      y + FP_RS_Y_OFFSET + 1, 2, 1, mcFgColor);
+      y + FP_RS_Y_OFFSET - 1, 2, 3, mcFgColor);
   }
 }
 

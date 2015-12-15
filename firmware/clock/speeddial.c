@@ -11,7 +11,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -39,8 +39,8 @@ extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
-void spotSpeedDialMarkerUpdate(u08 x, u08 marker);
-void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal);
+static void spotSpeedDialMarkerUpdate(u08 x, u08 marker);
+static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal);
 
 //
 // Function: spotSpeedDialCycle
@@ -111,7 +111,7 @@ void spotSpeedDialInit(u08 mode)
 //
 // Update a single speed dial needle
 //
-void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
+static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
 {
   s08 oldDx, newDx, oldDy, newDy;
   float tmp;
@@ -156,7 +156,7 @@ void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
 //
 // Paint a 10-minute marker in a Spotfire QuintusVisuals Speed Dial
 //
-void spotSpeedDialMarkerUpdate(u08 x, u08 marker)
+static void spotSpeedDialMarkerUpdate(u08 x, u08 marker)
 {
   s08 dx, dy;
   float tmp;

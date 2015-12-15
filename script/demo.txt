@@ -9,7 +9,6 @@ cs 0
 b 1000 100
 
 # Demo several graphics and text functions
-w 10
 e i ../script/paint.txt
 
 w 0
@@ -28,9 +27,13 @@ w 0
 # Demo lines
 e i ../script/line1.txt
 
-w 0
+# w 0
 # Demo lines
-e i ../script/line2.txt
+# e i ../script/line2.txt
+
+w 0
+# Demo lines 
+e i ../script/line6.txt
 
 w 0
 # Demo circle function

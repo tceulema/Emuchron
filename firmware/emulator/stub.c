@@ -15,8 +15,9 @@
 #include "stub.h"
 #include "lcd.h"
 #include "mchronutil.h"
+#include "scanutil.h"
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../config.h"
 #ifdef MARIO
@@ -31,13 +32,6 @@ extern volatile uint8_t alarming;
 extern uint16_t snoozeTimer;
 extern int16_t alarmTimer;
 
-// Stubbed button data
-volatile uint8_t last_buttonstate, just_pressed, pressed;
-volatile uint8_t buttonholdcounter = 0;
-
-// Data resulting from mchron startup command line processing
-extern argcArgv_t argcArgv;
-
 #ifdef MARIO
 // Mario chiptune alarm data
 extern const unsigned char __attribute__ ((progmem)) MarioTones[];
@@ -46,8 +40,13 @@ extern const unsigned char __attribute__ ((progmem)) MarioMaster[];
 extern uint16_t marioMasterLen;
 #endif
 
-// The inputhandler structure from mchron
-extern cmdInput_t cmdInput;
+// Stubbed button data
+volatile uint8_t last_buttonstate = 0;
+volatile uint8_t just_pressed = 0;
+volatile uint8_t pressed = 0;
+volatile uint8_t hold_release_req = 0;
+volatile uint8_t hold_release_conf = 0;
+volatile uint8_t buttonholdcounter = 0;
 
 // Stubbed hardware related stuff
 uint16_t MCUSR = 0;
@@ -58,7 +57,7 @@ uint16_t TCCR0A = 0;
 uint16_t TCCR0B = 0;
 uint16_t OCR0A = 0;
 uint16_t OCR2A = 0;
-// Initial value 16 for OCR2B defines full LCD backlight brightness
+// Initial value 16 for OCR2B defines full lcd backlight brightness
 uint16_t OCR2B = 16;
 uint16_t TIMSK0 = 0;
 uint16_t TIMSK2 = 0;
@@ -71,39 +70,43 @@ uint16_t PORTD = 0;
 uint16_t PINB = 0;
 uint16_t PIND = 0;
 
-// Stubbed eeprom data
-uint8_t eeprom[EE_MAX+1];
-
-// Stubbed alarm play pid
-pid_t playPid = -1;
-
-// Local brightness to detect changes
-u08 stubBacklight = 16;
-
 // Stuff for debugging
 FILE *debugFile = NULL;
 
+// Keypress hold data
+static uint8_t hold = GLCD_FALSE;
+static uint8_t lastchar = '\0';
+
+// Stubbed eeprom data
+static uint8_t eeprom[EE_MAX+1];
+
+// Stubbed alarm play pid
+static pid_t playPid = -1;
+
+// Local brightness to detect changes
+static u08 stubBacklight = 16;
+
 // Active help function when running an emulator
-void (*stubHelp)(void) = NULL;
+static void (*stubHelp)(void) = NULL;
 
 // Stuff for event handler stub
-int eventCycleState = CYCLE_NOWAIT;
-int eventInit = GLCD_TRUE;
+static int eventCycleState = CYCLE_NOWAIT;
+static int eventInit = GLCD_TRUE;
 
 // Local stuff for date/time and timer statistics
-double timeDelta = 0L;
-struct timeval timestampNext;
-int inTimeCount = 0;
-int outTimeCount = 0;
-double waitTotal = 0L;
-int minSleep = ANIMTICK_MS + 1;
+static double timeDelta = 0L;
+static struct timeval timestampNext;
+static int inTimeCount = 0;
+static int outTimeCount = 0;
+static double waitTotal = 0L;
+static int minSleep = ANIMTICK_MS + 1;
 
 // Local stuff for terminal settings for stdin keypress mode
 static struct termios oldt, newt;
-int kbMode = KB_MODE_LINE;
+static int kbMode = KB_MODE_LINE;
 
 // Local function prototypes
-int kbHit(void);
+static int kbHit(void);
 
 //
 // Function: alarmClear
@@ -172,9 +175,7 @@ void alarmSoundStart(void)
     // Get the total number of Mario tones to play and based on that
     // declare an array that fits all required shell commands to play it
     for (i = 0; i <= (marioMasterLen - 2); i = i + 2)
-    {
       totalLength = totalLength + MarioMaster[i + 1];
-    }
     char *params[totalLength * 2 + 7];
 
     // Begin of the execvp parameters
@@ -294,14 +295,14 @@ void alarmSwitchSet(uint8_t on, uint8_t show)
   if (on == GLCD_TRUE)
   {
     if (show == GLCD_TRUE)
-      printf("alarm : on\n");
+      printf("alarm  : on\n");
     pinMask = ~(0x1 << ALARM);
     ALARM_PIN = ALARM_PIN & pinMask;
   }
   else
   {
     if (show == GLCD_TRUE)
-      printf("alarm : off\n");
+      printf("alarm  : off\n");
     pinMask = 0x1 << ALARM;
     ALARM_PIN = ALARM_PIN | pinMask;
   }
@@ -316,13 +317,9 @@ void alarmSwitchShow(void)
 {
   // Show alarm switch state
   if (ALARM_PIN & _BV(ALARM))
-  {
-    printf("alarm : off\n");
-  }
+    printf("alarm  : off\n");
   else
-  {
-    printf("alarm : on\n");
-  }
+    printf("alarm  : on\n");
 }
 
 //
@@ -338,66 +335,17 @@ void alarmSwitchToggle(uint8_t show)
   if (ALARM_PIN & _BV(ALARM))
   {
     if (show == GLCD_TRUE)
-      printf("alarm : on\n");
+      printf("alarm  : on\n");
     pinMask = ~(0x1 << ALARM);
     ALARM_PIN = ALARM_PIN & pinMask;
   }
   else
   {
     if (show == GLCD_TRUE)
-      printf("alarm : off\n");
+      printf("alarm  : off\n");
     pinMask = 0x1 << ALARM;
     ALARM_PIN = ALARM_PIN | pinMask;
   }
-}
-
-//
-// Function: coreDump
-//
-// There's something terribly wrong in the LCD interface. It is usually
-// caused by bad functional clock code or a bad mchron command line request
-// that tries to do stuff outside the boundaries of the LCD display.
-// Provide some feedback and generate a coredump file (when enabled).
-// Note: A graceful environment shutdown is taken care of by the SIGABRT
-// signal handler, invoked by abort().
-// Note: In order to get a coredump file it requires to run shell command 
-// "ulimit -c unlimited" once in the mchron shell.
-//
-void coreDump(const char *location, u08 controller, u08 x, u08 y, u08 data)
-{
-  // Provide feedback
-  // Note: y = vertical lcd byte location (0..7)
-  printf("\n*** Invalid LCD api request in %s() ***\n", location);
-  printf("Info = controller:x:y:data = %d:%d:%d:%d\n",
-    (int)controller, (int)x, (int)y, (int)data);
-  printf("Debug this by loading the coredump file (when created) in a debugger.\n");
-
-  // Depending on the lcd device(s) used we'll see the latest image or not.
-  // In case we're using ncurses, regardless with or without glut, flush the
-  // screen. After aborting mchron, the ncurses image will be retained.
-  // In case we're only using the glut device, give end-user the means to have
-  // a look at the glut device to get a clue what's going on before its display
-  // is killed by the application that is being aborted. Note that at this
-  // point glut is still running in its own thread and will have its layout
-  // constantly refreshed. This allows a glut screendump to be made if needed.
-  if (argcArgv.lcdDeviceParam.useNcurses == GLCD_TRUE)
-  {
-    // Flush the ncurses device so we get its contents as-is at the time of
-    // the forced coredump
-    lcdDeviceFlush(1);
-  }
-  else // argcArgv.lcdDeviceParam.useGlut == GLCD_TRUE
-  {
-    // Have end-user confirm abort, allowing a screendump to be made
-    kbWaitKeypress(GLCD_FALSE);
-  }
-
-  // Cleanup command line read interface, forcing the readline history (when
-  // active) to be flushed in the history file
-  cmdInputCleanup(&cmdInput);
-
-  // Force coredump
-  abort();
 }
 
 //
@@ -405,7 +353,7 @@ void coreDump(const char *location, u08 controller, u08 x, u08 y, u08 data)
 //
 // Get keypress (if any)
 //
-int kbHit(void)
+static int kbHit(void)
 {
   struct timeval tv;
   fd_set rdfs;
@@ -445,7 +393,6 @@ char kbKeypressScan(u08 quitFind)
     ch = getchar();
     if (quitFind == GLCD_TRUE && (ch == 'q' || ch == 'Q'))
       quitFound = GLCD_TRUE;
-    //stubDelay(2);
   }
 
   // Return to line mode if needed
@@ -529,8 +476,9 @@ char kbWaitDelay(int delay)
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_SCAN);
 
-  // Wait till end of delay or a 'q' keypress
-  while (ch != 'q' && timeDiff > 1000)
+  // Wait till end of delay or a 'q' keypress and ignore
+  // a remaiing wait time that is less than 0.5 msec
+  while (ch != 'q' && timeDiff > 500)
   {
     // Split time to delay up in parts of max 250msec
     tvWait.tv_sec = 0;
@@ -616,56 +564,6 @@ char kbWaitKeypress(int allowQuit)
 }
  
 //
-// Function: statsPrint
-//
-// Print stub and LCD device statistics
-//
-void statsPrint(void)
-{
-  printf("statistics:\n");
-
-  // First print the stub statistics
-  printf("stub   : cycle=%d msec, inTime=%d, outTime=%d\n         ",
-    STUB_CYCLE / 1000, inTimeCount, outTimeCount);
-  if (inTimeCount == 0)
-  {
-    printf("avgSleep=- msec, ");
-  }
-  else
-  {
-    printf("avgSleep=%d msec, ",(int)(waitTotal / (double)inTimeCount / 1000));
-  }
-  if (minSleep == ANIMTICK_MS + 1)
-  {
-    printf("minSleep=- msec\n");
-  }
-  else
-  {
-    printf("minSleep=%d msec\n",minSleep);
-  }
-  
-  // Print glcd interface and LCD device glut and/or ncurses statistics
-  lcdStatsPrint();
-}
-
-//
-// Function: statsReset
-//
-// Reset stub and LCD device statistics
-//
-void statsReset(void)
-{
-  // Reset stub statistics
-  inTimeCount = 0;
-  outTimeCount = 0;
-  waitTotal = 0.0L;
-  minSleep = ANIMTICK_MS + 1;
-      
-  // Reset LCD device statistics
-  lcdStatsReset();
-}
-
-//
 // Function: stubBeep
 //
 // Stub for system beep
@@ -674,7 +572,8 @@ void stubBeep(uint16_t hz, uint16_t msec)
 {
   char shellCmd[100];
 
-  sprintf(shellCmd, "/usr/bin/play -q -n -t alsa synth %f sin %d",
+  sprintf(shellCmd,
+    "/usr/bin/play -q -n -t alsa synth %f sin %d > /dev/null 2>&1",
     ((float)(msec)) / 1000L, hz);
   system(shellCmd);
 }
@@ -735,20 +634,21 @@ void stubEeprom_write_byte(uint8_t *eprombyte, uint8_t value)
 }
 
 //
-// Function: stubGetEvent
+// Function: stubEventGet
 //
 // Get an mchron event. It is a combination of a 75msec timer wait event since
 // previous call, an optional keyboard event emulating the three buttons
 // (m,s,+) and alarm switch (a), and misc emulator commands.
 //
-char stubGetEvent(void)
+char stubEventGet(void)
 {
   struct timeval tv;
   struct timeval sleepThis;
   suseconds_t timeDiff;
   char c = '\0';
+  uint8_t keypress = GLCD_FALSE;
 
-  // Flush the LCD device
+  // Flush the lcd device
   lcdDeviceFlush(0);
 
   // Get timediff with previous call
@@ -805,7 +705,7 @@ char stubGetEvent(void)
     }
   }
 
-  // Detect changes in LCD brightness
+  // Detect changes in lcd brightness
   if ((OCR2B >> OCR2B_BITSHIFT) != stubBacklight)
   {
     stubBacklight = (OCR2B >> OCR2B_BITSHIFT);
@@ -817,6 +717,9 @@ char stubGetEvent(void)
   {
     struct timeval t;
     char waitChar = '\0';
+
+    // Reset any keypress hold
+    hold = GLCD_FALSE;
 
     // When going to cycle mode stop the alarm (if sounding) for non-nerve
     // wrecking emulator behavior, and also give a cycle mode helpmessage
@@ -839,9 +742,7 @@ char stubGetEvent(void)
 
     // Clear buffer
     while (kbHit())
-    {
       waitChar = getchar();
-    }
 
     // Verify keypress
     if (waitChar != 'c' && waitChar != 'C')
@@ -862,7 +763,7 @@ char stubGetEvent(void)
   }
 
   // Get clock time and set alarm state
-  stubTimer();
+  monoTimer();
 
   // Do we need to do anything with the alarm sound
   if (playPid == -1 && alarming == GLCD_TRUE && snoozeTimer == 0 &&
@@ -882,7 +783,20 @@ char stubGetEvent(void)
   pressed = 0;
   while (kbHit())
   {
+    keypress = GLCD_TRUE;
     c = getchar();
+
+    // Detect button hold start/end
+    if (c == lastchar)
+    {
+      hold = GLCD_TRUE;
+    }
+    else
+    {
+      lastchar = c;
+      hold = GLCD_FALSE;
+    }
+
     if (c == 'a' || c == 'A')
     {
       // Toggle the alarm switch
@@ -910,13 +824,16 @@ char stubGetEvent(void)
     }
     else if (c == 'p' || c == 'P')
     {
-      // Print stub and LCD performance statistics
-      statsPrint();
+      // Print stub and glcd/lcd performance statistics
+      printf("statistics:\n");
+      stubStatsPrint();
+      lcdStatsPrint();
     }
     else if (c == 'r' || c == 'R')
     {
-      // Reset stub and LCD performance statistics
-      statsReset();
+      // Reset stub and glcd/lcd performance statistics
+      stubStatsReset();
+      lcdStatsReset();
       printf("statistics reset\n");
     }
     else if (c == 's' || c == 'S')
@@ -933,8 +850,10 @@ char stubGetEvent(void)
     else if (c == '+')
     {
       // + button
-      just_pressed = just_pressed | BTTN_PLUS;
-      pressed = pressed | BTTN_PLUS;
+      if (hold == GLCD_FALSE)
+        just_pressed = just_pressed | BTTN_PLUS;
+      else
+        pressed = pressed | BTTN_PLUS;
     }
     else if (c == '\n')
     {
@@ -943,10 +862,36 @@ char stubGetEvent(void)
     }
   }
 
+  // Detect button hold end and confirm when requested
+  if (keypress == GLCD_FALSE || pressed == 0)
+  {
+    lastchar = 0;
+    hold = GLCD_FALSE;
+    if (hold_release_req == 1)
+    {
+      hold_release_conf = 1;
+      hold_release_req = 0;
+    }
+  }
+
   // Signal first entry completion
   eventInit = GLCD_FALSE;
 
   return c;
+}
+
+//
+// Function: stubEventInit
+//
+// Prepare the event generator for initial use by a requesting process.
+//
+void stubEventInit(int startMode, void (*stubHelpHandler)(void))
+{
+  eventInit = GLCD_TRUE;
+  eventCycleState = startMode;
+  just_pressed = 0;
+  stubHelp = stubHelpHandler;
+  stubHelp();
 }
 
 //
@@ -1067,13 +1012,48 @@ u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
 // Stub for debug string. Output is redirected to output file as specified
 // on the mchron command line. If no output file is specified, debug info
 // is discarded.
-// Note: To enable debugging set DEBUGGING to 1 in ratt.h
+// Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
 void stubPutstring(char *x, char *format)
 {
   if (debugFile != NULL)
     fprintf(debugFile, format, x);
   return;
+}
+
+//
+// Function: stubStatsPrint
+//
+// Print stub statistics
+//
+void stubStatsPrint(void)
+{
+  printf("stub   : cycle=%d msec, inTime=%d, outTime=%d\n         ",
+    STUB_CYCLE / 1000, inTimeCount, outTimeCount);
+
+  if (inTimeCount == 0)
+    printf("avgSleep=- msec, ");
+  else
+    printf("avgSleep=%d msec, ",(int)(waitTotal / (double)inTimeCount / 1000));
+
+  if (minSleep == ANIMTICK_MS + 1)
+    printf("minSleep=- msec\n");
+  else
+    printf("minSleep=%d msec\n",minSleep);
+}
+
+//
+// Function: stubStatsReset
+//
+// Reset stub statistics
+//
+void stubStatsReset(void)
+{
+  // Reset stub statistics
+  inTimeCount = 0;
+  outTimeCount = 0;
+  waitTotal = 0.0L;
+  minSleep = ANIMTICK_MS + 1;
 }
 
 //
@@ -1209,7 +1189,7 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
 // Stub for debug char. Output is redirected to output file as specified on
 // the mchron command line. If no output file is specified, debug info is
 // discarded.
-// Note: To enable debugging set DEBUGGING to 1 in ratt.h
+// Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
 void stubUart_putchar(char x)
 {
@@ -1224,7 +1204,7 @@ void stubUart_putchar(char x)
 // Stub for debug decimal. Output is redirected to output file as specified on
 // the mchron command line. If no output file is specified, debug info is
 // discarded.
-// Note: To enable debugging set DEBUGGING to 1 in ratt.h
+// Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
 void stubUart_putdec(int x, char *format)
 {

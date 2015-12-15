@@ -9,21 +9,21 @@
 # - Set the second step using variable 's'
 # - Set the wait delay between timestamps using variable 'w'
 #
-# Usage example (with digital HMS, second step 1 and delay of 0.04 sec):
+# Usage example (with digital HMS, second step 1 and delay of 40 msec):
 # cs 3
-# vs s 1
-# vs w 4
+# vs s=1
+# vs w=40
 # e s ../script/time-hm.txt
 #
 
 # Repeat m(inute) between 0..59
-rw m < 60 0 1
+rf m=0 m<60 m=m+1
   # Repeat s(econd) between 0..59 step 5
-  rw x < 60 0 s
+  rf x=0 x<60 x=x+s
     # Change the time using the 'm' and 'x' variables
     # This will update the selected clock
     ts 12 m x
-    # Wait 'w'*0.01 seconds
+    # Wait 'w'*0.001 seconds
     w w
   # Next x second
   rn

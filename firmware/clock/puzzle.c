@@ -10,7 +10,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "puzzle.h"
@@ -68,7 +68,7 @@ extern volatile uint8_t mcU8Util2;
 extern volatile uint8_t mcU8Util3;
 
 // Arrays with help page left/right panel text strings
-char *puzzleHelpMsgsLeft[] =
+static char *puzzleHelpMsgsLeft[] =
 {
   animSec,
   animDay,
@@ -77,7 +77,7 @@ char *puzzleHelpMsgsLeft[] =
   animHour,
   animYear
 };
-char *puzzleHelpMsgsRight[] =
+static char *puzzleHelpMsgsRight[] =
 {
   "Sec / Min",
   "Day / Mon",
@@ -91,7 +91,7 @@ char *puzzleHelpMsgsRight[] =
 
 // For each of the eight permutations of a bulb value specify the
 // parameters for the fill circle draw
-bulbDriver_t bulbDriver[] =
+static bulbDriver_t bulbDriver[] =
 {
   { 0, FILL_BLANK },
   { 0, FILL_THIRDUP },
@@ -104,10 +104,10 @@ bulbDriver_t bulbDriver[] =
 };
 
 // Local function prototypes
-void puzzleAlarmAreaUpdate(void);
-void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
+static void puzzleAlarmAreaUpdate(void);
+static void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
     u08 newVal1, u08 newVal2, u08 newVal3, u08 high, u08 init);
-void puzzleHelp(void);
+static void puzzleHelp(void);
 
 //
 // Function: puzzleButton
@@ -244,7 +244,7 @@ void puzzleInit(u08 mode)
 //
 // Draw update in puzzle clock alarm area
 //
-void puzzleAlarmAreaUpdate(void)
+static void puzzleAlarmAreaUpdate(void)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -303,7 +303,7 @@ void puzzleAlarmAreaUpdate(void)
 //
 // Update a single bulb row of a puzzle clock
 //
-void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
+static void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
     u08 newVal1, u08 newVal2, u08 newVal3, u08 high, u08 init)
 {
   u08 i;
@@ -382,7 +382,7 @@ void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
 //
 // Provide help page for puzzle clock
 //
-void puzzleHelp(void)
+static void puzzleHelp(void)
 {
   u08 i;
   u08 color;

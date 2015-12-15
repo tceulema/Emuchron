@@ -10,7 +10,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "slider.h"
@@ -57,9 +57,9 @@ extern char animMonth[];
 extern char animYear[];
 
 // Local function prototypes
-void sliderAlarmAreaUpdate(void);
-void sliderElementInit(u08 x, u08 y, u08 factor, char *label);
-void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal, u08 init);
+static void sliderAlarmAreaUpdate(void);
+static void sliderElementInit(u08 x, u08 y, u08 factor, char *label);
+static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal, u08 init);
 
 //
 // Function: sliderCycle
@@ -81,38 +81,38 @@ void sliderCycle(void)
   if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
   {
     sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_HOUR_Y_START, mcClockOldTH,
-    mcClockNewTH, mcClockInit);
+      mcClockNewTH, mcClockInit);
   }
   // Verify changes in min
   if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
   {
     sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_MIN_Y_START, mcClockOldTM,
-    mcClockNewTM, mcClockInit);
+      mcClockNewTM, mcClockInit);
   }
   // Verify changes in sec
   if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
   {
     sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_SEC_Y_START, mcClockOldTS,
-    mcClockNewTS, mcClockInit);
+      mcClockNewTS, mcClockInit);
   }
 
   // Verify changes in day
   if (mcClockNewDD != mcClockOldDD || mcClockInit == GLCD_TRUE)
   {
     sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_DAY_Y_START, mcClockOldDD,
-    mcClockNewDD, mcClockInit);
+      mcClockNewDD, mcClockInit);
   }
   // Verify changes in month
   if (mcClockNewDM != mcClockOldDM || mcClockInit == GLCD_TRUE)
   {
     sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_MON_Y_START, mcClockOldDM,
-    mcClockNewDM, mcClockInit);
+      mcClockNewDM, mcClockInit);
   }
   // Verify changes in year
   if (mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
   {
     sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START, mcClockOldDY,
-    mcClockNewDY, mcClockInit);
+      mcClockNewDY, mcClockInit);
   }
 }
 
@@ -121,7 +121,7 @@ void sliderCycle(void)
 //
 // Draw the value label and markers for a time/date/alarm element
 //
-void sliderElementInit(u08 x, u08 y, u08 factor, char *label)
+static void sliderElementInit(u08 x, u08 y, u08 factor, char *label)
 {
   u08 i;
   u08 markerX = x + SLIDER_MARKER_X_OFFSET;
@@ -150,7 +150,8 @@ void sliderElementInit(u08 x, u08 y, u08 factor, char *label)
 //
 // Set the value markers for a time/date/alarm element
 //
-void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal, u08 init)
+static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
+  u08 init)
 {
   u08 valLowOld = oldVal % 10;
   u08 valHighOld = oldVal / 10;
@@ -163,12 +164,14 @@ void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal, u08 init)
     if (init == GLCD_FALSE)
     {
       // Restore previous marker
-      glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET + valHighOld * (SLIDER_MARKER_WIDTH + 1),
+      glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
+        valHighOld * (SLIDER_MARKER_WIDTH + 1),
         y + SLIDER_MARKER_Y_OFFSET, SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT,
         ALIGN_AUTO, FILL_INVERSE, mcBgColor);
     }
     // Draw new marker
-    glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET + valHighNew * (SLIDER_MARKER_WIDTH + 1),
+    glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
+      valHighNew * (SLIDER_MARKER_WIDTH + 1),
       y + SLIDER_MARKER_Y_OFFSET, SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT,
       ALIGN_AUTO, FILL_INVERSE, mcFgColor);
   }
@@ -179,14 +182,18 @@ void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal, u08 init)
     if (init == GLCD_FALSE)
     {
       // Restore previous marker
-      glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET + valLowOld * (SLIDER_MARKER_WIDTH + 1),
+      glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
+        valLowOld * (SLIDER_MARKER_WIDTH + 1),
         y + SLIDER_MARKER_Y_OFFSET + 1 + SLIDER_MARKER_HEIGHT,
-        SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+        SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT, ALIGN_AUTO, FILL_INVERSE,
+        mcBgColor);
     }
     // Draw new marker
-    glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET + valLowNew * (SLIDER_MARKER_WIDTH + 1),
+    glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
+      valLowNew * (SLIDER_MARKER_WIDTH + 1),
       y + SLIDER_MARKER_Y_OFFSET + 1 + SLIDER_MARKER_HEIGHT,
-      SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT, ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+      SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT, ALIGN_AUTO, FILL_INVERSE,
+      mcFgColor);
   }
 }
 
@@ -238,7 +245,7 @@ void sliderInit(u08 mode)
 //
 // Draw update in slider clock alarm area
 //
-void sliderAlarmAreaUpdate(void)
+static void sliderAlarmAreaUpdate(void)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;

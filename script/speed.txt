@@ -6,7 +6,7 @@
 
 cs 11
 ts 0 0 0
-rw s <= 50 0 10
+rf s=0 s<=50 s=s+10
   ts 0 0 s
   w 0
 rn

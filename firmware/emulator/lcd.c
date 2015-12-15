@@ -8,12 +8,20 @@
 #include <sys/time.h>
 #include "../ks0108.h"
 #include "stub.h"
+#include "mchronutil.h"
 #include "lcd.h"
 #include "lcdglut.h"
 #include "lcdncurses.h"
 
 extern GrLcdStateType GrLcdState;
 extern uint16_t OCR2B;
+
+// Statistics counters on glcd interface. The ncurses and glut devices
+// have their own dedicated statistics counters that are administered
+// independent from these.
+long long lcdLcdByteRead = 0;	// Nbr of lcd bytes read from lcd
+long long lcdLcdByteWrite = 0;	// Nbr of lcd bytes written to lcd
+long long lcdLcdSetAddress = 0;	// Nbr of calls to set cursor in lcd display
 
 //
 // Our implementation of the 128*64px LCD Display:
@@ -60,18 +68,12 @@ extern uint16_t OCR2B;
 // after which it requires a mapping into the proper (x,y) byte within
 // the array and a mapping into the proper bit within that byte.
 //
-u08 lcdBuffer[GLCD_NUM_CONTROLLERS][GLCD_XPIXELS / GLCD_NUM_CONTROLLERS][GLCD_YPIXELS / 8];
+static u08 lcdBuffer[GLCD_NUM_CONTROLLERS]
+  [GLCD_XPIXELS / GLCD_NUM_CONTROLLERS][GLCD_YPIXELS / 8];
 
 // Identifiers to indicate what LCD stub devices are used
-u08 useGlut = GLCD_FALSE;
-u08 useNcurses = GLCD_FALSE;
-
-// Statistics counters on glcd interface. The ncurses and glut devices
-// have their own dedicated statistics counters that are administered
-// independent from these.
-long long lcdLcdByteRead = 0;   // Nbr of lcd bytes read from lcd
-long long lcdLcdByteWrite = 0;  // Nbr of lcd bytes written to lcd
-long long lcdLcdSetAddress = 0; // Nbr of calls to set cursor in lcd display
+static u08 useGlut = GLCD_FALSE;
+static u08 useNcurses = GLCD_FALSE;
 
 //
 // Function: lcdDeviceBacklightSet
@@ -157,7 +159,7 @@ void lcdStatsPrint(void)
 {
   // Report the LCD interface statistics
   printf("glcd   : dataWrite=%llu, dataRead=%llu, setAddress=%llu\n",
-    lcdLcdByteWrite, lcdLcdByteRead / 2, lcdLcdSetAddress);
+    lcdLcdByteWrite, lcdLcdByteRead, lcdLcdSetAddress);
 
   // Report glut statistics
   if (useGlut == GLCD_TRUE)
@@ -166,31 +168,26 @@ void lcdStatsPrint(void)
     double diffDivider;
     lcdGlutStats_t lcdGlutStats;
     
-    // Get and report LCD glut statistics
     lcdGlutStatsGet(&lcdGlutStats);
     printf("glut   : lcdByteRx=%llu, ", lcdGlutStats.lcdGlutByteReq);
     if (lcdGlutStats.lcdGlutByteReq == 0)
-    {
-      printf("byteEff=-%%, bitEff=-%%\n");
-    }
+      printf("byteEff=-%%, ");
     else
-    {
-      printf("byteEff=%d%%, bitEff=%d%%\n",
-        (int)(lcdGlutStats.lcdGlutByteCnf * 100 / lcdGlutStats.lcdGlutByteReq),
+      printf("byteEff=%d%%, ",
+        (int)(lcdGlutStats.lcdGlutByteCnf * 100 / lcdGlutStats.lcdGlutByteReq));
+    if (lcdGlutStats.lcdGlutBitReq == 0)
+      printf("bitEff=-%%\n");
+    else
+      printf("bitEff=%d%%\n",
         (int)(lcdGlutStats.lcdGlutBitCnf * 100 / lcdGlutStats.lcdGlutBitReq));
-    }
     printf("         msgTx=%llu, msgRx=%llu, maxQLen=%d, ",
       lcdGlutStats.lcdGlutMsgSend, lcdGlutStats.lcdGlutMsgRcv,
       lcdGlutStats.lcdGlutQueueMax);
     if (lcdGlutStats.lcdGlutQueueEvents == 0)
-    {
       printf("avgQLen=-\n");
-    }
     else
-    {
       printf("avgQLen=%llu\n",
         lcdGlutStats.lcdGlutMsgSend / lcdGlutStats.lcdGlutQueueEvents);
-    }
     printf("         redraws=%d, cycles=%llu, updates=%llu, ",
       lcdGlutStats.lcdGlutRedraws, lcdGlutStats.lcdGlutTicks,
       lcdGlutStats.lcdGlutQueueEvents);
@@ -217,15 +214,15 @@ void lcdStatsPrint(void)
     lcdNcurStatsGet(&lcdNcurStats);
     printf("ncurses: lcdByteRx=%llu, ", lcdNcurStats.lcdNcurByteReq);
     if (lcdNcurStats.lcdNcurByteReq == 0)
-    {
-      printf("byteEff=-%%, bitEff=-%%\n");
-    }
+      printf("byteEff=-%%, ");
     else
-    {
-      printf("byteEff=%d%%, bitEff=%d%%\n",
-        (int)(lcdNcurStats.lcdNcurByteCnf * 100 / lcdNcurStats.lcdNcurByteReq),
+      printf("byteEff=%d%%, ",
+        (int)(lcdNcurStats.lcdNcurByteCnf * 100 / lcdNcurStats.lcdNcurByteReq));
+    if (lcdNcurStats.lcdNcurBitReq == 0)
+      printf("bitEff=-%%\n");
+    else
+      printf("bitEff=%d%%\n",
         (int)(lcdNcurStats.lcdNcurBitCnf * 100 / lcdNcurStats.lcdNcurBitReq));
-    }
   }
   return;
 }
@@ -270,7 +267,7 @@ u08 lcdReadStub(u08 controller)
       GrLcdState.lcdYAddr >= GLCD_YPIXELS / 8)
   {
     // We should never get here
-    coreDump(__func__, controller, GrLcdState.lcdXAddr, GrLcdState.lcdYAddr,
+    emuCoreDump(__func__, controller, GrLcdState.lcdXAddr, GrLcdState.lcdYAddr,
       0);
   }
 
@@ -306,7 +303,7 @@ void lcdWriteStub(u08 data)
       GrLcdState.lcdYAddr >= GLCD_YPIXELS / 8)
   {
     // We should never get here
-    coreDump(__func__, controller, GrLcdState.lcdXAddr, GrLcdState.lcdYAddr,
+    emuCoreDump(__func__, controller, GrLcdState.lcdXAddr, GrLcdState.lcdYAddr,
       data);
   }
 

@@ -14,21 +14,35 @@
 #include "emulator/stub.h"
 #include "emulator/stubrefs.h"
 #endif
-#include "ratt.h"
+#include "monomain.h"
 #include "ks0108.h"
 #include "glcd.h"
 #include "config.h"
 
 // How many seconds to wait before turning off menus
-#define INACTIVITYTIMEOUT 10 
+#define INACTIVITYTIMEOUT	10
+
+// How many hold increases to pass prior to increasing increase value
+#define HOLD_SPEED_INCREASE	10
 
 // Instructions
-#define ACTION_ADVANCE	0
-#define ACTION_EXIT	1
-#define ACTION_CHANGE	2
-#define ACTION_SET	3
-#define ACTION_SAVE	4
-#define ACTION_NONE	5
+#define ACTION_ADVANCE		0
+#define ACTION_EXIT		1
+#define ACTION_CHANGE		2
+#define ACTION_SET		3
+#define ACTION_SAVE		4
+#define ACTION_NONE		5
+
+// Several fixed substring instructions
+#define INSTR_PREFIX_CHANGE	"Press + to change "
+#define INSTR_PREFIX_SET	"Press SET to set "
+
+// Several fixed complete instructions
+#define INSTR_ADVANCE		"Press MENU to advance"
+#define INSTR_EXIT		"Press MENU to exit   "
+#define INSTR_CHANGE		"Press + to change    "
+#define INSTR_SET		"Press SET to set     "
+#define INSTR_SAVE		"Press SET to save    "
 
 // External data
 extern volatile uint8_t time_s, time_m, time_h;
@@ -38,6 +52,8 @@ extern volatile uint8_t alarmSelect;
 extern volatile uint8_t just_pressed, pressed;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t displaymode;
+extern volatile uint8_t hold_release_req;
+extern volatile uint8_t hold_release_conf;
 
 // This variable keeps track of whether we have not pressed any
 // buttons in a few seconds, and turns off the menu display
@@ -49,7 +65,10 @@ volatile uint8_t timeoutcounter = 0;
 volatile uint8_t screenmutex = 0;
 
 // A shortcut to the active alarm clock
-volatile uint8_t almPageDataId;
+uint8_t almPageDataId;
+
+// This variable administers the consecutive button hold events
+static uint8_t holdcounter = 0;
 
 // The months in a year
 char *months[12] =
@@ -64,41 +83,31 @@ char *days[7] =
   "Sun ", "Mon ", "Tue ", "Wed ", "Thu ", "Fri ", "Sat "
 };
 
-// Several fixed substring instructions
-char instrPlusPrefix[] = "Press + to change ";
-char instrSetPrefix[]  = "Press SET to set ";
-
-// Several fixed complete instructions
-char instrAdvance[]    = "Press MENU to advance";
-char instrExit[]       = "Press MENU to exit   ";
-char instrChange[]     = "Press + to change    ";
-char instrSet[]        = "Press SET to set     ";
-char instrSave[]       = "Press SET to save    ";
-
 // Local function prototypes
-void menu_alarm(void);
-void display_alarm_menu(void);
-void display_main_menu(void);
-void enter_alarm_menu(void);
-void print_arrow(u08 y);
-void print_date(u08 month, u08 day, u08 year, u08 mode);
-void print_display_setting(u08 color);
-void print_instructions(char *line1, char *line2);
-void print_instructions2(char *line1a, char *line1b, char *line2a,
-  char *line2b);
-void set_alarm(void);
-void set_backlight(void);
-void set_date(void);
-void set_display(void);
-void set_time(void);
+static void menu_alarm(void);
+static void display_alarm_menu(void);
+static void display_main_menu(void);
+static void enter_alarm_menu(void);
+static uint8_t next_value(uint8_t value, uint8_t maxVal);
+static void print_arrow(u08 y);
+static void print_date(u08 month, u08 day, u08 year, u08 mode);
+static void print_display_setting(u08 color);
+static void print_instructions(char *line1, char *line2);
+static void print_instructions2(char *line1b, char *line2b);
+static void set_alarm(void);
+static void set_backlight(void);
+static void set_date(void);
+static void set_display(void);
+static void set_time(void);
 
 //
 // Function: menu_alarm
 //
 // This is the state-event machine for the alarm configuration page
 //
-void menu_alarm(void)
+static void menu_alarm(void)
 {
+  // Set parameters for alarm time/selector
   switch (displaymode)
   {
   case SET_ALARM:
@@ -106,41 +115,40 @@ void menu_alarm(void)
     DEBUGP("Set alarm 1");
     displaymode = SET_ALARM_1;
     almPageDataId = 0;
-    set_alarm();
     break;
   case SET_ALARM_1:
     // Alarm 1 -> Set Alarm 2
     DEBUGP("Set alarm 2");
     displaymode = SET_ALARM_2;
     almPageDataId = 1;
-    set_alarm();
     break;
   case SET_ALARM_2:
     // Alarm 2 -> Set Alarm 3
     DEBUGP("Set alarm 3");
     displaymode = SET_ALARM_3;
     almPageDataId = 2;
-    set_alarm();
     break;
   case SET_ALARM_3:
     // Alarm 3 -> Set Alarm 4
     DEBUGP("Set alarm 4");
     displaymode = SET_ALARM_4;
     almPageDataId = 3;
-    set_alarm();
     break;
   case SET_ALARM_4:
     // Alarm 4 -> Set Alarm Id
     DEBUGP("Set alarm Id");
     displaymode = SET_ALARM_ID;
     almPageDataId = 4;
-    set_alarm();
     break;
   default:
     // Switch back to main menu
     DEBUGP("Return to config menu");
     displaymode = SET_ALARM;
+    return;
   }
+
+  // Set the requested alarm/selector
+  set_alarm();
 }
 
 //
@@ -204,7 +212,7 @@ void menu_main(void)
 //
 // Display the alarm menu page
 //
-void display_alarm_menu(void)
+static void display_alarm_menu(void)
 {
   volatile u08 alarmH, alarmM;
   u08 i;
@@ -218,7 +226,7 @@ void display_alarm_menu(void)
   // Print the four alarm times
   for (i = 0; i < 4; i++)
   {
-    glcdSetAddress(MENU_INDENT, 1 + i);
+    glcdSetAddress(MENU_INDENT, i + 1);
     glcdPutStrFg("Alarm ");
     glcdPrintNumberFg(i + 1);
     glcdPutStrFg(":      ");
@@ -231,13 +239,13 @@ void display_alarm_menu(void)
   // Print the selected alarm
   glcdSetAddress(MENU_INDENT, 5);
   glcdPutStrFg("Select Alarm:     ");
-  glcdPrintNumberFg(alarmSelect+1);
+  glcdPrintNumberFg(alarmSelect + 1);
 
   // Print the button functions
   if (displaymode != SET_ALARM_ID)
-    print_instructions(instrAdvance, instrSet);
+    print_instructions(INSTR_ADVANCE, INSTR_SET);
   else
-    print_instructions(instrExit, instrSet);
+    print_instructions(INSTR_EXIT, INSTR_SET);
 
   // Clear the arrow area
   glcdFillRectangle2(0, 8, 7, 40, ALIGN_TOP, FILL_FULL, mcBgColor);
@@ -249,7 +257,7 @@ void display_alarm_menu(void)
 //
 // Display the main menu page
 //
-void display_main_menu(void)
+static void display_main_menu(void)
 {
   DEBUGP("Display menu");
 
@@ -278,7 +286,7 @@ void display_main_menu(void)
   glcdPrintNumberFg(OCR2B >> OCR2B_BITSHIFT);
 #endif
   
-  print_instructions(instrAdvance, instrSet);
+  print_instructions(INSTR_ADVANCE, INSTR_SET);
   glcdFillRectangle2(126, 48, 2, 16, ALIGN_TOP, FILL_FULL, mcBgColor);
 
   // Clear the arrow area
@@ -291,7 +299,7 @@ void display_main_menu(void)
 //
 // Enter the alarm setup configuration page
 //
-void enter_alarm_menu(void)
+static void enter_alarm_menu(void)
 {
   uint8_t mode = SET_ALARM;
 
@@ -305,7 +313,7 @@ void enter_alarm_menu(void)
   while (1)
   {
 #ifdef EMULIN
-    stubGetEvent();
+    stubEventGet();
 #endif
     if (just_pressed & BTTN_MENU)
     {
@@ -350,17 +358,69 @@ void enter_alarm_menu(void)
 }
 
 //
+// Function: next_value
+//
+// Returns the next value for an item based on single keypress, initial
+// press-hold and long duration press-hold and the upper limit value
+//
+static uint8_t next_value(uint8_t value, uint8_t maxVal)
+{
+  // Reset fast increase upon hold release confirmation
+  if (hold_release_conf == 1)
+  {
+    if (DEBUGGING && holdcounter == HOLD_SPEED_INCREASE)
+      DEBUGP("+1");
+    holdcounter = 0;
+    hold_release_conf = 0;
+  }
+
+  if (pressed & BTTN_PLUS)
+  {
+    // Press-hold: normal or fast increase
+
+    // Request a confirmation on hold release
+    if (DEBUGGING && hold_release_req == 0)
+      DEBUGP("rlr");
+    hold_release_req = 1;
+
+    if (holdcounter < HOLD_SPEED_INCREASE)
+    {
+      // Not too long press-hold: single increase
+      holdcounter++;
+      value++;
+      if (DEBUGGING && holdcounter == HOLD_SPEED_INCREASE)
+        DEBUGP("+2");
+    }
+    else
+    {
+      // Long press-hold; double increase
+      value = value + 2;
+    }
+  }
+  else
+  {
+    // Single press: single increase
+    holdcounter = 0;
+    value++;
+  }
+
+  // Check on overflow
+  if (value >= maxVal)
+    value = value % maxVal;
+
+  return value;
+}
+
+//
 // Function: print_arrow
 //
 // Print an arrow in front of a menu item
 //
-void print_arrow(u08 y)
+static void print_arrow(u08 y)
 {
   glcdFillRectangle(0, y, MENU_INDENT - 1, 1, mcFgColor);
-  glcdDot(MENU_INDENT - 3, y - 1, mcFgColor);
-  glcdDot(MENU_INDENT - 3, y + 1, mcFgColor);
-  glcdDot(MENU_INDENT - 4, y - 2, mcFgColor);
-  glcdDot(MENU_INDENT - 4, y + 2, mcFgColor);
+  glcdRectangle(MENU_INDENT - 3, y - 1, 1, 3, mcFgColor);
+  glcdRectangle(MENU_INDENT - 4, y - 2, 1, 5, mcFgColor);
 }
 
 //
@@ -368,7 +428,7 @@ void print_arrow(u08 y)
 //
 // Print the date (dow+mon+day+year) with optional highlighted item
 //
-void print_date(u08 month, u08 day, u08 year, u08 mode)
+static void print_date(u08 month, u08 day, u08 year, u08 mode)
 {
   glcdSetAddress(MENU_INDENT, 3);
   glcdPutStrFg("Date:");
@@ -397,7 +457,7 @@ void print_date(u08 month, u08 day, u08 year, u08 mode)
 //
 // Print the display setting
 //
-void print_display_setting(u08 color)
+static void print_display_setting(u08 color)
 {
   glcdSetAddress(MENU_INDENT, 4);
   glcdPutStrFg("Display:     ");
@@ -417,7 +477,7 @@ void print_display_setting(u08 color)
 //
 // Print instructions at bottom of screen
 //
-void print_instructions(char *line1, char *line2)
+static void print_instructions(char *line1, char *line2)
 {
   glcdSetAddress(0, 6);
   glcdPutStrFg(line1);
@@ -433,14 +493,13 @@ void print_instructions(char *line1, char *line2)
 //
 // Print instructions at bottom of screen
 //
-void print_instructions2(char *line1a, char *line1b, char *line2a,
-  char *line2b)
+static void print_instructions2(char *line1b, char *line2b)
 {
   glcdSetAddress(0, 6);
-  glcdPutStrFg(line1a);
+  glcdPutStrFg(INSTR_PREFIX_CHANGE);
   glcdPutStrFg(line1b);
   glcdSetAddress(0, 7);
-  glcdPutStrFg(line2a);
+  glcdPutStrFg(INSTR_PREFIX_SET);
   glcdPutStrFg(line2b);
 }
 
@@ -449,7 +508,7 @@ void print_instructions2(char *line1a, char *line1b, char *line2a,
 //
 // Set an alarm time and alarm selector by processing button presses
 //
-void set_alarm(void)
+static void set_alarm(void)
 {
   uint8_t mode = SET_ALARM;
   uint8_t newAlarmSelect = alarmSelect;
@@ -464,14 +523,15 @@ void set_alarm(void)
 
   // Get current alarm
   if (almPageDataId != 4)
-  {
     alarmTimeGet(almPageDataId, &newHour, &newMin);
-  }
+
+  // Clear any hold data
+  holdcounter = 0;
 
   while (1)
   {
 #ifdef EMULIN
-    stubGetEvent();
+    stubEventGet();
 #endif
     if (just_pressed & BTTN_MENU)
     {
@@ -493,6 +553,7 @@ void set_alarm(void)
     if (just_pressed & BTTN_SET)
     {
       just_pressed = 0;
+      holdcounter = 0;
       screenmutex++;
       if (mode == SET_ALARM)
       {
@@ -505,7 +566,7 @@ void set_alarm(void)
           glcdSetAddress(MENU_INDENT + 18 * 6, 5);
           glcdPrintNumberBg(newAlarmSelect + 1);
           // Display instructions below
-          print_instructions2(instrPlusPrefix, "alm", instrSetPrefix, "alm ");
+          print_instructions2("alm", "alm ");
         }
         else
         {
@@ -516,7 +577,7 @@ void set_alarm(void)
           glcdSetAddress(MENU_INDENT + 15 * 6, 1 + almPageDataId);
           glcdPrintNumberBg(newHour);
           // Display instructions below
-          print_instructions2(instrPlusPrefix, "hr.", instrSetPrefix, "hour");
+          print_instructions2("hr.", "hour");
         }
       }
       else if (mode == SET_HOUR)
@@ -530,7 +591,7 @@ void set_alarm(void)
         glcdSetAddress(MENU_INDENT + 18 * 6, 1 + almPageDataId);
         glcdPrintNumberBg(newMin);
         // Display instructions below
-        print_instructions2(instrPlusPrefix, "min", instrSetPrefix, "min ");
+        print_instructions2("min", "min ");
       }
       else
       {
@@ -560,9 +621,9 @@ void set_alarm(void)
         alarmTimeGet(newAlarmSelect, &mcAlarmH, &mcAlarmM);
         // Display instructions below
         if (displaymode != SET_ALARM_ID)
-          print_instructions(instrAdvance, instrSet);
+          print_instructions(INSTR_ADVANCE, INSTR_SET);
         else
-          print_instructions(instrExit, instrSet);
+          print_instructions(INSTR_EXIT, INSTR_SET);
       }
       screenmutex--;
     }
@@ -596,9 +657,7 @@ void set_alarm(void)
       }
       else if (mode == SET_MIN)
       {
-        newMin++;
-        if (newMin >= 60)
-          newMin = 0;
+        newMin = next_value(newMin, 60);
         // Print the minutes inverted
         glcdSetAddress(MENU_INDENT + 18 * 6, 1 + almPageDataId);
         glcdPrintNumberBg(newMin);
@@ -619,7 +678,7 @@ void set_alarm(void)
 //
 // Set display backlight brightness by processing button presses
 //
-void set_backlight(void)
+static void set_backlight(void)
 {
   uint8_t mode = SET_BRIGHTNESS;
 
@@ -627,7 +686,7 @@ void set_backlight(void)
   screenmutex++;
 
   // Last item before leaving setup page
-  print_instructions(instrExit, 0);
+  print_instructions(INSTR_EXIT, 0);
 
   // Put a small arrow next to 'Backlight'
   print_arrow(43);
@@ -638,7 +697,7 @@ void set_backlight(void)
   while (1)
   {
 #ifdef EMULIN
-    stubGetEvent();
+    stubEventGet();
 #endif
     if (just_pressed & BTTN_MENU)
     {
@@ -673,7 +732,7 @@ void set_backlight(void)
         glcdSetAddress(MENU_INDENT + 18 * 6, 5);
         glcdPrintNumberBg(OCR2B >> OCR2B_BITSHIFT);	
         // Display instructions below
-        print_instructions(instrChange, instrSave);
+        print_instructions(INSTR_CHANGE, INSTR_SAVE);
       }
       else
       {
@@ -682,7 +741,7 @@ void set_backlight(void)
         glcdSetAddress(MENU_INDENT + 18 * 6, 5);
         glcdPrintNumberFg(OCR2B >> OCR2B_BITSHIFT);
         // Display instructions below
-        print_instructions(instrExit, instrSet);
+        print_instructions(INSTR_EXIT, INSTR_SET);
       }
       screenmutex--;
     }
@@ -697,7 +756,7 @@ void set_backlight(void)
         screenmutex++;
         display_main_menu();
         // Display instructions below
-        print_instructions(instrChange, instrSave);
+        print_instructions(INSTR_CHANGE, INSTR_SAVE);
         // Put a small arrow next to 'Backlight'
         print_arrow(43);
         glcdSetAddress(MENU_INDENT + 18 * 6, 5);
@@ -717,7 +776,7 @@ void set_backlight(void)
 // Set a data by setting all individual items of a date by processing
 // button presses
 //
-void set_date(void)
+static void set_date(void)
 {
   uint8_t mode = SET_DATE;
   uint8_t day, month, year;
@@ -735,10 +794,13 @@ void set_date(void)
   
   timeoutcounter = INACTIVITYTIMEOUT;  
 
+  // Clear any hold data
+  holdcounter = 0;
+
   while (1)
   {
 #ifdef EMULIN
-    stubGetEvent();
+    stubEventGet();
 #endif
     if (just_pressed & BTTN_MENU)
     {
@@ -759,6 +821,7 @@ void set_date(void)
     if (just_pressed & BTTN_SET)
     {
       just_pressed = 0;
+      holdcounter = 0;
       screenmutex++;
 
       if (mode == SET_DATE)
@@ -769,7 +832,7 @@ void set_date(void)
         // Print the month inverted
         print_date(month, day, year, mode);
         // Display instructions below
-        print_instructions2(instrPlusPrefix, "mon", instrSetPrefix, "mon ");
+        print_instructions2("mon", "mon ");
       }
       else if (mode == SET_MONTH)
       {
@@ -778,7 +841,7 @@ void set_date(void)
         // Print the day inverted
         print_date(month, day, year, mode);
         // Display instructions below
-        print_instructions2(instrPlusPrefix, "day", instrSetPrefix, "day ");
+        print_instructions2("day", "day ");
       }
       else if ((mode == SET_DAY))
       {
@@ -787,7 +850,7 @@ void set_date(void)
         // Print the year inverted
         print_date(month, day, year, mode);
         // Display instructions below
-        print_instructions2(instrPlusPrefix, "yr.", instrSetPrefix, "year");
+        print_instructions2("yr.", "year");
       }
       else
       {
@@ -795,14 +858,14 @@ void set_date(void)
         DEBUG(putstring_nl("Done setting date"));
         mode = SET_DATE;
         // Print the date normal
-        print_date(month,day,year,mode);
+        print_date(month, day, year, mode);
         // Display instructions below
-        print_instructions(instrAdvance, instrSet);
+        print_instructions(INSTR_ADVANCE, INSTR_SET);
 	// Update date
         date_y = year;
         date_m = month;
         date_d = day;
-        writei2ctime(time_s, time_m, time_h, 0, day, month, year);
+        writei2ctime(time_s, time_m, time_h, day, month, year);
       }
       screenmutex--;
     }
@@ -853,9 +916,7 @@ void set_date(void)
       }
       if (mode == SET_YEAR)
       {
-        year++;
-        if (year >= 100)
-          year = 0;
+        year = next_value(year, 100);
         if (!leapyear(year) && month == 2 && day > 28)
           day = 28;
       }
@@ -872,7 +933,7 @@ void set_date(void)
 //
 // Set the display type by processing button presses
 //
-void set_display(void)
+static void set_display(void)
 {
   uint8_t mode = SET_DISPLAY;
 
@@ -880,7 +941,7 @@ void set_display(void)
 
   screenmutex++;
 #ifndef BACKLIGHT_ADJUST
-  print_instructions(instrExit, 0);
+  print_instructions(INSTR_EXIT, 0);
 #endif
   // Put a small arrow next to 'Display'
   print_arrow(35);
@@ -890,7 +951,7 @@ void set_display(void)
   while (1)
   {
 #ifdef EMULIN
-    stubGetEvent();
+    stubEventGet();
 #endif
     if (just_pressed & BTTN_MENU)
     {
@@ -923,7 +984,7 @@ void set_display(void)
         mode = SET_DSP;
         print_display_setting(mcBgColor);
         // Display instructions below
-        print_instructions(instrChange, instrSave);
+        print_instructions(INSTR_CHANGE, INSTR_SAVE);
       }
       else
       {
@@ -932,9 +993,9 @@ void set_display(void)
         print_display_setting(mcFgColor);
         // Display instructions below
 #ifdef BACKLIGHT_ADJUST
-        print_instructions(instrAdvance, instrSet);
+        print_instructions(INSTR_ADVANCE, INSTR_SET);
 #else
-        print_instructions(instrExit, instrSet);
+        print_instructions(INSTR_EXIT, INSTR_SET);
 #endif
       }
       screenmutex--;
@@ -960,7 +1021,7 @@ void set_display(void)
         screenmutex++;
         display_main_menu();
         // Display instructions below
-        print_instructions(instrChange, instrSave);
+        print_instructions(INSTR_CHANGE, INSTR_SAVE);
         // Put a small arrow next to 'Display'
         print_arrow(35);
         print_display_setting(mcBgColor);
@@ -980,7 +1041,7 @@ void set_display(void)
 //
 // Set the system time by processing button presses
 //
-void set_time(void)
+static void set_time(void)
 {
   uint8_t mode = SET_TIME;
   uint8_t hour, min, sec;
@@ -998,9 +1059,12 @@ void set_time(void)
  
   timeoutcounter = INACTIVITYTIMEOUT;  
 
+  // Clear any hold data
+  holdcounter = 0;
+
   while (1) {
 #ifdef EMULIN
-    stubGetEvent();
+    stubEventGet();
 #endif
     if (just_pressed & BTTN_MENU)
     {
@@ -1021,6 +1085,7 @@ void set_time(void)
     if (just_pressed & BTTN_SET)
     {
       just_pressed = 0;
+      holdcounter = 0;
       screenmutex++;
       if (mode == SET_TIME)
       {
@@ -1031,7 +1096,7 @@ void set_time(void)
         glcdSetAddress(MENU_INDENT + 12 * 6, 2);
         glcdPrintNumberBg(hour);
         // Display instructions below
-        print_instructions2(instrPlusPrefix, "hr.", instrSetPrefix, "hour");
+        print_instructions2("hr.", "hour");
       }
       else if (mode == SET_HOUR)
       {
@@ -1044,7 +1109,7 @@ void set_time(void)
         glcdWriteCharFg(':');
         glcdPrintNumberBg(min);
         // Display instructions below
-        print_instructions2(instrPlusPrefix, "min", instrSetPrefix, "min ");
+        print_instructions2("min", "min ");
       }
       else if (mode == SET_MIN)
       {
@@ -1057,7 +1122,7 @@ void set_time(void)
         // and the seconds inverted
         glcdPrintNumberBg(sec);
         // Display instructions below
-        print_instructions2(instrPlusPrefix, "sec", instrSetPrefix, "sec ");
+        print_instructions2("sec", "sec ");
       }
       else
       {
@@ -1068,12 +1133,12 @@ void set_time(void)
         glcdSetAddress(MENU_INDENT + 18 * 6, 2);
         glcdPrintNumberFg(sec);
         // Display instructions below
-        print_instructions(instrAdvance, instrSet);
+        print_instructions(INSTR_ADVANCE, INSTR_SET);
         // Update time
         time_h = hour;
         time_m = min;
         time_s = sec;
-        writei2ctime(sec, min, hour, 0, date_d, date_m, date_y);
+        writei2ctime(sec, min, hour, date_d, date_m, date_y);
       }
       screenmutex--;
     }
@@ -1092,17 +1157,13 @@ void set_time(void)
       }
       if (mode == SET_MIN)
       {
-        min++;
-        if (min >= 60)
-          min = 0;
+        min = next_value(min, 60);
         glcdSetAddress(MENU_INDENT + 15 * 6, 2);
         glcdPrintNumberBg(min);
       }
       if (mode == SET_SEC)
       {
-        sec++;
-        if (sec >= 60)
-          sec = 0;
+        sec = next_value(sec, 60);
         glcdSetAddress(MENU_INDENT + 18 * 6, 2);
         glcdPrintNumberBg(sec);
       }

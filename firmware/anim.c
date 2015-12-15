@@ -12,7 +12,7 @@
 #include "util.h"
 #endif
 #include "ks0108.h"
-#include "ratt.h"
+#include "monomain.h"
 #include "glcd.h"
 #include "anim.h"
 
@@ -32,8 +32,8 @@
 #include "clock/spiderplot.h"
 #include "clock/trafficlight.h"
 
-// The following ratt.c global variables are used to transfer the hardware
-// state to a stable functional Monochron clock state.
+// The following monomain.c global variables are used to transfer the
+// hardware state to a stable functional Monochron clock state.
 // They are not to be used in individual Monochron clocks as their
 // contents are considered unstable.
 extern volatile uint8_t new_ts, new_tm, new_th;
@@ -70,10 +70,10 @@ volatile uint8_t mcCycleCounter = 0;
 // Flag to force clocks to paint clock values
 volatile uint8_t mcClockInit = GLCD_FALSE;
 
-// The foreground and background colors of the BW LCD display.
+// The foreground and background colors of the b/w lcd display.
 // Upon changing the display mode their values are swapped.
-// OFF = 0 = black color (=0x0 bit value in LCD memory)
-// ON  = 1 = white color (=0x1 bit value in LCD memory)
+// OFF = 0 = black color (=0x0 bit value in lcd memory)
+// ON  = 1 = white color (=0x1 bit value in lcd memory)
 volatile uint8_t mcFgColor;
 volatile uint8_t mcBgColor;
 
@@ -128,8 +128,8 @@ clockDriver_t monochron[] =
 };
 
 // Local function prototypes
-void animAlarmSwitchCheck(void);
-void animDateTimeCopy(void);
+static void animAlarmSwitchCheck(void);
+static void animDateTimeCopy(void);
 
 //
 // Function: animAlarmSwitchCheck
@@ -138,7 +138,7 @@ void animDateTimeCopy(void);
 // the alarm info, resulting in a flag indicating whether the alarm info
 // area must be updated.
 //
-void animAlarmSwitchCheck(void)
+static void animAlarmSwitchCheck(void)
 {
   // Reset pending functional alarm switch change
   mcUpdAlarmSwitch = GLCD_FALSE;
@@ -218,9 +218,7 @@ void animClockDraw(u08 mode)
   // When a clock needs a full init, set the old date/time to something
   // harmless that can be used to undraw stuff: use current time
   if (mode == DRAW_INIT_FULL)
-  {
     animDateTimeCopy();
-  }
 
   // Have the clock initialize or update itself
   if (clockDriver->clockId != CHRON_NONE)
@@ -231,9 +229,8 @@ void animClockDraw(u08 mode)
       animAlarmSwitchCheck();
       (*(clockDriver->cycle))();
       if (mcClockTimeEvent == GLCD_TRUE)
-      {
         animDateTimeCopy();
-      }
+
       // Clear init flag (if set anyway) in case of first clock draw
       mcClockInit = GLCD_FALSE;
     }
@@ -259,11 +256,10 @@ u08 animClockNext(void)
 {
   // Select the next clock
   mcMchronClock++;
+
+  // When end of clock pool is reached continue at beginning
   if (mcMchronClock >= sizeof(monochron) / sizeof(clockDriver_t))
-  {
-    // End of clock pool reached: continue at beginning
     mcMchronClock = 0;
-  }
 
   return mcClockPool[mcMchronClock].initType;
 }
@@ -273,7 +269,7 @@ u08 animClockNext(void)
 //
 // Copy new date/time to old date/time
 //
-void animDateTimeCopy(void)
+static void animDateTimeCopy(void)
 {
   mcClockOldTS = mcClockNewTS;
   mcClockOldTM = mcClockNewTM;

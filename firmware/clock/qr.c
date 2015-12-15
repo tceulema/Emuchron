@@ -10,7 +10,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "qr.h"
@@ -136,15 +136,15 @@ extern volatile uint8_t mcU8Util2;
 extern volatile uint8_t mcU8Util3;
 
 // Local function prototypes
-void qrAlarmAreaUpdate(void);
-void qrDraw(void);
-void qrMarkerDraw(u08 x, u08 y);
+static void qrAlarmAreaUpdate(void);
+static void qrDraw(void);
+static void qrMarkerDraw(u08 x, u08 y);
 
 // On april 1st, instead of the date, encode the message below. If you don't
 // like it make the textstring empty (""), and the clock will ignore it.
 // Note: The length of the message below will be truncated after 23 chars
 // when in HMS mode and after 26 chars when in HM mode.
-char *msgAprilFools = "The cake is a lie.";
+static char *msgAprilFools = "The cake is a lie.";
 
 //
 // Function: qrCycle
@@ -345,7 +345,7 @@ void qrInit(u08 mode)
 //
 // Draw update in QR clock alarm area
 //
-void qrAlarmAreaUpdate(void)
+static void qrAlarmAreaUpdate(void)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -418,7 +418,7 @@ void qrAlarmAreaUpdate(void)
 // QR_Y_START, QR_PIX_FACTOR and QR_BORDER you must modify this function as
 // well. Changing QR_X_START should be ok (but why would you want to do that?)
 //
-void qrDraw(void)
+static void qrDraw(void)
 {
   // Dedicated code requires lots of things to administer
   u08 x = 0;
@@ -532,7 +532,7 @@ void qrDraw(void)
 //
 // Draw a fixed QR marker element
 //
-void qrMarkerDraw(u08 x, u08 y)
+static void qrMarkerDraw(u08 x, u08 y)
 {
   glcdRectangle(x, y, 14, 14, OFF);
   glcdRectangle(x + 1, y + 1, 12, 12, OFF);

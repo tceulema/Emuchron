@@ -11,7 +11,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -58,7 +58,7 @@ extern char animMin[];
 extern char animSec[];
 
 // Local function prototypes
-void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
+static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
   u08 valEnd, u08 color);
 
 //
@@ -177,7 +177,7 @@ void spotSpiderPlotInit(u08 mode)
 // QuintusVisuals Spider Plot. The color parameter will either remove or add
 // lines. 
 //
-void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
+static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
   u08 valEnd, u08 color)
 {
   s08 startX, startY, endX, endY;

@@ -7,10 +7,10 @@
 #define MCHRONUTIL_H
 
 #include "lcd.h"
-#include "scanutil.h"
+#include "interpreter.h"
 
 // Definition of a structure to hold the main() arguments
-typedef struct _argcArgv_t
+typedef struct _emuArgcArgv_t
 {
   int argDebug;				// Index in argv for logfile argument
   int argGlutGeometry;			// Index in argv for geometry argument
@@ -18,19 +18,31 @@ typedef struct _argcArgv_t
   int argTty;				// Index in argv for ncurses tty argument
   int argLcdType;			// Index in argv for lcd device argument
   lcdDeviceParam_t lcdDeviceParam;	// Processed args for lcd stub interface
-} argcArgv_t;
+} emuArgcArgv_t;
 
-// mchron utility function prototypes
-int emuArgcArgv(int argc, char *argv[], argcArgv_t *argcArgv);
+// mchron command argument translation functions
+u08 emuColorGet(char colorId);
+u08 emuFontGet(char *fontName);
+u08 emuOrientationGet(char orientationId);
+int emuStartModeGet(char startId);
+
+// mchron environment functions
+int emuArgcArgvGet(int argc, char *argv[]);
+void emuCoreDump(const char *location, u08 controller, u08 x, u08 y, u08 data);
+void emuSigSetup(void);
+void emuWinClose(void);
+
+// mchron interpreter command line/list functions
+int emuLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput);
+int emuListExecute(cmdLine_t *cmdLineRoot, char *source);
+
+// mchron interpreter support functions
 void emuClockRelease(int echoCmd);
 void emuClockUpdate(void);
-int emuColorGet(char colorId, int *color);
-int emuListExecute(cmdLine_t *cmdLineRoot, char *source, int echoCmd,
-  int (*cmdHandler)(cmdInput_t *, int));
+void emuTimePrint(void);
+void emuTimeSync(void);
+
+// mchron logfile functions
 void emuLogfileClose(void);
 void emuLogfileOpen(char debugFile[]);
-void emuSigSetup(void);
-int emuStartModeGet(char startId, int *start);
-void emuTimePrint(void);
-void emuWinClose(void);
 #endif

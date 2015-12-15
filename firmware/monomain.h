@@ -1,10 +1,10 @@
 //*****************************************************************************
-// Filename : 'ratt.h'
+// Filename : 'monomain.h'
 // Title    : Defines for the main clock engine for MONOCHRON
 //*****************************************************************************
 
-#ifndef RATT_H
-#define RATT_H
+#ifndef MONOMAIN_H
+#define MONOMAIN_H
 
 #include "global.h"
 
@@ -12,7 +12,7 @@
 
 // Debugging macros.
 // Note that DEBUGGING is the master switch for generating debug output.
-// 0 = OFF, 1 = ON
+// 0 = Off, 1 = On
 #define DEBUGGING	0
 #define DEBUG(x)	if (DEBUGGING) { x; }
 #define DEBUGP(x)	DEBUG(putstring_nl(x))
@@ -62,8 +62,8 @@
 
 // Enums
 
-// Constants for how to display time & date
-// Those commented out are no longer supported
+// Constants for how to display time & date.
+// Those commented out are no longer supported.
 //#define REGION_US	0
 //#define REGION_EU	1
 //#define DOW_REGION_US	2
@@ -89,8 +89,10 @@
 #define TIMER2_RETURN_1	53
 #define TIMER2_RETURN_2	9
 
-// DO NOT set EE_INITIALIZED to 0xFF / 255, as that is
-// the state the eeprom will be in when totally erased.
+// DO NOT set EE_INITIALIZED to 0xFF / 255, as that is the state the
+// eeprom will be in when totally erased.
+// Warning: Keep defines EE_ALARM_HOUR2..EE_ALARM_MIN4 together in
+// a single range block and in sequential order.
 #define EE_INITIALIZED	0xC3
 #define EE_INIT		0
 #define EE_ALARM_HOUR	1
@@ -122,6 +124,6 @@ void init_eeprom(void);
 uint8_t leapyear(uint16_t y);
 void mchronTimeInit(void);
 uint8_t readi2ctime(void);
-void writei2ctime(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
-  uint8_t date, uint8_t mon, uint8_t yr);
+void writei2ctime(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
+  uint8_t mon, uint8_t yr);
 #endif

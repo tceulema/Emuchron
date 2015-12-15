@@ -10,73 +10,73 @@
 #
 # Usage example (with analog HMS, wait delay of 0.25 sec):
 # cs 1
-# vs w 25
+# vs w=250
 # e s ../script/year.txt
 #
 
 # Set date on a leap year (so we have 29 days in feb)
-vs y 12
+vs y=12
 
 # Make sure we're seeing a date by switching off the alarm
 ap 0
 
 # Jan
-vs m 1
-vs d 31
+vs m=1
+vs d=31
 e i ../script/month.txt
 
 # Feb
-vs m 2
-vs d 29
+vs m=2
+vs d=29
 e i ../script/month.txt
 
 # Mar
-vs m 3
-vs d 31
+vs m=3
+vs d=31
 e i ../script/month.txt
 
 # Apr
-vs m 4
-vs d 30
+vs m=4
+vs d=30
 e i ../script/month.txt
 
 # May
-vs m 5
-vs d 31
+vs m=5
+vs d=31
 e i ../script/month.txt
 
 # Jun
-vs m 6
-vs d 30
+vs m=6
+vs d=30
 e i ../script/month.txt
 
 # Jul
-vs m 7
-vs d 31
+vs m=7
+vs d=31
 e i ../script/month.txt
 
 # Aug
-vs m 8
-vs d 31
+vs m=8
+vs d=31
 e i ../script/month.txt
 
 # Sep
-vs m 9
-vs d 30
+vs m=9
+vs d=30
 e i ../script/month.txt
 
 # Oct
-vs m 10
-vs d 31
+vs m=10
+vs d=31
 e i ../script/month.txt
 
 # Nov
-vs m 11
-vs d 30
+vs m=11
+vs d=30
 e i ../script/month.txt
 
 # Dec
-vs m 12
-vs d 31
+vs m=12
+vs d=31
 e i ../script/month.txt
 

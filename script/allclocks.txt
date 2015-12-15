@@ -4,11 +4,17 @@
 # Purpose: Put all clocks through the emulator
 #
 
-vs mc 17
+# Set max clock value and clear screen
+vs mc=18
 le
-rw cl <= mc 1 1
-  cs cl
-  cf n
+
+# Run all clocks
+rf cl=1 cl<=mc cl=cl+1
+  # Skip the glcd performance clock
+  iif cl!=18
+    cs cl
+    cf n
+  ien
 rn
 cs 0
 

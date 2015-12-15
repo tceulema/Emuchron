@@ -9,13 +9,15 @@
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
 #include "util.h"
-#include "ratt.h"
+#include "monomain.h"
 
 // These store the current button states for all 3 buttons. We can 
 // then query whether the buttons are pressed and released or pressed.
 // This allows for 'high speed incrementing' when setting config values.
 volatile uint8_t last_buttonstate = 0, just_pressed = 0, pressed = 0;
 volatile uint8_t buttonholdcounter = 0;
+volatile uint8_t hold_release_req = 0;
+volatile uint8_t hold_release_conf = 0;
 
 void buttonsInit(void)
 {
@@ -24,7 +26,7 @@ void buttonsInit(void)
   ALARM_PORT |= _BV(ALARM);
 
   // Alarm switching is detected by using the pin change interrupt
-  PCICR =  _BV(PCIE0);
+  PCICR = _BV(PCIE0);
   PCMSK0 |= _BV(ALARM);
 
   // The buttons are totem pole'd together so we can read the buttons with
@@ -44,7 +46,7 @@ uint16_t readADC(void)
   ADCSRA &= ~_BV(ADIE);
   // Start a conversion
   ADCSRA |= _BV(ADSC);
-  while (! (ADCSRA & _BV(ADIF)));
+  while (!(ADCSRA & _BV(ADIF)));
   return ADC;
 }
 
@@ -63,6 +65,12 @@ SIGNAL(ADC_vect)
     // No presses
     pressed = 0;
     last_buttonstate = 0;
+    if (hold_release_req == 1)
+    {
+      hold_release_conf = 1;
+      hold_release_req = 0;
+      DEBUG(putstring_nl("rlc"));
+    }
     
     // Start next conversion
     ADCSRA |= _BV(ADIE) | _BV(ADSC);
@@ -76,35 +84,34 @@ SIGNAL(ADC_vect)
       // Was not pressed before, debounce by taking another reading
       _delay_ms(10);
       reading2 = readADC();
-      if ( (reading2 > 735) || (reading2 < 610))
+      if ((reading2 > 735) || (reading2 < 610))
       {
-	// Was a bounce, ignore it
+        // Was a bounce, ignore it
         // Start next conversion
-	ADCSRA |= _BV(ADIE) | _BV(ADSC);
-	return;
+        ADCSRA |= _BV(ADIE) | _BV(ADSC);
+        return;
       }
 
       // See if we're press-and-holding.
       // The hold counter is decremented by the 1-msec timer.
-      buttonholdcounter = 150;
+      buttonholdcounter = 250;
       while (buttonholdcounter)
       {
-	reading2 = readADC();
-	if ( (reading2 > 735) || (reading2 < 610))
+        reading2 = readADC();
+        if ((reading2 > 735) || (reading2 < 610))
         {
-	  // Button was released
-	  last_buttonstate &= ~BTTN_PLUS;
-  
-	  DEBUG(putstring_nl("b3"));
-	  just_pressed |= BTTN_PLUS;
+          // Button was released
+          last_buttonstate &= ~BTTN_PLUS;
+
+          DEBUG(putstring_nl("b3"));
+          just_pressed |= BTTN_PLUS;
           // Start next conversion
-	  ADCSRA |= _BV(ADIE) | _BV(ADSC);
-	  return;
-	}
+          ADCSRA |= _BV(ADIE) | _BV(ADSC);
+          return;
+        }
       }
-      // 0.15 second later...
+      // 0.25 second later...
       last_buttonstate |= BTTN_PLUS;
-      // The button was held down (fast advance)
       pressed |= BTTN_PLUS;
     }
   }
@@ -116,12 +123,12 @@ SIGNAL(ADC_vect)
       // Was not pressed before, debounce by taking another reading
       _delay_ms(10);
       reading2 = readADC();
-      if ( (reading2 > 610) || (reading2 < 270))
+      if ((reading2 > 610) || (reading2 < 270))
       {
-	// Was a bounce, ignore it
+        // Was a bounce, ignore it
         // Start next conversion
-	ADCSRA |= _BV(ADIE) | _BV(ADSC);	
-	return;
+        ADCSRA |= _BV(ADIE) | _BV(ADSC);	
+        return;
       }
       DEBUG(putstring_nl("b2"));
       just_pressed |= BTTN_SET;
@@ -140,10 +147,10 @@ SIGNAL(ADC_vect)
       reading2 = readADC();
       if (reading2 > 270)
       {
-	// Was a bounce, ignore it
+        // Was a bounce, ignore it
         // Start next conversion
-	ADCSRA |= _BV(ADIE) | _BV(ADSC); 	
-	return;
+        ADCSRA |= _BV(ADIE) | _BV(ADSC); 	
+        return;
       }
       DEBUG(putstring_nl("b1"));
       just_pressed |= BTTN_MENU;

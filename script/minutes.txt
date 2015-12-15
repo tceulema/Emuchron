@@ -13,13 +13,16 @@
 # e s ../script/minutes.txt
 #
 
+# Make sure alarm will not trigger
+ap 0
+
 # Repeat m(inute) between 0..59
-rw m < 60 0 1
+rf m=0 m<60 m=m+1
   # Change the time using the 'm' variable
   # This will update the layout of the selected clock
-  ts 16 m 30
+  ts 16 m 0
   # Wait 0.2 second
-  w 20
+  w 200
 # Next m(inute)
 rn
 

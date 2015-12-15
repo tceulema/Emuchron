@@ -4,53 +4,55 @@
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/time.h>
-#include <readline/readline.h>
-#include <readline/history.h>
 
 // Monochron defines
 #include "../ks0108.h"
 #include "../ks0108conf.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
-#include "../config.h"
 
 // Monochron clocks
 #include "../clock/analog.h"
+#include "../clock/bigdigit.h"
+#include "../clock/cascade.h"
 #include "../clock/digital.h"
 #include "../clock/nerd.h"
 #include "../clock/mosquito.h"
+#include "../clock/perftest.h"
 #include "../clock/pong.h"
 #include "../clock/puzzle.h"
+#include "../clock/qr.h"
 #include "../clock/slider.h"
-#include "../clock/cascade.h"
-#include "../clock/perftest.h"
 #include "../clock/speeddial.h"
 #include "../clock/spiderplot.h"
 #include "../clock/trafficlight.h"
-#include "../clock/bigdigit.h"
-#include "../clock/qr.h"
 
-// Mchron stubs, utilities and command profile defines
+// Emuchron stubs and utilities
 #include "stub.h"
-#include "stubrefs.h"
+#include "expr.h"
 #include "lcd.h"
-#include "scanutil.h"
-#include "scanprofile.h"
+#include "listvarutil.h"
 #include "mchronutil.h"
+#include "scanutil.h"
+#include "mchron.h"
+
+// Convert a double to other type with decent nearest whole number rounding.
+// Use these macros to convert a scanned numeric command argument (that is
+// of type double) into a type fit for post-processing in a command handler. 
+#define TO_INT(d)	((int)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
+#define TO_U08(d)	((u08)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
+#define TO_UINT8_T(d)	((uint8_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
+#define TO_UINT16_T(d)	((uint16_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 
 // Monochron defined data
-extern volatile uint8_t time_s, time_m, time_h;
-extern volatile uint8_t date_d, date_m, date_y;
-extern volatile uint8_t new_ts;
 extern volatile uint8_t time_event;
-extern volatile uint8_t just_pressed;
-extern volatile uint8_t alarmOn;
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -59,30 +61,24 @@ extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern clockDriver_t *mcClockPool;
 
 // The variables that store the processed command line arguments
 extern char argChar[];
-extern int argInt[];
+extern double argDouble[];
 extern char *argWord[];
 extern char *argString;
 
-// Help function when running the clock or Monochron emulator
-extern void (*stubHelp)(void);
+// The command profile for an mchron command
+extern cmdArg_t argCmd[];
 
 // External data from expression evaluator
-extern int exprValue;
-extern int varError;
+extern double exprValue;
 
 // The command list execution depth tells us if we're running at
 // command prompt level
 extern int listExecDepth;
-
-// Event handler stub interface
-extern int eventInit;
-extern int eventCycleState;
 
 #ifdef MARIO
 // Mario chiptune alarm sanity check data
@@ -90,34 +86,40 @@ extern const int marioTonesLen;
 extern const int marioBeatsLen;
 #endif
 
+// Data resulting from mchron startup command line processing
+extern emuArgcArgv_t emuArgcArgv;
+
+// Flag to indicate we're going to exit
+extern int invokeExit;
+
 // This is me
 extern const char *__progname;
 
-// The emulator background/foreground color of the LCD display and backlight
-// OFF = 0 = black color (=0x0 bit value in LCD memory)
-// ON  = 1 = white color (=0x1 bit value in LCD memory)
-u08 emuBgColor = OFF;
-u08 emuFgColor = ON;
-u08 emuBacklight = 16;
+// The command line input stream control structure
+cmdInput_t cmdInput;
 
-// Current command file execution depth
-int fileExecDepth = 0;
+// The current command echo state
+int echoCmd = CMD_ECHO_YES;
 
 // Initial user definable mchron alarm time
 uint8_t emuAlarmH = 22;
 uint8_t emuAlarmM = 9;
 
-// Data resulting from mchron startup command line processing
-argcArgv_t argcArgv;
+// Current command file execution depth
+int fileExecDepth = 0;
 
-// The command line input stream control structure
-cmdInput_t cmdInput;
+// The emulator background/foreground color of the lcd display and backlight
+// OFF = 0 = black color (=0x0 bit value in lcd memory)
+// ON  = 1 = white color (=0x1 bit value in lcd memory)
+static u08 emuBgColor = OFF;
+static u08 emuFgColor = ON;
+static u08 emuBacklight = 16;
 
 // The clocks supported in the mchron clock test environment.
 // Note that Monochron will have its own implemented array of supported
 // clocks in anim.c [firmware]. So, we need to switch between the two
 // arrays when appropriate.
-clockDriver_t emuMonochron[] =
+static clockDriver_t emuMonochron[] =
 {
   {CHRON_NONE,        DRAW_INIT_NONE, 0,                  0,                   0},
   {CHRON_ANALOG_HMS,  DRAW_INIT_FULL, analogHmsInit,      analogCycle,         0},
@@ -139,37 +141,7 @@ clockDriver_t emuMonochron[] =
   {CHRON_QR_HM,       DRAW_INIT_FULL, qrInit,             qrCycle,             0},
   {CHRON_PERFTEST,    DRAW_INIT_FULL, perfInit,           perfCycle,           0}
 };
-
-// Main command handler function prototypes
-int doAlarmPosition(char *input, int echoCmd);
-int doAlarmSet(char *input, int echoCmd);
-int doAlarmToggle(char *input, int echoCmd);
-int doBeep(char *input, int echoCmd);
-int doClockFeed(char *input, int echoCmd);
-int doClockSet(char *input, int echoCmd);
-int doComments(char *input, int echoCmd);
-int doDate(char *input, int echoCmd, int reset);
-int doExecute(char *input, int echoCmd);
-int doExit(char *input, int echoCmd);
-int doHelp(char *input, int echoCmd);
-int doInput(cmdInput_t *cmdInput, int echoCmd);
-int doLcdBacklightSet(char *input, int echoCmd);
-int doLcdErase(char *input, int echoCmd);
-int doLcdInverse(char *input, int echoCmd);
-int doMonochron(char *input, int echoCmd);
-int doPaintAscii(char *input, int echoCmd);
-int doPaintCircle(char *input, int echoCmd, int fill);
-int doPaintDot(char *input, int echoCmd);
-int doPaintLine(char *input, int echoCmd);
-int doPaintRectangle(char *input, int echoCmd, int fill);
-int doRepeatNext(char *input, int echoCmd);
-int doRepeatWhile(cmdInput_t *cmdInput, int echoCmd);
-int doStats(char *input, int echoCmd, int reset);
-int doTime(char *input, int echoCmd, char type);
-int doVarPrint(char *input, int echoCmd);
-int doVarReset(char *input, int echoCmd);
-int doVarSet(char *input, int echoCmd);
-int doWait(char *input, int echoCmd);
+int emuMonochronCount = sizeof(emuMonochron) / sizeof(clockDriver_t);
 
 //
 // Function: main
@@ -178,15 +150,16 @@ int doWait(char *input, int echoCmd);
 //
 int main(int argc, char *argv[])
 {
-  char prompt[50];
+  cmdLine_t cmdLine;
+  char *prompt;
   int retVal = CMD_RET_OK;
 
   // Setup signal handlers to either recover from signal or to attempt
   // graceful non-standard exit
   emuSigSetup();
 
-  // Do command line processing and setup the LCD device parameters
-  retVal = emuArgcArgv(argc, argv, &argcArgv);
+  // Do command line processing and setup the lcd device parameters
+  retVal = emuArgcArgvGet(argc, argv);
   if (retVal != CMD_RET_OK)
     return CMD_RET_ERROR;
 
@@ -208,7 +181,7 @@ int main(int argc, char *argv[])
   stubEepromReset();
   init_eeprom();
 
-  // Init the LCD color modes
+  // Init the lcd color modes
   mcBgColor = emuBgColor;
   mcFgColor = emuFgColor;
 
@@ -216,15 +189,15 @@ int main(int argc, char *argv[])
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
 
-  // Init the LCD emulator device(s)
-  lcdDeviceInit(argcArgv.lcdDeviceParam);
+  // Init the lcd emulator device(s)
+  lcdDeviceInit(emuArgcArgv.lcdDeviceParam);
 
   // Uncomment this if you want to join with debugger prior to using
-  // anything in the glcd library for the LCD device
+  // anything in the glcd library for the lcd device
   //char tmpInput[10];
   //fgets(tmpInput, 10, stdin);
 
-  // Clear and show welcome message on LCD device
+  // Clear and show welcome message on lcd device
   beep(4000, 100);
   lcdDeviceBacklightSet(emuBacklight);
   glcdInit(mcBgColor);
@@ -233,20 +206,18 @@ int main(int argc, char *argv[])
   lcdDeviceFlush(0);
 
   // Open debug logfile when requested
-  if (argcArgv.argDebug != 0)
-  {
-    emuLogfileOpen(argv[argcArgv.argDebug]);
-  }
+  if (emuArgcArgv.argDebug != 0)
+    emuLogfileOpen(argv[emuArgcArgv.argDebug]);
 
   // Show our process id and (optional) ncurses output device
   // (handy for attaching a debugger :-)
   printf("\n%s PID = %d\n", __progname, getpid());
-  if (argcArgv.lcdDeviceParam.useNcurses == 1)
-    printf("ncurses tty = %s\n", argcArgv.lcdDeviceParam.lcdNcurTty);
+  if (emuArgcArgv.lcdDeviceParam.useNcurses == 1)
+    printf("ncurses tty = %s\n", emuArgcArgv.lcdDeviceParam.lcdNcurTty);
   printf("\n");
   
   // Init the clock pool supported in mchron command line mode
-  mcClockPool = (clockDriver_t *)emuMonochron;
+  mcClockPool = emuMonochron;
 
   // Init the stubbed alarm switch to 'Off' and clear audible alarm
   alarmSwitchSet(GLCD_FALSE, GLCD_FALSE);
@@ -259,12 +230,12 @@ int main(int argc, char *argv[])
   // Init functional clock plugin time
   mchronTimeInit();
 
-  // Reset named signed int variables a..z, aa..zz
-  varReset();
+  // Initialize mchron named variable buckets
+  varInit();
 
   // Init the command line input interface
   cmdInput.file = stdin;
-  if (argcArgv.lcdDeviceParam.useNcurses == 0)
+  if (emuArgcArgv.lcdDeviceParam.useNcurses == 0)
   {
     // No interference between readline library and ncurses
     cmdInput.readMethod = CMD_INPUT_READLINELIB;
@@ -283,7 +254,16 @@ int main(int argc, char *argv[])
   // the last proton in the universe has desintegrated (or use 'x' or
   // ^D to exit)
 
+  // Initialize a command line for the interpreter
+  cmdLine.lineNum = 0;
+  cmdLine.input = NULL;
+  cmdLine.cmdCommand = NULL;
+  cmdLine.cmdPcCtrlParent = NULL;
+  cmdLine.cmdPcCtrlChild = NULL;
+  cmdLine.next = NULL;
+
   // Do the first command line read
+  prompt = malloc(strlen(__progname) + 3);
   sprintf(prompt, "%s> ", __progname);
   cmdInputRead(prompt, &cmdInput);
 
@@ -291,7 +271,10 @@ int main(int argc, char *argv[])
   while (cmdInput.input != NULL)
   {
     // Process input
-    retVal = doInput(&cmdInput, CMD_ECHO_YES);
+    cmdLine.lineNum++;
+    cmdLine.input = cmdInput.input;
+    cmdLine.cmdCommand = NULL;
+    retVal = emuLineExecute(&cmdLine, &cmdInput);
     if (retVal == CMD_RET_EXIT)
       break;
 
@@ -302,9 +285,10 @@ int main(int argc, char *argv[])
   // Done: caused by 'x' or ^D
 
   // Cleanup command line read interface
+  free(prompt);
   cmdInputCleanup(&cmdInput);
 
-  // Shutdown gracefully by killing audio and stopping the LCD device(s)
+  // Shutdown gracefully by killing audio and stopping the lcd device(s)
   alarmSoundKill();
   lcdDeviceEnd();
   
@@ -314,28 +298,43 @@ int main(int argc, char *argv[])
 
   // Tell user if exit was due to manual EOF
   if (retVal != CMD_RET_EXIT)
-  {
     printf("\n<ctrl>d - exit\n");
-  }
 
   // Goodbye
   return CMD_RET_OK;
 }
 
 //
-// Function: doAlarmPosition
+// Below are all mchron command and control block handlers functions. Each and
+// every mchron command will, when provided with proper arguments, end up in
+// one of the functions below.
+//
+// Upon entering a command handler function for a 'regular' command, all its
+// arguments have been successfully scanned and evaluated. All it takes for
+// the handler is to pick up and process the evaluated arguments in the
+// argChar[], argDouble[], argWord[] and argString variables, based on the
+// sequence of command arguments in the command dictionary.
+//
+// A control block handler however must implement more functionality as command
+// arguments are evaluated optionally, depending on the control block type and
+// the execution state of the associated block. As such, a control block
+// handler is responsible for its own argument scanning and processing.
+//
+
+//
+// Function: doAlarmPos
 //
 // Set alarm switch position
 //
-int doAlarmPosition(char *input, int echoCmd)
+int doAlarmPos(cmdLine_t *cmdLine)
 {
-  uint8_t on = GLCD_TRUE;
-  
-  // Scan command line with alarm switch position profile
-  ARGSCAN(argAlarmPosition, &input);
+  uint8_t on;
+  uint8_t newPosition = TO_UINT8_T(argDouble[0]);
 
   // Define new alarm switch position
-  if (argInt[0] == 0)
+  if (newPosition == 1)
+    on = GLCD_TRUE;
+  else
     on = GLCD_FALSE;
 
   // Set alarm switch position
@@ -361,51 +360,15 @@ int doAlarmPosition(char *input, int echoCmd)
 }
 
 //
-// Function: doAlarmToggle
-//
-// Toggle alarm switch position
-//
-int doAlarmToggle(char *input, int echoCmd)
-{
-  // The command line may not contain additional arguments
-  ARGSCAN(argEnd, &input);
-
-  // Toggle alarm switch position
-  alarmSwitchToggle(GLCD_FALSE);
-
-  // Update clock when active
-  if (mcClockPool[mcMchronClock].clockId != CHRON_NONE)
-  {
-    alarmStateSet();
-    animClockDraw(DRAW_CYCLE);
-    lcdDeviceFlush(0);
-  }
-
-  // Report the new alarm settings
-  if (echoCmd == CMD_ECHO_YES)
-  {
-    // Report current time+date+alarm
-    readi2ctime();
-    emuTimePrint();
-  }
-
-  return CMD_RET_OK;
-}
-
-//
 // Function: doAlarmSet
 //
 // Set clock alarm time
 //
-int doAlarmSet(char *input, int echoCmd)
+int doAlarmSet(cmdLine_t *cmdLine)
 {
-  // Overide alarm
-  // Scan command line with alarm set profile
-  ARGSCAN(argAlarmSet, &input);
-
   // Set new alarm time
-  emuAlarmH = ((uint8_t)argInt[0]) % 24;
-  emuAlarmM = ((uint8_t)argInt[1]) % 60;
+  emuAlarmH = TO_UINT8_T(argDouble[0]);
+  emuAlarmM = TO_UINT8_T(argDouble[1]);
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
 
@@ -422,13 +385,13 @@ int doAlarmSet(char *input, int echoCmd)
       // exiting the config menu. We therefore don't care what the old
       // value was. This behavior will not cause a problem for most clocks
       // when we are in command mode and change the alarm: the alarm time
-      // will overwrite the old value on the LCD. However, for a clock like
+      // will overwrite the old value on the lcd. However, for a clock like
       // Analog that shows the alarm in an analog clock style, changing the
       // alarm in command mode will draw the new alarm while not erasing
       // the old alarm time.
       // We'll use a trick to overwrite the old alarm: toggle the alarm
       // switch twice. Note: This may cause a slight blink in the alarm
-      // area when using the glut LCD device.
+      // area when using the glut lcd device.
       alarmSwitchToggle(GLCD_FALSE);
       alarmStateSet();
       animClockDraw(DRAW_CYCLE);
@@ -456,17 +419,43 @@ int doAlarmSet(char *input, int echoCmd)
 }
 
 //
+// Function: doAlarmToggle
+//
+// Toggle alarm switch position
+//
+int doAlarmToggle(cmdLine_t *cmdLine)
+{
+  // Toggle alarm switch position
+  alarmSwitchToggle(GLCD_FALSE);
+
+  // Update clock when active
+  if (mcClockPool[mcMchronClock].clockId != CHRON_NONE)
+  {
+    alarmStateSet();
+    animClockDraw(DRAW_CYCLE);
+    lcdDeviceFlush(0);
+  }
+
+  // Report the new alarm settings
+  if (echoCmd == CMD_ECHO_YES)
+  {
+    // Report current time+date+alarm
+    readi2ctime();
+    emuTimePrint();
+  }
+
+  return CMD_RET_OK;
+}
+
+//
 // Function: doBeep
 //
 // Give audible beep
 //
-int doBeep(char *input, int echoCmd)
+int doBeep(cmdLine_t *cmdLine)
 {
-  // Scan command line with beep profile
-  ARGSCAN(argBeep, &input);
-
   // Sound beep
-  beep(argInt[0], (uint8_t)argInt[1]);
+  beep(TO_UINT16_T(argDouble[0]), TO_UINT8_T(argDouble[1]));
 
   return CMD_RET_OK;
 }
@@ -476,17 +465,14 @@ int doBeep(char *input, int echoCmd)
 //
 // Feed clock with time and keyboard events
 //
-int doClockFeed(char *input, int echoCmd)
+int doClockFeed(cmdLine_t *cmdLine)
 {
   char ch = '\0';
   int startMode = CYCLE_NOWAIT;
   int myKbMode = KB_MODE_LINE;
 
-  // Scan command line with clock feed profile
-  ARGSCAN(argClockFeed, &input);
-
   // Get the start mode
-  emuStartModeGet(argChar[0], &startMode);
+  startMode = emuStartModeGet(argChar[0]);
 
   // Check clock
   if (mcClockPool[mcMchronClock].clockId == CHRON_NONE)
@@ -500,23 +486,18 @@ int doClockFeed(char *input, int echoCmd)
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_SCAN);
 
-  // Setup and provide emulator end-user help
-  stubHelp = stubHelpClockFeed;
-  stubHelp();
-
   // Init alarm and functional clock time
   mcAlarming = GLCD_FALSE;
   mchronTimeInit();
 
-  // Init stub event handler
-  eventInit = GLCD_TRUE;
-  eventCycleState = startMode;
+  // Init stub event handler used in main loop below
+  stubEventInit(startMode, stubHelpClockFeed);
 
   // Run clock until 'q'
   while (ch != 'q' && ch != 'Q')
   {
     // Get timer event and execute clock cycle
-    ch = stubGetEvent();
+    ch = stubEventGet();
 
     // Process keyboard events
     if (ch == 's' || ch == 'S')
@@ -551,32 +532,33 @@ int doClockFeed(char *input, int echoCmd)
 }
 
 //
-// Function: doClockSet
+// Function: doClockSelect
 //
 // Select clock from list of available clocks
 //
-int doClockSet(char *input, int echoCmd)
+int doClockSelect(cmdLine_t *cmdLine)
 {
-  // Scan command line with clock set profile
-  ARGSCAN(argClockSelect, &input);
+  uint8_t clock;
 
-  if (argInt[0] == CHRON_NONE)
+  if (argDouble[0] >= emuMonochronCount - 1 + 0.49L)
+  {
+    // Requested clock is beyond max value
+    printf("%s? invalid: %.0f\n", cmdLine->cmdCommand->cmdArg[0].argName,
+      argDouble[0]+0.01);
+    return CMD_RET_ERROR;
+  }
+
+  clock = TO_UINT8_T(argDouble[0]);
+  if (clock == CHRON_NONE)
   {
     // Release clock
     emuClockRelease(echoCmd);
   }
   else
   {
-    // Init clock layout for selected clock
-    if (argInt[0] > sizeof(emuMonochron) / sizeof(clockDriver_t) - 1)
-    {
-      // Requested clock is beyond max value
-      printf("%s? invalid value: %d\n", argClockSelect[0].argName, argInt[0]);
-      return CMD_RET_ERROR;
-    }
     alarmSoundKill();
     mcClockTimeEvent = GLCD_TRUE;
-    mcMchronClock = (uint8_t)argInt[0];
+    mcMchronClock = clock;
     mcAlarmSwitch = ALARM_SWITCH_NONE;
     alarmStateSet();
     animClockDraw(DRAW_INIT_FULL);
@@ -591,60 +573,62 @@ int doClockSet(char *input, int echoCmd)
 //
 // Process comments
 //
-int doComments(char *input, int echoCmd)
+int doComments(cmdLine_t *cmdLine)
 {
   // Dump comments in the log only when we run at root command level
   if (listExecDepth == 0)
-  {
-     DEBUGP(input);
-  }
+     DEBUGP(argString);
 
   return CMD_RET_OK;
 }
 
 //
-// Function: doDate
+// Function: doDateReset
 //
-// Set/reset internal clock date
+// Reset internal clock date
 //
-int doDate(char *input, int echoCmd, int reset)
+int doDateReset(cmdLine_t *cmdLine)
 {
-  int dateOk = GLCD_TRUE;
-
-  if (reset == GLCD_TRUE)
-  {
-    // Reset date to system date
-    // The command line may not contain additional arguments
-    ARGSCAN(argEnd, &input);
-
-    stubTimeSet(70, 0, 0, 0, 80, 0, 0);
-  }
-  else
-  {
-    // Set date
-    // Scan command line with date set profile
-    ARGSCAN(argDateSet, &input);
-
-    dateOk = stubTimeSet(70, 0, 0, 0, (uint8_t)argInt[0], (uint8_t)argInt[1],
-      (uint8_t)argInt[2]);
-    if (dateOk == GLCD_FALSE)
-      return CMD_RET_ERROR;
-  }
+  // Reset date to system date
+  stubTimeSet(70, 0, 0, 0, 80, 0, 0);
 
   // Sync mchron time with new date
-  new_ts = 60;
-  DEBUGP("Clear time event");
-  time_event = GLCD_FALSE;
-  mchronTimeInit();
+  emuTimeSync();
 
   // Update clock when active
   emuClockUpdate();
 
   // Report (new) time+date+alarm
   if (echoCmd == CMD_ECHO_YES)
-  {
     emuTimePrint();
-  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doDateSet
+//
+// Set internal clock date
+//
+int doDateSet(cmdLine_t *cmdLine)
+{
+  int dateOk = GLCD_TRUE;
+
+  // Set new date
+  dateOk = stubTimeSet(70, 0, 0, 0, TO_UINT8_T(argDouble[0]),
+    TO_UINT8_T(argDouble[1]), TO_UINT8_T(argDouble[2]));
+  if (dateOk == GLCD_FALSE)
+    return CMD_RET_ERROR;
+
+  // Sync mchron time with new date
+  emuTimeSync();
+
+  // Update clock when active
+  emuClockUpdate();
+
+  // Report (new) time+date+alarm
+  if (echoCmd == CMD_ECHO_YES)
+    emuTimePrint();
 
   return CMD_RET_OK;
 }
@@ -654,13 +638,12 @@ int doDate(char *input, int echoCmd, int reset)
 //
 // Execute mchron commands from a file
 //
-int doExecute(char *input, int echoCmd)
+int doExecute(cmdLine_t *cmdLine)
 {
-  int echo = 0;
-  char fileName[250];
-  int i = 0;
+  int myEchoCmd;
+  char *fileName;
   cmdLine_t *cmdLineRoot = NULL;
-  cmdRepeat_t *cmdRepeatRoot = NULL;
+  cmdPcCtrl_t *cmdPcCtrlRoot = NULL;
   int retVal = CMD_RET_OK;
 
   // Verify too deep nested 'e' commands (prevent potential recursive call) 
@@ -671,44 +654,48 @@ int doExecute(char *input, int echoCmd)
     return CMD_RET_ERROR;
   }
 
-  // Scan command line with execute profile
-  ARGSCAN(argExecute, &input);
+  // Keep current command echo to restore at end of this function
+  myEchoCmd = echoCmd;
 
-  // Get echo
+  // Get new command echo state where 'i' keeps current one
   if (argChar[0] == 'e')
-    echo = CMD_ECHO_YES;
-  else if (argChar[0] == 'i')
-    echo = echoCmd;
-  else // argChar[0] == 's'
-    echo = CMD_ECHO_NO;
+    echoCmd = CMD_ECHO_YES;
+  else if (argChar[0] == 's')
+    echoCmd = CMD_ECHO_NO;
 
   // Copy filename
-  while (argString[i] != '\0')
-  {
-    fileName[i] = argString[i];
-    i++;
-  }
-  fileName[i] = '\0';
+  fileName = malloc(strlen(argString) + 1);
+  sprintf(fileName, "%s", argString);
+
+  // Valid command file and stack level: increase stack level
+  fileExecDepth++;
 
   // Load the lines from the command file in a linked list.
   // Warning: this will reset the cmd scan global variables.
-  retVal = cmdFileLoad(&cmdLineRoot, &cmdRepeatRoot, fileName);
+  retVal = cmdListFileLoad(&cmdLineRoot, &cmdPcCtrlRoot, fileName,
+    fileExecDepth);
   if (retVal == CMD_RET_OK)
   {
-    // Valid command file: increase stack level
-    fileExecDepth++;
-
     // Execute the commands in the command list
-    retVal = emuListExecute(cmdLineRoot, fileName, echo, doInput);
-
-    // We're done: decrease stack level
-    fileExecDepth--;
+    retVal = emuListExecute(cmdLineRoot, fileName);
   }
 
-  // We're done. Either all commands in the linked list have been executed
+  // We're done: decrease stack level
+  fileExecDepth--;
+
+  // Either all commands in the linked list have been executed
   // successfullly or an error has occured. Do some admin stuff by
   // cleaning up the linked lists.
-  cmdListCleanup(cmdLineRoot, cmdRepeatRoot);
+  free(fileName);
+  cmdListCleanup(cmdLineRoot, cmdPcCtrlRoot);
+
+  // Final stack trace element for error/interrupt that occured at
+  // lower level
+  if (retVal == CMD_RET_RECOVER && listExecDepth == 0)
+    printf("%d:%s:-:%s\n", fileExecDepth, __progname, cmdLine->input);
+
+  // Restore original command echo state
+  echoCmd = myEchoCmd;
 
   return retVal;
 }
@@ -718,12 +705,9 @@ int doExecute(char *input, int echoCmd)
 //
 // Prepare to exit mchron
 //
-int doExit(char *input, int echoCmd)
+int doExit(cmdLine_t *cmdLine)
 {
   int retVal = CMD_RET_OK;
-
-  // The command line may not contain additional arguments
-  ARGSCAN(argEnd, &input);
 
   if (listExecDepth > 0)
   {
@@ -732,7 +716,8 @@ int doExit(char *input, int echoCmd)
   }
   else
   {
-    // Indicate we want to exit 
+    // Indicate we want to exit
+    invokeExit = GLCD_TRUE;
     retVal = CMD_RET_EXIT;
   }
   
@@ -744,11 +729,8 @@ int doExit(char *input, int echoCmd)
 //
 // Dump helppage
 //
-int doHelp(char *input, int echoCmd)
+int doHelp(cmdLine_t *cmdLine)
 {
-  // The command line may not contain additional arguments
-  ARGSCAN(argEnd, &input);
-
   if (listExecDepth > 0)
   {
     printf("use only at command prompt\n");
@@ -761,253 +743,238 @@ int doHelp(char *input, int echoCmd)
 }
 
 //
-// Function: doInput
+// Function: doHelpCmd
 //
-// Process input string.
-// This is the main command input handler that can be called recursively
-// via the 'e' command.
+// Print the mchron dictionary content for a command
 //
-int doInput(cmdInput_t *cmdInput, int echoCmd)
+int doHelpCmd(cmdLine_t *cmdLine)
 {
-  char *input = cmdInput->input;
-  int retVal = CMD_RET_OK;
-
-  // See if we have an empty command line
-  if (*input == '\0')
+  if (listExecDepth > 0)
   {
-    // Do nothing (but optionally dump empty line in logfile)
-    retVal = doComments(cmdInput->input, echoCmd);
-    return retVal;
+    printf("use only at command prompt\n");
+    return CMD_RET_ERROR;
   }
 
-  // Prepare command line argument scanner
-  argInit(&input);
-  if (*input == '\0')
+  // Print dictionary of command or all commands
+  if (strcmp(argWord[1], "*") == 0)
   {
-    // Input only contains white space chars
-    return retVal;
-  }
-
-  // We have non-whitespace characters so scan the command line with
-  // the command profile
-  ARGSCAN(argCmd, &input);
-
-  // Process the main command
-  if (strcmp(argWord[0], "#") == 0)
-  {
-    // Do comments
-    retVal = doComments(cmdInput->input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "ap") == 0)
-  {
-    // Set alarm switch position
-    retVal = doAlarmPosition(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "as") == 0)
-  {
-    // Set alarm time
-    retVal = doAlarmSet(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "at") == 0)
-  {
-    // Toggle alarm switch position
-    retVal = doAlarmToggle(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "b") == 0)
-  {
-    // Sound beep
-    retVal = doBeep(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "cf") == 0)
-  {
-    // Feed clock in emulator with time and keyboard events
-    retVal = doClockFeed(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "cs") == 0)
-  {
-    // Set clock for emulator
-    retVal = doClockSet(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "dr") == 0)
-  {
-    // Reset date to system date
-    retVal = doDate(input, echoCmd, GLCD_TRUE);
-  }
-  else if (strcmp(argWord[0], "ds") == 0)
-  {
-    // Set date
-    retVal = doDate(input, echoCmd, GLCD_FALSE);
-  }
-  else if (strcmp(argWord[0], "e") == 0)
-  {
-    // Execute mchron commands from a file
-    retVal = doExecute(input, echoCmd);
-    if (retVal < CMD_RET_OK && listExecDepth == 0)
-    {
-      // Final stack trace element for error that occured at lower level
-      if (retVal == CMD_RET_ERROR_RECOVER || retVal == CMD_RET_INTERRUPT)
-        printf("%d:%s:-:%s\n", fileExecDepth, __progname, cmdInput->input);
-    }
-  }
-  else if (strcmp(argWord[0], "h") == 0)
-  {
-    // Dump help page
-    retVal = doHelp(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "li") == 0)
-  {
-    // Inverse screen
-    retVal = doLcdInverse(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "lbs") == 0)
-  {
-    // Set LCD backlight
-    retVal = doLcdBacklightSet(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "le") == 0)
-  {
-    // Erase LCD display
-    retVal = doLcdErase(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "m") == 0)
-  {
-    // Monochron emulator
-    retVal = doMonochron(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "pa") == 0)
-  {
-    // Paint ascii
-    retVal = doPaintAscii(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "pc") == 0)
-  {
-    // Paint circle
-    retVal = doPaintCircle(input, echoCmd, GLCD_FALSE);
-  }
-  else if (strcmp(argWord[0], "pcf") == 0)
-  {
-    // Paint filled circle
-    retVal = doPaintCircle(input, echoCmd, GLCD_TRUE);
-  }
-  else if (strcmp(argWord[0], "pd") == 0)
-  {
-    // Paint dot
-    retVal = doPaintDot(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "pl") == 0)
-  {
-    // Paint line
-    retVal = doPaintLine(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "pr") == 0)
-  {
-    // Paint rectangle
-    retVal = doPaintRectangle(input, echoCmd, GLCD_FALSE);
-  }
-  else if (strcmp(argWord[0], "prf") == 0)
-  {
-    // Paint filled rectangle
-    retVal = doPaintRectangle(input, echoCmd, GLCD_TRUE);
-  }
-  else if (strcmp(argWord[0], "q") == 0)
-  {
-    // The <quit> key is not really a command...
-    printf("use only as command interrupt keypress\n");
-    retVal = CMD_RET_ERROR;
-  }
-  else if (strcmp(argWord[0], "rn") == 0)
-  {
-    // The user has entered a 'rn' command at command prompt level.
-    // This is either a syntax or a parse error. Handle it though
-    // like any other command.
-    // A repeat while/next combination is handled in doListExecute().
-    retVal = doRepeatNext(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "rw") == 0)
-  {
-    // The user has entered a 'rw' command at command prompt level.
-    // Cache all keyboard input commands until this 'rw' is matched
-    // with a corresponding 'rn' command. Then execute the command
-    // list.
-    retVal = doRepeatWhile(cmdInput, echoCmd);
-  }
-  else if (strcmp(argWord[0], "sp") == 0)
-  {
-    // Statistics print
-    retVal = doStats(input, echoCmd, GLCD_FALSE);
-  }
-  else if (strcmp(argWord[0], "sr") == 0)
-  {
-    // Statistics reset
-    retVal = doStats(input, echoCmd, GLCD_TRUE);
-  }
-  else if (strcmp(argWord[0], "tf") == 0)
-  {
-    // Flush time to active clock
-    retVal = doTime(input, echoCmd, 'f');
-  }
-  else if (strcmp(argWord[0], "tp") == 0)
-  {
-    // Print time
-    retVal = doTime(input, echoCmd, 'p');
-  }
-  else if (strcmp(argWord[0], "tr") == 0)
-  {
-    // Reset time to system time
-    retVal = doTime(input, echoCmd, 'r');
-  }
-  else if (strcmp(argWord[0], "ts") == 0)
-  {
-    // Set time
-    retVal = doTime(input, echoCmd, 's');
-  }
-  else if (strcmp(argWord[0], "vp") == 0)
-  {
-    // Print value of one or all variable
-    retVal = doVarPrint(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "vr") == 0)
-  {
-    // Reset one or all all variables
-    retVal = doVarReset(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "vs") == 0)
-  {
-    // Set value of variable
-    retVal = doVarSet(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "w") == 0)
-  {
-    // Wait delay time or keypress
-    retVal = doWait(input, echoCmd);
-  }
-  else if (strcmp(argWord[0], "x") == 0)
-  {
-    // Exit mchron
-    retVal = doExit(input, echoCmd);
+    cmdDictCmdPrintAll();
   }
   else
   {
-    printf("%s? invalid value: %s\n", argCmd[0].argName, argWord[0]);
-    retVal = CMD_RET_ERROR;
+    if (cmdDictCmdPrint(argWord[1]) != CMD_RET_OK)
+    {
+      printf("%s? invalid: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
+        argWord[1]);
+      return CMD_RET_ERROR;
+    }
   }
 
-  return retVal;
+  return CMD_RET_OK;
+}
+
+//
+// Function: doHelpExpr
+//
+// Print the result of an expression
+//
+int doHelpExpr(cmdLine_t *cmdLine)
+{
+  cmdArgValuePrint(argDouble[0], GLCD_TRUE);
+  printf("\n");
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doIfElse
+//
+// The start of an if-else block
+//
+int doIfElse(cmdLine_t **cmdProgCounter)
+{
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
+  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
+  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
+  char *input = cmdLine->input;
+  int retVal;
+
+  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
+  {
+    // Scan the command line for the if-else parameters
+    cmdArgInit(&input);
+    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+      GLCD_FALSE);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+    cmdPcCtrlChild->initialized = GLCD_TRUE;
+  }
+
+  // Decide where to go depending on whether the preceding block
+  // (if-then or else-if) was active
+  if (cmdPcCtrlParent->active == GLCD_TRUE)
+  {
+    // Deactivate preceding block and jump to end-if
+    cmdPcCtrlParent->active = GLCD_FALSE;
+    *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+  }
+  else
+  {
+    // Make if-else block active and continue on next line
+    cmdPcCtrlChild->active = GLCD_TRUE;
+    *cmdProgCounter = (*cmdProgCounter)->next;
+  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doIfElseIf
+//
+// The start of an if-else-if block
+//
+int doIfElseIf(cmdLine_t **cmdProgCounter)
+{
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
+  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
+  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
+  char *input = cmdLine->input;
+  int retVal;
+
+  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
+  {
+    // Scan the command line for the if-else-if arguments
+    cmdArgInit(&input);
+    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+      GLCD_FALSE);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+
+    // Copy the condition expression for the if-else-if
+    cmdPcCtrlChild->cbArg1 = cmdPcCtrlArgCreate(argWord[1]);
+    cmdPcCtrlChild->initialized = GLCD_TRUE;
+  }
+
+  // Decide where to go depending on whether the preceding block
+  // (if-then or else-if) was active
+  if (cmdPcCtrlParent->active == GLCD_TRUE)
+  {
+    // Deactivate preceding block and jump to end-if
+    cmdPcCtrlParent->active = GLCD_FALSE;
+    while ((*cmdProgCounter)->cmdCommand->cmdPcCtrlType != PC_IF_END)
+      *cmdProgCounter = (*cmdProgCounter)->cmdPcCtrlChild->cmdLineChild;
+  }
+  else
+  {
+    // Evaluate the condition expression 
+    EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
+
+    // Decide where to go depending on the condition result
+    if (exprValue != 0)
+    {
+      // The if-else-if block is active and we'll continue on the next line
+      cmdPcCtrlChild->active = GLCD_TRUE;
+      *cmdProgCounter = (*cmdProgCounter)->next;
+    }
+    else
+    {
+      // Jump to next block (if-else-if, if-else or if-end)
+      *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+    }
+  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doIfEnd
+//
+// The closing of an if-then-else block
+//
+int doIfEnd(cmdLine_t **cmdProgCounter)
+{
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
+  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
+  char *input = cmdLine->input;
+  int retVal;
+
+  // Scan the command line for the if-end parameters
+  cmdArgInit(&input);
+  cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+  retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+    GLCD_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Deactivate current control block and continue on next line
+  cmdPcCtrlParent->active = GLCD_FALSE;
+  *cmdProgCounter = (*cmdProgCounter)->next;
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doIfThen
+//
+// Initiate an if-then and determine where to continue
+//
+int doIfThen(cmdLine_t **cmdProgCounter)
+{
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
+  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
+  char *input = cmdLine->input;
+  int retVal;
+
+  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
+  {
+    // Scan the command line for the if-then arguments
+    cmdArgInit(&input);
+    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+      GLCD_FALSE);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+
+    // Copy the condition expression for the if-then
+    cmdPcCtrlChild->cbArg1 = cmdPcCtrlArgCreate(argWord[1]);
+    cmdPcCtrlChild->initialized = GLCD_TRUE;
+  }
+
+  // Evaluate the condition expression 
+  EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
+
+  // Decide where to go depending on the condition result
+  if (exprValue != 0)
+  {
+    // The if-then block is active and continue on next line
+    cmdPcCtrlChild->active = GLCD_TRUE;
+    *cmdProgCounter = (*cmdProgCounter)->next;
+  }
+  else
+  {
+    // Jump to if-else-if, if-else or if-end block
+    *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+  }
+
+  return CMD_RET_OK;
 }
 
 //
 // Function: doLcdBacklightSet
 //
-// Set LCD backlight (0 = almost dark .. 16 = full power).
-// Note: Only the glut LCD stub supports backlight .
+// Set lcd backlight (0 = almost dark .. 16 = full power).
+// Note: Only the glut lcd stub supports backlight.
 //
-int doLcdBacklightSet(char *input, int echoCmd)
+int doLcdBacklightSet(cmdLine_t *cmdLine)
 {
-  // Scan command line with backlight profile
-  ARGSCAN(argBacklight, &input);
-
   // Process backlight
-  emuBacklight = argInt[0];
+  emuBacklight = TO_U08(argDouble[0]);
   lcdDeviceBacklightSet(emuBacklight);
 
   return CMD_RET_OK;
@@ -1016,16 +983,13 @@ int doLcdBacklightSet(char *input, int echoCmd)
 //
 // Function: doLcdErase
 //
-// Erase the contents of the LCD screen
+// Erase the contents of the lcd screen
 //
-int doLcdErase(char *input, int echoCmd)
+int doLcdErase(cmdLine_t *cmdLine)
 {
-  // The command line may not contain additional arguments
-  ARGSCAN(argEnd, &input);
-
-  // Erase LCD display and flush the display
+  // Erase lcd display
   glcdClearScreen(mcBgColor);
-  lcdDeviceFlush(1);
+  lcdDeviceFlush(0);
 
   return CMD_RET_OK;
 }
@@ -1033,13 +997,10 @@ int doLcdErase(char *input, int echoCmd)
 //
 // Function: doLcdInverse
 //
-// Inverse the contents of the LCD screen
+// Inverse the contents of the lcd screen
 //
-int doLcdInverse(char *input, int echoCmd)
+int doLcdInverse(cmdLine_t *cmdLine)
 {
-  // The command line may not contain additional arguments
-  ARGSCAN(argEnd, &input);
-
   // Toggle the foreground and background colors
   if (mcBgColor == OFF)
   {
@@ -1052,7 +1013,7 @@ int doLcdInverse(char *input, int echoCmd)
     emuFgColor = mcFgColor = ON;
   }
 
-  // Inverse and flush the display
+  // Inverse the display
   glcdFillRectangle2(0, 0, GLCD_XPIXELS, GLCD_YPIXELS, ALIGN_TOP,
     FILL_INVERSE, mcFgColor);
   lcdDeviceFlush(0);
@@ -1065,17 +1026,14 @@ int doLcdInverse(char *input, int echoCmd)
 //
 // Start the stubbed Monochron application
 //
-int doMonochron(char *input, int echoCmd)
+int doMonochron(cmdLine_t *cmdLine)
 {
   u08 myBacklight = 16;
-  int startMode = CYCLE_NOWAIT;
   int myKbMode = KB_MODE_LINE;
-
-  // Scan command line with monochron profile
-  ARGSCAN(argMchronStart, &input);
+  int startMode = CYCLE_NOWAIT;
 
   // Get the start mode
-  emuStartModeGet(argChar[0], &startMode);
+  startMode = emuStartModeGet(argChar[0]);
 
   // Clear active clock (if any)
   emuClockRelease(CMD_ECHO_NO);
@@ -1085,25 +1043,16 @@ int doMonochron(char *input, int echoCmd)
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_SCAN);
 
-  // Setup and provide emulator end-user help
-  stubHelp = stubHelpMonochron;
-  stubHelp();
-
-  // Init stub event handler
-  eventInit = GLCD_TRUE;
-  eventCycleState = startMode;
-
   // Set essential Monochron startup data
   mcClockTimeEvent = GLCD_FALSE;
   mcAlarmSwitch = ALARM_SWITCH_NONE;
-  just_pressed = 0;
 
   // Clear the screen so we won't see any flickering upon
   // changing the backlight later on
   glcdClearScreen(OFF);
 
-  // Upon request force the eeprom to init and, based on that,
-  // set the backlight of the LCD stub device
+  // Upon request force the eeprom to init and, based on that, set the
+  // backlight of the lcd stub device
   if (argChar[1] == 'r')
   {
     stubEepromReset();
@@ -1116,17 +1065,20 @@ int doMonochron(char *input, int echoCmd)
     lcdDeviceBacklightSet(myBacklight);
   }
 
+  // Init stub event handler used in Monochron
+  stubEventInit(startMode, stubHelpMonochron);
+
   // Start Monochron and witness the magic :-)
-  stubMain();
+  monoMain();
 
   // We're done.
   // Restore the clock pool that mchron supports (as it was overridden
   // by the Monochron clock pool). By clearing the active clock from that
   // pool also any audible alarm will be stopped and reset.
-  mcClockPool = (clockDriver_t *)emuMonochron;
+  mcClockPool = emuMonochron;
   emuClockRelease(CMD_ECHO_NO);
 
-  // Restore alarm and foreground/background color and backlight as they
+  // Restore alarm, foreground/background color and backlight as they
   // were prior to starting Monochron
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
@@ -1146,47 +1098,33 @@ int doMonochron(char *input, int echoCmd)
 //
 // Paint ascii
 //
-int doPaintAscii(char *input, int echoCmd)
+int doPaintAscii(cmdLine_t *cmdLine)
 {
   u08 len = 0;
-  u08 orientation = ORI_HORIZONTAL;
-  u08 font = FONT_5X5P;
-  int color;
+  u08 color;
+  u08 orientation;
+  u08 font;
 
-  // Scan paint ascii text with x/y font scaling profile
-  ARGSCAN(argPaintAscii, &input);
-
-  // Get color
-  emuColorGet(argChar[0], &color);
-
-  // Get font
-  if (strcmp(argWord[1], "5x5p") == 0)
-    font = FONT_5X5P;
-  else // argWord[1] == "5x7n")
-    font = FONT_5X7N;
-
-  // Get orientation
-  if (argChar[1] == 'b')
-    orientation = ORI_VERTICAL_BU;
-  else if (argChar[1] == 'h')
-    orientation = ORI_HORIZONTAL;
-  else // argChar[1] == 't'
-    orientation = ORI_VERTICAL_TD;
+  // Get color, orientation and font from command line text values
+  color = emuColorGet(argChar[0]);
+  orientation = emuOrientationGet(argChar[1]);
+  font = emuFontGet(argWord[1]);
 
   // Paint ascii based on text orientation
   if (orientation == ORI_HORIZONTAL)
   {
     // Horizontal text
-    len = glcdPutStr3((u08)argInt[0], (u08)argInt[1], font, argString,
-      (u08)argInt[2], (u08)argInt[3], (u08)color);
+    len = glcdPutStr3(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
+      argString, TO_U08(argDouble[2]), TO_U08(argDouble[3]), color);
     if (echoCmd == CMD_ECHO_YES)
       printf("hor px=%d\n", (int)len);
   }
   else
   {
     // Vertical text
-    len = glcdPutStr3v((u08)argInt[0], (u08)argInt[1], font, orientation,
-      argString, (u08)argInt[2], (u08)argInt[3], (u08)color);
+    len = glcdPutStr3v(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
+      orientation, argString, TO_U08(argDouble[2]), TO_U08(argDouble[3]),
+      color);
     if (echoCmd == CMD_ECHO_YES)
       printf("vert px=%d\n", (int)len);
   }
@@ -1200,41 +1138,46 @@ int doPaintAscii(char *input, int echoCmd)
 //
 // Paint circle
 //
-int doPaintCircle(char *input, int echoCmd, int fill)
+int doPaintCircle(cmdLine_t *cmdLine)
 {
-  int color;
+  u08 color;
 
-  if (fill == GLCD_FALSE)
+  // Get color
+  color = emuColorGet(argChar[0]);
+
+  // Draw circle
+  glcdCircle2(TO_U08(argDouble[0]), TO_U08(argDouble[1]), TO_U08(argDouble[2]),
+    TO_U08(argDouble[3]), color);
+  lcdDeviceFlush(0);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doPaintCircleFill
+//
+// Paint circle with fill pattern
+//
+int doPaintCircleFill(cmdLine_t *cmdLine)
+{
+  u08 color;
+  u08 pattern;
+
+  // Get color
+  color = emuColorGet(argChar[0]);
+
+  // All fill patterns are allowed except inverse
+  pattern = TO_U08(argDouble[3]);
+  if (pattern == FILL_INVERSE)
   {
-    // Scan circle profile
-    ARGSCAN(argPaintCircle, &input);
-
-    // Get color
-    emuColorGet(argChar[0], &color);
-
-    // Draw circle
-    glcdCircle2((u08)argInt[0], (u08)argInt[1], (u08)argInt[2], (u08)argInt[3],
-      (u08)color);
+    printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[4].argName,
+      (int)pattern);
+    return CMD_RET_ERROR;
   }
-  else
-  {
-    // Scan fill circle profile
-    ARGSCAN(argPaintCircleFill, &input);
 
-    // Get color
-    emuColorGet(argChar[0], &color);
-
-    // All fill patterns are allowed except inverse
-    if (argInt[3] == FILL_INVERSE)
-    {
-      printf("%s? invalid value: %d\n", argPaintCircleFill[4].argName, argInt[3]);
-      return CMD_RET_ERROR;
-    }
-
-    // Draw filled circle
-    glcdFillCircle2((u08)argInt[0], (u08)argInt[1], (u08)argInt[2],
-      (u08)argInt[3], (u08)color);
-  }
+  // Draw filled circle
+  glcdFillCircle2(TO_U08(argDouble[0]), TO_U08(argDouble[1]),
+    TO_U08(argDouble[2]), pattern, color);
   lcdDeviceFlush(0);
 
   return CMD_RET_OK;
@@ -1245,18 +1188,15 @@ int doPaintCircle(char *input, int echoCmd, int fill)
 //
 // Paint dot
 //
-int doPaintDot(char *input, int echoCmd)
+int doPaintDot(cmdLine_t *cmdLine)
 {
-  int color;
-
-  // Scan dot profile
-  ARGSCAN(argPaintDot, &input);
+  u08 color;
 
   // Get color
-  emuColorGet(argChar[0], &color);
+  color = emuColorGet(argChar[0]);
 
   // Draw dot
-  glcdDot((u08)argInt[0], (u08)argInt[1], (u08)color);
+  glcdDot(TO_U08(argDouble[0]), TO_U08(argDouble[1]), color);
   lcdDeviceFlush(0);
 
   return CMD_RET_OK;
@@ -1267,58 +1207,169 @@ int doPaintDot(char *input, int echoCmd)
 //
 // Paint line
 //
-int doPaintLine(char *input, int echoCmd)
+int doPaintLine(cmdLine_t *cmdLine)
 {
-  int color;
-
-  // Scan line profile
-  ARGSCAN(argPaintLine, &input);
+  u08 color;
 
   // Get color
-  emuColorGet(argChar[0], &color);
+  color = emuColorGet(argChar[0]);
 
   // Draw line
-  glcdLine((u08)argInt[0], (u08)argInt[1], (u08)argInt[2], (u08)argInt[3],
-    (u08)color);
+  glcdLine(TO_U08(argDouble[0]), TO_U08(argDouble[1]), TO_U08(argDouble[2]),
+    TO_U08(argDouble[3]), color);
   lcdDeviceFlush(0);
 
   return CMD_RET_OK;
 }
 
 //
-// Function: doPaintRectangle
+// Function: doPaintNumber
 //
-// Paint rectangle
+// Paint a number using a c printf format
 //
-int doPaintRectangle(char *input, int echoCmd, int fill)
+int doPaintNumber(cmdLine_t *cmdLine)
 {
-  int color;
+  u08 len = 0;
+  u08 color;
+  u08 orientation;
+  u08 font;
+  char *valString;
 
-  if (fill == GLCD_FALSE)
+  // Get color, orientation and font from commandline text values
+  color = emuColorGet(argChar[0]);
+  orientation = emuOrientationGet(argChar[1]);
+  font = emuFontGet(argWord[1]);
+
+  // Get output string
+  asprintf(&valString, argString, argDouble[4]);
+
+  // Paint ascii based on text orientation
+  if (orientation == ORI_HORIZONTAL)
   {
-    // Scan paint rectangle profile
-    ARGSCAN(argPaintRect, &input);
-
-    // Get color
-    emuColorGet(argChar[0], &color);
-
-    // Draw rectangle
-    glcdRectangle((u08)argInt[0], (u08)argInt[1], (u08)argInt[2], (u08)argInt[3],
-      (u08)color);
+    // Horizontal text
+    len = glcdPutStr3(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
+      valString, TO_U08(argDouble[2]), TO_U08(argDouble[3]), color);
+    if (echoCmd == CMD_ECHO_YES)
+      printf("hor px=%d\n", (int)len);
   }
   else
   {
-    // Scan fill reactangle profile
-    ARGSCAN(argPaintRectFill, &input);
-
-    // Get color
-    emuColorGet(argChar[0], &color);
-
-    // Draw filled rectangle
-    glcdFillRectangle2((u08)argInt[0], (u08)argInt[1], (u08)argInt[2],
-      (u08)argInt[3], (u08)argInt[4], (u08)argInt[5], (u08)color);
+    // Vertical text
+    len = glcdPutStr3v(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
+      orientation, valString, TO_U08(argDouble[2]), TO_U08(argDouble[3]),
+      color);
+    if (echoCmd == CMD_ECHO_YES)
+      printf("vert px=%d\n", (int)len);
   }
   lcdDeviceFlush(0);
+
+  // Free the allocated output string
+  free(valString);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doPaintRect
+//
+// Paint rectangle
+//
+int doPaintRect(cmdLine_t *cmdLine)
+{
+  u08 color;
+
+  // Get color
+  color = emuColorGet(argChar[0]);
+
+  // Draw rectangle
+  glcdRectangle(TO_U08(argDouble[0]), TO_U08(argDouble[1]),
+    TO_U08(argDouble[2]), TO_U08(argDouble[3]), color);
+  lcdDeviceFlush(0);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doPaintRectFill
+//
+// Paint rectangle with fill pattern
+//
+int doPaintRectFill(cmdLine_t *cmdLine)
+{
+  u08 color;
+
+  // Get color
+  color = emuColorGet(argChar[0]);
+
+  // Draw filled rectangle
+  glcdFillRectangle2(TO_U08(argDouble[0]), TO_U08(argDouble[1]),
+    TO_U08(argDouble[2]), TO_U08(argDouble[3]), TO_U08(argDouble[4]),
+    TO_U08(argDouble[5]), color);
+  lcdDeviceFlush(0);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doRepeatFor
+//
+// Initiate a new repeat loop
+//
+int doRepeatFor(cmdLine_t **cmdProgCounter)
+{
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
+  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
+  char *input = cmdLine->input;
+  int retVal;
+
+  // Init the control block structure when needed
+  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
+  {
+    // Scan the command line for the repeat arguments
+    cmdArgInit(&input);
+    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+      GLCD_FALSE);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+
+    // Copy the expressions for the init, condition and post arguments
+    cmdPcCtrlChild->cbArg1 = cmdPcCtrlArgCreate(argWord[1]);
+    cmdPcCtrlChild->cbArg2 = cmdPcCtrlArgCreate(argWord[2]);
+    cmdPcCtrlChild->cbArg3 = cmdPcCtrlArgCreate(argWord[3]);
+    cmdPcCtrlChild->initialized = GLCD_TRUE;
+  }
+
+  // Execute the repeat logic
+  if (cmdPcCtrlChild->active == GLCD_FALSE)
+  {
+    // First entry for this loop. Make the repeat active, then evaluate
+    // the repeat init and the repeat condition expressions.
+    cmdPcCtrlChild->active = GLCD_TRUE;
+    EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
+    EXPR_EVALUATE(cmdCommand->cmdArg[1].argName, cmdPcCtrlChild->cbArg2);
+  }
+  else
+  {
+    // For a next repeat loop first evaluate the step expression and
+    // then re-evaluate the repeat condition expression
+    EXPR_EVALUATE(cmdCommand->cmdArg[2].argName, cmdPcCtrlChild->cbArg3);
+    EXPR_EVALUATE(cmdCommand->cmdArg[1].argName, cmdPcCtrlChild->cbArg2);
+  }
+
+  // Decide where to go depending on the repeat condition result
+  if (exprValue != 0)
+  {
+    // Continue at next line
+    *cmdProgCounter = (*cmdProgCounter)->next;
+  }
+  else
+  {
+    // End of loop; make it inactive and jump to repeat next
+    cmdPcCtrlChild->active = GLCD_FALSE;
+    *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+  }
 
   return CMD_RET_OK;
 }
@@ -1326,136 +1377,163 @@ int doPaintRectangle(char *input, int echoCmd, int fill)
 //
 // Function: doRepeatNext
 //
-// Invalid repeat next at command prompt level
+// Complete current repeat loop and determine end-of-loop
 //
-int doRepeatNext(char *input, int echoCmd)
+int doRepeatNext(cmdLine_t **cmdProgCounter)
 {
-  // This 'rn' command is entered at command prompt level so it can
-  // never be a valid one. If it is syntactically correct then it is
-  // semantically incorrect as it cannot be matched with a 'rw' command.
-  // A repeat while/next combination is handled in doListExecute().
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
+  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
+  char *input = cmdLine->input;
+  int retVal;
 
-  // Scan end of command
-  ARGSCAN(argEnd, &input);
+  // Scan and validate the repeat next command line
+  cmdArgInit(&input);
+  cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+  retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+    GLCD_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
 
-  // Parse error
-  printf("%s? parse error: no matching rw command\n", argCmd[0].argName);
-  return CMD_RET_ERROR;
-}
-
-//
-// Function: doRepeatWhile
-//
-// Load repeat while loop commands interactively via keyboard and
-// execute when command entry is complete.
-//
-int doRepeatWhile(cmdInput_t *cmdInput, int echoCmd)
-{
-  cmdLine_t *cmdLineRoot = NULL;
-  cmdRepeat_t *cmdRepeatRoot = NULL;
-  int retVal = CMD_RET_OK;
-
-  // Load keyboard command lines in a linked list.
-  // Warning: this will reset the cmd scan global variables.
-  retVal = cmdKeyboardLoad(&cmdLineRoot, &cmdRepeatRoot, cmdInput);
-  if (retVal == CMD_RET_OK)
+  // Decide where to go depending on whether the loop is still active
+  if (cmdPcCtrlParent->active == GLCD_TRUE)
   {
-    // Execute the commands in the command list
-    retVal = emuListExecute(cmdLineRoot, (char *)__progname, CMD_ECHO_NO,
-      doInput);
-  }
-
-  // We're done. Either all commands in the linked list have been
-  // executed successfullly or an error has occured. Do admin stuff
-  // by cleaning up the linked lists.
-  cmdListCleanup(cmdLineRoot, cmdRepeatRoot);
-
-  return retVal;
-}
-
-//
-// Function: doStats
-//
-// Print/reset stub and LCD performance statistics
-//
-int doStats(char *input, int echoCmd, int reset)
-{
-  // The command line may not contain additional arguments
-  ARGSCAN(argEnd, &input);
-
-  if (reset == GLCD_FALSE)
-  {
-    // Print statistics
-    statsPrint();
+    // Jump back to top of repeat (and evaluate there whether the repeat
+    // loop will continue)
+    *cmdProgCounter = cmdPcCtrlParent->cmdLineParent;
   }
   else
   {
-    // Reset statistics
-    statsReset();
-    if (echoCmd == CMD_ECHO_YES)
-    {
-      printf("statistics reset\n");
-    }
+    // End of repeat loop; continue at next line
+    *cmdProgCounter = (*cmdProgCounter)->next;
   }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doStatsPrint
+//
+// Print stub, glcd interface and lcd performance statistics
+//
+int doStatsPrint(cmdLine_t *cmdLine)
+{
+  printf("statistics:\n");
+
+  // Print stub statistics
+  stubStatsPrint();
+  
+  // Print glcd interface and lcd performance statistics
+  lcdStatsPrint();
   
   return CMD_RET_OK;
 }
 
 //
-// Function: doTime
+// Function: doStatsReset
 //
-// Set internal clock time or report time/date/alarm
+// Reset stub, glcd interface and lcd performance statistics
 //
-int doTime(char *input, int echoCmd, char type)
+int doStatsReset(cmdLine_t *cmdLine)
+{
+  // Reset stub statistics
+  stubStatsReset();
+
+  // Reset glcd interface and lcd performance statistics
+  lcdStatsReset();
+
+  if (echoCmd == CMD_ECHO_YES)
+    printf("statistics reset\n");
+  
+  return CMD_RET_OK;
+}
+
+//
+// Function: doTimeFlush
+//
+// Sync with and then report and update clock with date/time/alarm 
+//
+int doTimeFlush(cmdLine_t *cmdLine)
+{
+  // Get current time+date
+  readi2ctime();
+
+  // Sync mchron time with (new) time
+  emuTimeSync();
+
+  // Update clock when active
+  emuClockUpdate();
+
+  // Report (new) time+date+alarm
+  if (echoCmd == CMD_ECHO_YES)
+    emuTimePrint();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doTimePrint
+//
+// Report current date/time/alarm 
+//
+int doTimePrint(cmdLine_t *cmdLine)
+{
+  // Get current time+date
+  readi2ctime();
+
+  // Report time+date+alarm
+  emuTimePrint();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doTimeReset
+//
+// Reset internal clock time
+//
+int doTimeReset(cmdLine_t *cmdLine)
+{
+  // Reset time to system time
+  stubTimeSet(80, 0, 0, 0, 70, 0, 0);
+
+  // Sync mchron time with (new) time
+  emuTimeSync();
+
+  // Update clock when active
+  emuClockUpdate();
+
+  // Report time+date+alarm
+  if (echoCmd == CMD_ECHO_YES)
+    emuTimePrint();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doTimeSet
+//
+// Set internal clock time
+//
+int doTimeSet(cmdLine_t *cmdLine)
 {
   int timeOk = GLCD_TRUE;
 
-  if (type == 'p' || type == 'f')
-  {
-    // The command line may not contain additional arguments
-    ARGSCAN(argEnd, &input);
+  // Overide time
+  timeOk = stubTimeSet(TO_UINT8_T(argDouble[2]), TO_UINT8_T(argDouble[1]),
+    TO_UINT8_T(argDouble[0]), 0, 70, 0, 0);
+  if (timeOk == GLCD_FALSE)
+    return CMD_RET_ERROR;
 
-    // Get current time+date
-    readi2ctime();
-  }
-  else if (type == 'r')
-  {
-    // The command line may not contain additional arguments
-    ARGSCAN(argEnd, &input);
+  // Sync mchron time with (new) time
+  emuTimeSync();
 
-    // Reset time to system time
-    stubTimeSet(80, 0, 0, 0, 70, 0, 0);
-  }
-  else // type = 's'
-  {
-    // Scan command line with time set profile
-    ARGSCAN(argTimeSet, &input);
+  // Update clock when active
+  emuClockUpdate();
 
-    // Overide time
-    timeOk = stubTimeSet((uint8_t)argInt[2], (uint8_t)argInt[1],
-      (uint8_t)argInt[0], 0, 70, 0, 0);
-    if (timeOk == GLCD_FALSE)
-      return CMD_RET_ERROR;
-  }
-
-  // In case time was changed or a flush request is made update running clock
-  if (type == 'r' || type == 's' || type == 'f')
-  {
-    // Sync mchron time with (new) time
-    new_ts = 60;
-    DEBUGP("Clear time event");
-    time_event = GLCD_FALSE;
-    mchronTimeInit();
-
-    // Update clock when active
-    emuClockUpdate();
-  }
-
-  // Report (new) time+date+alarm
-  if (echoCmd == CMD_ECHO_YES || type == 'p')
-  {
+  // Report new time+date+alarm
+  if (echoCmd == CMD_ECHO_YES)
     emuTimePrint();
-  }
 
   return CMD_RET_OK;
 }
@@ -1466,15 +1544,12 @@ int doTime(char *input, int echoCmd, char type)
 // Print value of one or all used named variables in rows with max 8
 // variable values per row
 //
-int doVarPrint(char *input, int echoCmd)
+int doVarPrint(cmdLine_t *cmdLine)
 {
-  int retVal = CMD_RET_OK;
+  int retVal;
 
-  // Scan command line with var print profile
-  ARGSCAN(argVarPrint, &input);
-
-  // Print the value of variable(s)
-  retVal = varValPrint(argWord[1], argVarSet[0].argName);
+  // Print all variables or a single one
+  retVal = varPrint(cmdLine->cmdCommand->cmdArg[0].argName, argWord[1]);
 
   return retVal;
 }
@@ -1484,22 +1559,15 @@ int doVarPrint(char *input, int echoCmd)
 //
 // Clear one or all used named variables
 //
-int doVarReset(char *input, int echoCmd)
+int doVarReset(cmdLine_t *cmdLine)
 {
   int retVal = CMD_RET_OK;
 
-  // Scan command line with var reset profile
-  ARGSCAN(argVarReset, &input);
-
-  // Clear the variable
+  // Clear all variables or a single one
   if (strcmp(argWord[1], "*") == 0)
-  {
     varReset();
-  }
   else
-  {
-    retVal = varClear(argWord[1]);
-  }
+    retVal = varClear(cmdLine->cmdCommand->cmdArg[0].argName, argWord[1]);
 
   return retVal;
 }
@@ -1507,39 +1575,29 @@ int doVarReset(char *input, int echoCmd)
 //
 // Function: doVarSet
 //
-// Init and set named variable
+// Init and set named variable. Note that the actual expression evaluation and
+// variable assignment has been performed by the command argument scan module.
+// When the expression evaluator failed this function won't be called. Only
+// when the expression was evaluated successfully this function is called
+// and there's nothing else left for us to do except for returning the
+// successful technical result of the expression evaluator.
 //
-int doVarSet(char *input, int echoCmd)
+int doVarSet(cmdLine_t *cmdLine)
 {
-  int retVal = CMD_RET_OK;
-
-  // Scan command line with var set profile
-  ARGSCAN(argVarSet, &input);
-
-  // Make the variable active (when not in use) and set its value
-  retVal = varValSet(argWord[1], argInt[0]);
-  if (retVal != CMD_RET_OK)
-  {
-    printf("%s? invalid value: %s\n", argVarSet[0].argName, argWord[1]);
-  }
-  
-  return retVal;
+  return CMD_RET_OK;
 }
 
 //
 // Function: doWait
 //
-// Wait for keypress or pause (in 0.01 sec)
+// Wait for keypress or pause in multiple of 1 msec.
 //
-int doWait(char *input, int echoCmd)
+int doWait(cmdLine_t *cmdLine)
 {
   int delay = 0;
   char ch = '\0';
 
-  // Scan command line with delay profile
-  ARGSCAN(argWait, &input);
-
-  delay = argInt[0];
+  delay = TO_INT(argDouble[0]);
   if (delay == 0)
   {
     // Wait for keypress
@@ -1550,7 +1608,8 @@ int doWait(char *input, int echoCmd)
   }
   else
   {
-    ch = kbWaitDelay(delay * 10);
+    // Wait delay*0.001 sec
+    ch = kbWaitDelay(delay);
   }
 
   // If a 'q' was entered, we need to quit the list execution 

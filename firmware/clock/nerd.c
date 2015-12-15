@@ -10,7 +10,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "nerd.h"
@@ -58,7 +58,7 @@ typedef struct _nerdLocation_t
   uint8_t digitsDY;	// Number of digits of time h
 } nerdLocation_t;
 
-nerdLocation_t nerdLocation[] =
+static nerdLocation_t nerdLocation[] =
 {
   // Binary clock
   {2,
@@ -75,9 +75,9 @@ nerdLocation_t nerdLocation[] =
 };
 
 // Local function prototypes
-void nerdAlarmAreaUpdate(void);
-void nerdBaseClockUpdate(uint8_t clock);
-uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
+static void nerdAlarmAreaUpdate(void);
+static void nerdBaseClockUpdate(uint8_t clock);
+static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
   uint16_t oldVal, char *numberStr);
 
 //
@@ -134,7 +134,7 @@ void nerdInit(u08 mode)
 //
 // Draw update in digital clock alarm area
 //
-void nerdAlarmAreaUpdate(void)
+static void nerdAlarmAreaUpdate(void)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -191,7 +191,7 @@ void nerdAlarmAreaUpdate(void)
 //
 // Draw update for a single clock
 //
-void nerdBaseClockUpdate(uint8_t clock)
+static void nerdBaseClockUpdate(uint8_t clock)
 {
   char numberStr[13];
   uint8_t digitOffset = 0;
@@ -272,7 +272,7 @@ void nerdBaseClockUpdate(uint8_t clock)
 // - In case the new string value is identical to the old value the
 //   function returns value 255.  
 //
-uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
+static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
   uint16_t oldVal, char *numberStr)
 {
   uint8_t i = 0;

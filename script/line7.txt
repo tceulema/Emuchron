@@ -1,0 +1,39 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: This script is used for testing gldcdLine().
+#
+# Note: This script was used in creating performance test glcdline-2
+#       in perftest.c [firmware/emulator].
+#
+
+# Erase LCD display
+le
+
+vs xCenter=64
+vs yCenter=32
+vs radius=29
+vs stepA=60
+vs stepB=58
+
+# Eye candy: paint surrounding circle
+pc f xCenter yCenter radius+2 0
+
+# Run continuously. Quit by pressing 'q' key.
+rf null true null
+
+  rf draw=0 draw<stepA*stepB/2 draw=draw+1
+    # Get start and end point of line
+    vs xA=sin(2*pi/stepA*(draw%stepA))*radius+xCenter
+    vs yA=-cos(2*pi/stepA*(draw%stepA))*radius+yCenter
+    vs xB=sin(2*pi/stepB*(draw%stepB))*radius+xCenter
+    vs yB=-cos(2*pi/stepB*(draw%stepB))*radius+yCenter
+
+    # Paint the line and remove it again
+    pl f xA yA xB yB
+    w 15
+    pl b xA yA xB yB
+  rn
+
+rn
+

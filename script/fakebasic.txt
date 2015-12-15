@@ -10,80 +10,65 @@
 le
 
 # Wait some time prior starting entering text
-rw x < 4 1 1
+rf x=1 x<4 x=x+1
   pa f 1 1 5x5p h 1 1 >_
-  w 35
+  w 350
   pa f 1 1 5x5p h 1 1 >    
-  w 35
+  w 350
 rn
 
 # List the program
 pa f 1 1 5x5p h 1 1 >_
-w 15
+w 150
 pa f 1 1 5x5p h 1 1 >l_
-w 50
+w 500
 pa f 1 1 5x5p h 1 1 >li_
-w 50
+w 500
 pa f 1 1 5x5p h 1 1 >lis_
-w 50
+w 500
 pa f 1 1 5x5p h 1 1 >list_
-w 50
+w 500
 pa f 1 1 5x5p h 1 1 >list  
+w 100
 pa f 1 8 5x5p h 1 1 10 for x = 1 to 10
-w 10
+w 100
 pa f 1 15 5x5p h 1 1 20   print x;
-w 10
+w 100
 pa f 1 22 5x5p h 1 1 30 next x
-w 10
+w 100
 pa f 1 29 5x5p h 1 1 ready
 
 # Wait some time prior starting entering text
-rw x < 4 1 1
+rf x=1 x<4 x=x+1
   pa f 1 36 5x5p h 1 1 >_
-  w 35
+  w 350
   pa f 1 36 5x5p h 1 1 >    
-  w 35
+  w 350
 rn
 
 # Run the program
 pa f 1 36 5x5p h 1 1 >_
-w 10
+w 100
 pa f 1 36 5x5p h 1 1 >r_
-w 50
+w 500
 pa f 1 36 5x5p h 1 1 >ru_
-w 50
+w 500
 pa f 1 36 5x5p h 1 1 >run_
-w 50
+w 500
 pa f 1 36 5x5p h 1 1 >run  
-pa f 1 43 5x5p h 1 1 1
-w 10
-pa f 7 43 5x5p h 1 1 2
-w 10
-pa f 13 43 5x5p h 1 1 3
-w 10
-pa f 19 43 5x5p h 1 1 4
-w 10
-pa f 25 43 5x5p h 1 1 5
-w 10
-pa f 31 43 5x5p h 1 1 6
-w 10
-pa f 37 43 5x5p h 1 1 7
-w 10
-pa f 43 43 5x5p h 1 1 8
-w 10
-pa f 49 43 5x5p h 1 1 9
-w 10
-pa f 55 43 5x5p h 1 1 10
-w 10
+w 100
+rf x=1 x<=10 x=x+1
+  pn f 1+(x-1)*6 43 5x5p h 1 1 x %1.0f
+  w 100
+rn
 pa f 1 50 5x5p h 1 1 ready
 
 # Now blink the cursor indefinitely
 # Hit 'q' to quit the faking
-rw x < 2 0 1
+rf null true null
   pa f 1 57 5x5p h 1 1 >_
-  w 35
+  w 350
   pa f 1 57 5x5p h 1 1 >  
-  w 35
-  vs x 0
+  w 350
 rn
 

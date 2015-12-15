@@ -11,7 +11,7 @@
 #include "../util.h"
 #endif
 #include "../ks0108.h"
-#include "../ratt.h"
+#include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -38,7 +38,7 @@ extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
-void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
+static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
   u08 newVal);
 
 //
@@ -112,7 +112,7 @@ void spotTrafLightInit(u08 mode)
 //
 // Update a single trafficlight
 //
-void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
+static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
   u08 newVal)
 {
   u08 segmentOld, segmentNew;

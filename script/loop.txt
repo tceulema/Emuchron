@@ -1,0 +1,23 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Consider this a performance test for the interpreter/CPU
+#          by running a time consuming loop
+#
+
+# Clear variables and report start time
+vr *
+tp
+
+# Loop 1 million times
+rf x=0 x<1000000 x=x+1
+  # Comments
+  vs y=x+1
+rn
+
+# Report end time and print variables
+# Values reported must be 10^6 for both x and y
+tp
+vp x
+vp y
+
