@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'mchron.c'
-// Title    : Main entry and command line utility for the MONOCHRON emulator
+// Title    : Main entry and command line utility for the emuchron emulator
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
@@ -13,18 +13,19 @@
 
 // Monochron defines
 #include "../ks0108.h"
-#include "../ks0108conf.h"
 #include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../config.h"
 
 // Monochron clocks
 #include "../clock/analog.h"
 #include "../clock/bigdigit.h"
 #include "../clock/cascade.h"
 #include "../clock/digital.h"
-#include "../clock/nerd.h"
+#include "../clock/example.h"
 #include "../clock/mosquito.h"
+#include "../clock/nerd.h"
 #include "../clock/perftest.h"
 #include "../clock/pong.h"
 #include "../clock/puzzle.h"
@@ -37,10 +38,10 @@
 // Emuchron stubs and utilities
 #include "stub.h"
 #include "expr.h"
-#include "lcd.h"
-#include "listvarutil.h"
+#include "listutil.h"
 #include "mchronutil.h"
 #include "scanutil.h"
+#include "varutil.h"
 #include "mchron.h"
 
 // Convert a double to other type with decent nearest whole number rounding.
@@ -122,6 +123,7 @@ static u08 emuBacklight = 16;
 static clockDriver_t emuMonochron[] =
 {
   {CHRON_NONE,        DRAW_INIT_NONE, 0,                  0,                   0},
+  {CHRON_EXAMPLE,     DRAW_INIT_FULL, exampleInit,        exampleCycle,        0},
   {CHRON_ANALOG_HMS,  DRAW_INIT_FULL, analogHmsInit,      analogCycle,         0},
   {CHRON_ANALOG_HM,   DRAW_INIT_FULL, analogHmInit,       analogCycle,         0},
   {CHRON_DIGITAL_HMS, DRAW_INIT_FULL, digitalHmsInit,     digitalCycle,        0},
@@ -135,13 +137,13 @@ static clockDriver_t emuMonochron[] =
   {CHRON_SPEEDDIAL,   DRAW_INIT_FULL, spotSpeedDialInit,  spotSpeedDialCycle,  0},
   {CHRON_SPIDERPLOT,  DRAW_INIT_FULL, spotSpiderPlotInit, spotSpiderPlotCycle, 0},
   {CHRON_TRAFLIGHT,   DRAW_INIT_FULL, spotTrafLightInit,  spotTrafLightCycle,  0},
-  {CHRON_BIGDIG_ONE,  DRAW_INIT_FULL, bigdigInit,         bigdigCycle,         bigdigButton},
-  {CHRON_BIGDIG_TWO,  DRAW_INIT_FULL, bigdigInit,         bigdigCycle,         bigdigButton},
+  {CHRON_BIGDIG_ONE,  DRAW_INIT_FULL, bigDigInit,         bigDigCycle,         bigDigButton},
+  {CHRON_BIGDIG_TWO,  DRAW_INIT_FULL, bigDigInit,         bigDigCycle,         bigDigButton},
   {CHRON_QR_HMS,      DRAW_INIT_FULL, qrInit,             qrCycle,             0},
   {CHRON_QR_HM,       DRAW_INIT_FULL, qrInit,             qrCycle,             0},
   {CHRON_PERFTEST,    DRAW_INIT_FULL, perfInit,           perfCycle,           0}
 };
-int emuMonochronCount = sizeof(emuMonochron) / sizeof(clockDriver_t);
+static int emuMonochronCount = sizeof(emuMonochron) / sizeof(clockDriver_t);
 
 //
 // Function: main
@@ -158,7 +160,7 @@ int main(int argc, char *argv[])
   // graceful non-standard exit
   emuSigSetup();
 
-  // Do command line processing and setup the lcd device parameters
+  // Do command line processing
   retVal = emuArgcArgvGet(argc, argv);
   if (retVal != CMD_RET_OK)
     return CMD_RET_ERROR;
@@ -167,15 +169,11 @@ int main(int argc, char *argv[])
   // Do sanity check on Mario data
   if (marioTonesLen != marioBeatsLen)
   {
-    printf("Error: Mario alarm - Tone and beat array sizes not aligned: %d vs %d\n",
-      marioTonesLen, marioBeatsLen);
+    printf("%s: Mario alarm - Tone and beat array sizes not aligned: %d vs %d\n",
+      __progname, marioTonesLen, marioBeatsLen);
     return CMD_RET_ERROR;
   }
 #endif
-
-  // Welcome in mchron
-  printf("\n*** Welcome to Emuchron command line tool (build %s, %s) ***\n",
-    __DATE__, __TIME__);
 
   // Force first time init Monochron eeprom
   stubEepromReset();
@@ -189,21 +187,27 @@ int main(int argc, char *argv[])
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
 
-  // Init the lcd emulator device(s)
-  lcdDeviceInit(emuArgcArgv.lcdDeviceParam);
+  // Init the lcd controllers and display stub device(s)
+  retVal = ctrlInit(emuArgcArgv.ctrlDeviceArgs);
+  if (retVal != CMD_RET_OK)
+    return retVal;
 
   // Uncomment this if you want to join with debugger prior to using
   // anything in the glcd library for the lcd device
   //char tmpInput[10];
   //fgets(tmpInput, 10, stdin);
 
+  // Welcome in mchron
+  printf("\n*** Welcome to Emuchron command line tool (build %s, %s) ***\n\n",
+    __DATE__, __TIME__);
+
   // Clear and show welcome message on lcd device
   beep(4000, 100);
-  lcdDeviceBacklightSet(emuBacklight);
+  ctrlLcdBacklightSet(emuBacklight);
   glcdInit(mcBgColor);
   glcdPutStr2(1, 1, FONT_5X5P, "* Welcome to Emuchron Emulator *", mcFgColor);
   glcdPutStr2(1, 8, FONT_5X5P, "Enter 'h' for help", mcFgColor);
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   // Open debug logfile when requested
   if (emuArgcArgv.argDebug != 0)
@@ -211,9 +215,10 @@ int main(int argc, char *argv[])
 
   // Show our process id and (optional) ncurses output device
   // (handy for attaching a debugger :-)
-  printf("\n%s PID = %d\n", __progname, getpid());
-  if (emuArgcArgv.lcdDeviceParam.useNcurses == 1)
-    printf("ncurses tty = %s\n", emuArgcArgv.lcdDeviceParam.lcdNcurTty);
+  printf("%s PID = %d\n", __progname, getpid());
+  if (emuArgcArgv.ctrlDeviceArgs.useNcurses == 1)
+    printf("ncurses tty = %s\n",
+      emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty);
   printf("\n");
   
   // Init the clock pool supported in mchron command line mode
@@ -235,16 +240,7 @@ int main(int argc, char *argv[])
 
   // Init the command line input interface
   cmdInput.file = stdin;
-  if (emuArgcArgv.lcdDeviceParam.useNcurses == 0)
-  {
-    // No interference between readline library and ncurses
-    cmdInput.readMethod = CMD_INPUT_READLINELIB;
-  }
-  else
-  {
-    // When using ncurses we cannot use the readline library
-    cmdInput.readMethod = CMD_INPUT_MANUAL;
-  }
+  cmdInput.readMethod = CMD_INPUT_READLINELIB;
   cmdInputInit(&cmdInput);
 
   // All initialization is done!
@@ -288,9 +284,10 @@ int main(int argc, char *argv[])
   free(prompt);
   cmdInputCleanup(&cmdInput);
 
-  // Shutdown gracefully by killing audio and stopping the lcd device(s)
+  // Shutdown gracefully by killing audio and stopping the controller
+  // and lcd device(s)
   alarmSoundKill();
-  lcdDeviceEnd();
+  ctrlCleanup();
   
   // Stop debug output 
   DEBUGP("**** logging stopped");
@@ -315,10 +312,11 @@ int main(int argc, char *argv[])
 // argChar[], argDouble[], argWord[] and argString variables, based on the
 // sequence of command arguments in the command dictionary.
 //
-// A control block handler however must implement more functionality as command
-// arguments are evaluated optionally, depending on the control block type and
-// the execution state of the associated block. As such, a control block
-// handler is responsible for its own argument scanning and processing.
+// A control block handler (for if-logic and repeat commands) however must
+// implement more functionality as command arguments are evaluated optionally,
+// depending on the control block type and the execution state of the
+// associated block. As such, a control block handler is responsible for its
+// own argument scanning and processing.
 //
 
 //
@@ -345,7 +343,7 @@ int doAlarmPos(cmdLine_t *cmdLine)
   {
     alarmStateSet();
     animClockDraw(DRAW_CYCLE);
-    lcdDeviceFlush(0);
+    ctrlLcdFlush();
   }
 
   // Report the new alarm settings
@@ -404,7 +402,7 @@ int doAlarmSet(cmdLine_t *cmdLine)
       mcAlarmSwitch = ALARM_SWITCH_NONE;
       animClockDraw(DRAW_CYCLE);
     }
-    lcdDeviceFlush(0);
+    ctrlLcdFlush();
   }
 
   // Report the new alarm settings
@@ -433,7 +431,7 @@ int doAlarmToggle(cmdLine_t *cmdLine)
   {
     alarmStateSet();
     animClockDraw(DRAW_CYCLE);
-    lcdDeviceFlush(0);
+    ctrlLcdFlush();
   }
 
   // Report the new alarm settings
@@ -494,13 +492,13 @@ int doClockFeed(cmdLine_t *cmdLine)
   stubEventInit(startMode, stubHelpClockFeed);
 
   // Run clock until 'q'
-  while (ch != 'q' && ch != 'Q')
+  while (ch != 'q')
   {
     // Get timer event and execute clock cycle
     ch = stubEventGet();
 
     // Process keyboard events
-    if (ch == 's' || ch == 'S')
+    if (ch == 's')
       animClockButton(BTTN_SET);
     if (ch == '+')
       animClockButton(BTTN_PLUS);
@@ -508,7 +506,7 @@ int doClockFeed(cmdLine_t *cmdLine)
     // Execute a clock cycle for the clock
     mcClockTimeEvent = time_event;
     animClockDraw(DRAW_CYCLE);
-    lcdDeviceFlush(0);
+    ctrlLcdFlush();
     if (mcClockTimeEvent == GLCD_TRUE)
     {
       DEBUGP("Clear time event");
@@ -556,6 +554,7 @@ int doClockSelect(cmdLine_t *cmdLine)
   }
   else
   {
+    // Switch to new clock
     alarmSoundKill();
     mcClockTimeEvent = GLCD_TRUE;
     mcMchronClock = clock;
@@ -577,7 +576,7 @@ int doComments(cmdLine_t *cmdLine)
 {
   // Dump comments in the log only when we run at root command level
   if (listExecDepth == 0)
-     DEBUGP(argString);
+    DEBUGP(argString);
 
   return CMD_RET_OK;
 }
@@ -650,7 +649,7 @@ int doExecute(cmdLine_t *cmdLine)
   if (fileExecDepth >= CMD_FILE_DEPTH_MAX)
   {
     printf("stack level exceeded by last 'e' command (max=%d).\n",
-      CMD_FILE_DEPTH_MAX);  
+      CMD_FILE_DEPTH_MAX);
     return CMD_RET_ERROR;
   }
 
@@ -672,13 +671,14 @@ int doExecute(cmdLine_t *cmdLine)
 
   // Load the lines from the command file in a linked list.
   // Warning: this will reset the cmd scan global variables.
+  // When ok execute the list. If an error occured prepare for
+  // completing a stack trace.
   retVal = cmdListFileLoad(&cmdLineRoot, &cmdPcCtrlRoot, fileName,
     fileExecDepth);
   if (retVal == CMD_RET_OK)
-  {
-    // Execute the commands in the command list
     retVal = emuListExecute(cmdLineRoot, fileName);
-  }
+  else if (retVal == CMD_RET_ERROR)
+    retVal = CMD_RET_RECOVER;
 
   // We're done: decrease stack level
   fileExecDepth--;
@@ -782,6 +782,19 @@ int doHelpExpr(cmdLine_t *cmdLine)
 {
   cmdArgValuePrint(argDouble[0], GLCD_TRUE);
   printf("\n");
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doHelpMsg
+//
+// Show help message
+//
+int doHelpMsg(cmdLine_t *cmdLine)
+{
+  // Show message in the command shell
+  printf("%s\n", argString);
 
   return CMD_RET_OK;
 }
@@ -975,7 +988,46 @@ int doLcdBacklightSet(cmdLine_t *cmdLine)
 {
   // Process backlight
   emuBacklight = TO_U08(argDouble[0]);
-  lcdDeviceBacklightSet(emuBacklight);
+  ctrlLcdBacklightSet(emuBacklight);
+  ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdCursorSet
+//
+// Send x and y cursor position to controller
+//
+int doLcdCursorSet(cmdLine_t *cmdLine)
+{
+  u08 payload;
+  u08 controller = TO_U08(argDouble[0]);
+
+  // Send x position and y page to lcd controller
+  payload = TO_U08(argDouble[1]);
+  ctrlExecute(CTRL_METHOD_COMMAND, controller, GLCD_SET_Y_ADDR | payload);
+  payload = TO_U08(argDouble[2]);
+  ctrlExecute(CTRL_METHOD_COMMAND, controller, GLCD_SET_PAGE | payload);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdDisplaySet
+//
+// Switch controller displays on/off
+//
+int doLcdDisplaySet(cmdLine_t *cmdLine)
+{
+  u08 payload;
+
+  // Send display on/off to controller 0 and 1
+  payload = TO_U08(argDouble[0]);
+  ctrlExecute(CTRL_METHOD_COMMAND, 0, GLCD_ON_CTRL | payload);
+  payload = TO_U08(argDouble[1]);
+  ctrlExecute(CTRL_METHOD_COMMAND, 1, GLCD_ON_CTRL | payload);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -989,7 +1041,7 @@ int doLcdErase(cmdLine_t *cmdLine)
 {
   // Erase lcd display
   glcdClearScreen(mcBgColor);
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1014,9 +1066,84 @@ int doLcdInverse(cmdLine_t *cmdLine)
   }
 
   // Inverse the display
-  glcdFillRectangle2(0, 0, GLCD_XPIXELS, GLCD_YPIXELS, ALIGN_TOP,
-    FILL_INVERSE, mcFgColor);
-  lcdDeviceFlush(0);
+  glcdFillRectangle2(0, 0, GLCD_XPIXELS, GLCD_YPIXELS, ALIGN_TOP, FILL_INVERSE,
+    mcFgColor);
+  ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdPrint
+//
+// Print controller state and registers
+//
+int doLcdPrint(cmdLine_t *cmdLine)
+{
+  // Print controller state and registers
+  ctrlRegPrint();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdRead
+//
+// Read data from controller lcd using the internal controller cursor
+//
+int doLcdRead(cmdLine_t *cmdLine)
+{
+  int varId;
+  u08 lcdByte;
+
+  // Read data from controller lcd buffer
+  lcdByte = ctrlExecute(CTRL_METHOD_READ, TO_U08(argDouble[0]), 0);
+
+  // Assign the lcd byte value to the variable
+  varId = varIdGet(argWord[1]);
+  if (varId < 0 )
+  {
+    printf("%s? internal error\n", cmdLine->cmdCommand->cmdArg[0].argName);
+    return CMD_RET_ERROR;
+  }
+  varValSet(varId, (double)lcdByte);
+
+  // Print the variable holding the lcd byte
+  if (echoCmd == CMD_ECHO_YES)
+    varPrint(cmdLine->cmdCommand->cmdArg[1].argName, argWord[1]);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdStartLineSet
+//
+// Set display startline in controllers
+//
+int doLcdStartLineSet(cmdLine_t *cmdLine)
+{
+  u08 payload;
+
+  // Send display startline to controller 0 and 1
+  payload = TO_U08(argDouble[0]);
+  ctrlExecute(CTRL_METHOD_COMMAND, 0, GLCD_START_LINE | payload);
+  payload = TO_U08(argDouble[1]);
+  ctrlExecute(CTRL_METHOD_COMMAND, 1, GLCD_START_LINE | payload);
+  ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdWrite
+//
+// Write data to controller lcd using the internal controller cursor
+//
+int doLcdWrite(cmdLine_t *cmdLine)
+{
+  // Write data to controller lcd
+  ctrlExecute(CTRL_METHOD_WRITE, TO_U08(argDouble[0]), TO_U08(argDouble[1]));
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1056,13 +1183,13 @@ int doMonochron(cmdLine_t *cmdLine)
   if (argChar[1] == 'r')
   {
     stubEepromReset();
-    lcdDeviceBacklightSet(OCR2A_VALUE);
+    ctrlLcdBacklightSet(OCR2A_VALUE);
   }
   else
   {
     // No init needed so set the backlight as stored in the eeprom
     myBacklight = eeprom_read_byte((uint8_t *)EE_BRIGHT) >> OCR2B_BITSHIFT;
-    lcdDeviceBacklightSet(myBacklight);
+    ctrlLcdBacklightSet(myBacklight);
   }
 
   // Init stub event handler used in Monochron
@@ -1084,7 +1211,8 @@ int doMonochron(cmdLine_t *cmdLine)
   mcAlarmM = emuAlarmM;
   mcBgColor = emuBgColor;
   mcFgColor = emuFgColor;
-  lcdDeviceBacklightSet(emuBacklight);
+  ctrlLcdBacklightSet(emuBacklight);
+  ctrlLcdFlush();
 
   // Return to line mode if needed
   if (myKbMode == KB_MODE_LINE)
@@ -1128,7 +1256,7 @@ int doPaintAscii(cmdLine_t *cmdLine)
     if (echoCmd == CMD_ECHO_YES)
       printf("vert px=%d\n", (int)len);
   }
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1148,7 +1276,7 @@ int doPaintCircle(cmdLine_t *cmdLine)
   // Draw circle
   glcdCircle2(TO_U08(argDouble[0]), TO_U08(argDouble[1]), TO_U08(argDouble[2]),
     TO_U08(argDouble[3]), color);
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1178,7 +1306,7 @@ int doPaintCircleFill(cmdLine_t *cmdLine)
   // Draw filled circle
   glcdFillCircle2(TO_U08(argDouble[0]), TO_U08(argDouble[1]),
     TO_U08(argDouble[2]), pattern, color);
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1197,7 +1325,7 @@ int doPaintDot(cmdLine_t *cmdLine)
 
   // Draw dot
   glcdDot(TO_U08(argDouble[0]), TO_U08(argDouble[1]), color);
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1217,7 +1345,7 @@ int doPaintLine(cmdLine_t *cmdLine)
   // Draw line
   glcdLine(TO_U08(argDouble[0]), TO_U08(argDouble[1]), TO_U08(argDouble[2]),
     TO_U08(argDouble[3]), color);
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1261,7 +1389,7 @@ int doPaintNumber(cmdLine_t *cmdLine)
     if (echoCmd == CMD_ECHO_YES)
       printf("vert px=%d\n", (int)len);
   }
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   // Free the allocated output string
   free(valString);
@@ -1284,7 +1412,7 @@ int doPaintRect(cmdLine_t *cmdLine)
   // Draw rectangle
   glcdRectangle(TO_U08(argDouble[0]), TO_U08(argDouble[1]),
     TO_U08(argDouble[2]), TO_U08(argDouble[3]), color);
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1305,7 +1433,7 @@ int doPaintRectFill(cmdLine_t *cmdLine)
   glcdFillRectangle2(TO_U08(argDouble[0]), TO_U08(argDouble[1]),
     TO_U08(argDouble[2]), TO_U08(argDouble[3]), TO_U08(argDouble[4]),
     TO_U08(argDouble[5]), color);
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1424,7 +1552,7 @@ int doStatsPrint(cmdLine_t *cmdLine)
   stubStatsPrint();
   
   // Print glcd interface and lcd performance statistics
-  lcdStatsPrint();
+  ctrlStatsPrint(CTRL_STATS_FULL);
   
   return CMD_RET_OK;
 }
@@ -1440,7 +1568,7 @@ int doStatsReset(cmdLine_t *cmdLine)
   stubStatsReset();
 
   // Reset glcd interface and lcd performance statistics
-  lcdStatsReset();
+  ctrlStatsReset(CTRL_STATS_FULL);
 
   if (echoCmd == CMD_ECHO_YES)
     printf("statistics reset\n");
@@ -1590,7 +1718,7 @@ int doVarSet(cmdLine_t *cmdLine)
 //
 // Function: doWait
 //
-// Wait for keypress or pause in multiple of 1 msec.
+// Wait for keypress or pause in multiples of 1 msec.
 //
 int doWait(cmdLine_t *cmdLine)
 {
@@ -1612,8 +1740,8 @@ int doWait(cmdLine_t *cmdLine)
     ch = kbWaitDelay(delay);
   }
 
-  // If a 'q' was entered, we need to quit the list execution 
-  if ((ch == 'q' || ch == 'Q') && listExecDepth > 0)
+  // A 'q' will interrupt any command execution
+  if (ch == 'q' && listExecDepth > 0)
   {
     printf("quit\n");
     return CMD_RET_INTERRUPT;

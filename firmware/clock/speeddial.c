@@ -35,7 +35,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
@@ -49,17 +48,11 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal);
 //
 void spotSpeedDialCycle(void)
 {
-  // Update alarm info in clock
-  spotAlarmAreaUpdate();
-
-  // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+  // Update common Spotfire clock elements and check if clock requires update
+  if (spotCommonUpdate() == GLCD_FALSE)
     return;
 
   DEBUGP("Update SpeedDial");
-
-  // Update common parts of a Spotfire clock
-  spotCommonUpdate();
 
   // Verify changes in sec
   if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
@@ -99,9 +92,7 @@ void spotSpeedDialInit(u08 mode)
 
     // Draw speed dial markers
     for (j = 0; j < 7; j++)
-    {
-       spotSpeedDialMarkerUpdate(SPEED_X_START + i * SPEED_X_OFFSET_SIZE, j);
-    }
+      spotSpeedDialMarkerUpdate(SPEED_X_START + i * SPEED_X_OFFSET_SIZE, j);
   }
   spotAxisInit(CHRON_SPEEDDIAL);
 }
@@ -119,16 +110,16 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
 
   // Calculate changes in needle
   tmp = sin(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * oldVal +
-          SPEED_NDL_RADIAL_START);
+    SPEED_NDL_RADIAL_START);
   oldDx = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
   tmp = -cos(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * oldVal +
-          SPEED_NDL_RADIAL_START);
+    SPEED_NDL_RADIAL_START);
   oldDy = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
   tmp = sin(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * newVal +
-          SPEED_NDL_RADIAL_START);
+    SPEED_NDL_RADIAL_START);
   newDx = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
   tmp = -cos(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * newVal +
-          SPEED_NDL_RADIAL_START);
+    SPEED_NDL_RADIAL_START);
   newDy = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
 
   // Only work on the needle when it has changed

@@ -8,7 +8,7 @@
 #       graphics fun than this one).
 #
 
-# Erase LCD display
+# Erase lcd display
 le
 
 # Do rectangle box

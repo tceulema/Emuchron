@@ -44,6 +44,11 @@
 // Button keypress delay (msec)
 #define KEYPRESS_DLY_1	150
 
+// Lcd brightness related constants
+#define OCR2B_BITSHIFT	0
+#define OCR2B_PLUS	1
+#define OCR2A_VALUE	16
+
 // Main entry for the config menu
 void menu_main(void);
 #endif

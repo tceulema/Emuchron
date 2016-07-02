@@ -7,7 +7,10 @@
 #       in perftest.c [firmware/emulator].
 #
 
-# Erase LCD display
+# Give help message
+hm --- press 'q' to quit --- 
+
+# Erase lcd display
 le
 
 vs xCenter=64

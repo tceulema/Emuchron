@@ -79,41 +79,29 @@ void sliderCycle(void)
 
   // Verify changes in hour
   if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-  {
     sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_HOUR_Y_START, mcClockOldTH,
       mcClockNewTH, mcClockInit);
-  }
   // Verify changes in min
   if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-  {
     sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_MIN_Y_START, mcClockOldTM,
       mcClockNewTM, mcClockInit);
-  }
   // Verify changes in sec
   if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-  {
     sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_SEC_Y_START, mcClockOldTS,
       mcClockNewTS, mcClockInit);
-  }
 
   // Verify changes in day
   if (mcClockNewDD != mcClockOldDD || mcClockInit == GLCD_TRUE)
-  {
     sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_DAY_Y_START, mcClockOldDD,
       mcClockNewDD, mcClockInit);
-  }
   // Verify changes in month
   if (mcClockNewDM != mcClockOldDM || mcClockInit == GLCD_TRUE)
-  {
     sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_MON_Y_START, mcClockOldDM,
       mcClockNewDM, mcClockInit);
-  }
   // Verify changes in year
   if (mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
-  {
     sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START, mcClockOldDY,
       mcClockNewDY, mcClockInit);
-  }
 }
 
 //
@@ -133,10 +121,8 @@ static void sliderElementInit(u08 x, u08 y, u08 factor, char *label)
   {
     // Draw marker on top row only if in range
     if (i <= factor)
-    {
       glcdDot(markerX + SLIDER_MARKER_WIDTH / 2, markerY + SLIDER_MARKER_HEIGHT / 2,
         mcFgColor);
-    }
     // Draw marker on bottom row
     glcdDot(markerX + SLIDER_MARKER_WIDTH / 2,
       markerY + SLIDER_MARKER_HEIGHT + 1 + SLIDER_MARKER_HEIGHT / 2,

@@ -27,16 +27,9 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcU8Util1;
-extern volatile uint8_t mcUpdAlarmSwitch;
-extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
-
-extern unsigned char *months[12];
-extern unsigned char *days[7];
 
 // Structure defining the LCD element locations for a single clock
 typedef struct _nerdLocation_t
@@ -58,24 +51,30 @@ typedef struct _nerdLocation_t
   uint8_t digitsDY;	// Number of digits of time h
 } nerdLocation_t;
 
+// Location definitions for the binary, octal and hex clock elements
 static nerdLocation_t nerdLocation[] =
 {
   // Binary clock
-  {2,
-   17, 28, 5, 28 + 5 * 4 + 2, 6, 28 + 11 * 4 + 2 * 2,  6,
-   24, 18, 5, 18 + 6 * 4    , 4, 18 + 11 * 4        , 12},
+  {
+    2,
+    17, 28, 5, 28 + 5 * 4 + 2, 6, 28 + 11 * 4 + 2 * 2,  6,
+    24, 18, 5, 18 + 6 * 4    , 4, 18 + 11 * 4        , 12
+  },
   // Octal clock
-  {8,
-   33, 48, 2, 48 + 3 * 4 + 2, 2, 48 +  6 * 4 + 2 * 2,  2,
-   40, 42, 2, 42 + 4 * 4    , 2, 42 +  8 * 4        ,  4},
+  {
+    8,
+    33, 48, 2, 48 + 3 * 4 + 2, 2, 48 +  6 * 4 + 2 * 2,  2,
+    40, 42, 2, 42 + 4 * 4    , 2, 42 +  8 * 4        ,  4
+  },
   // Hex clock
-  {16,
-   49, 46, 2, 46 + 4 * 4 + 2, 2, 46 +  8 * 4 + 2 * 2,  2,
-   56, 44, 2, 44 + 5 * 4    , 1, 44 +  9 * 4        ,  3}
+  {
+    16,
+    49, 46, 2, 46 + 4 * 4 + 2, 2, 46 +  8 * 4 + 2 * 2,  2,
+    56, 44, 2, 44 + 5 * 4    , 1, 44 +  9 * 4        ,  3
+  }
 };
 
 // Local function prototypes
-static void nerdAlarmAreaUpdate(void);
 static void nerdBaseClockUpdate(uint8_t clock);
 static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
   uint16_t oldVal, char *numberStr);
@@ -88,7 +87,8 @@ static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
 void nerdCycle(void)
 {
   // Update alarm info in clock
-  nerdAlarmAreaUpdate();
+  animAlarmAreaUpdate(NERD_ALARM_X_START, NERD_ALARM_Y_START,
+    ALARM_AREA_ALM_ONLY);
 
   // Only if a time event or init is flagged we need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
@@ -126,64 +126,6 @@ void nerdInit(u08 mode)
     
   // Force the alarm info area to init itself
   mcAlarmSwitch = ALARM_SWITCH_NONE;
-  mcU8Util1 = GLCD_FALSE;
-}
-
-//
-// Function: nerdAlarmAreaUpdate
-//
-// Draw update in digital clock alarm area
-//
-static void nerdAlarmAreaUpdate(void)
-{
-  u08 inverseAlarmArea = GLCD_FALSE;
-  u08 newAlmDisplayState = GLCD_FALSE;
-  char msg[6];
-
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
-  {
-    if (mcAlarmSwitch == ALARM_SWITCH_ON)
-    {
-      // Show alarm time
-      animValToStr(mcAlarmH, msg);
-      msg[2] = ':';
-      animValToStr(mcAlarmM, &(msg[3]));
-      glcdPutStr2(NERD_ALARM_X_START, NERD_ALARM_Y_START, FONT_5X5P, msg, mcFgColor);
-    }
-    else
-    {
-      // Clear area (remove alarm time)
-      glcdFillRectangle(NERD_ALARM_X_START - 1, NERD_ALARM_Y_START - 1, 19, 7, mcBgColor);
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-    glcdFillRectangle2(NERD_ALARM_X_START - 1, NERD_ALARM_Y_START - 1, 19, 7,
-      ALIGN_AUTO, FILL_INVERSE, mcBgColor);
 }
 
 //
@@ -326,7 +268,7 @@ static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
   }
 
   // Close the generated string
-  numberStr[digits] = '\0'; 
+  numberStr[digits] = '\0';
 
   // If we need to init our clock overide the mismatch value and indicate
   // that the entire string is to be reported

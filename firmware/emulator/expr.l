@@ -5,9 +5,7 @@
 
 %{
 #define YYSTYPE double
-#include <stdlib.h>
 #include "expr.tab.h"
-#include "listvarutil.h"
 %}
 
 white [ \t]+
@@ -15,13 +13,15 @@ digit [0-9]
 integer {digit}+
 exponent [e][+-]?{integer}
 double {integer}("."{integer})?{exponent}?
-var [a-zA-Z]+
+hex 0x[a-fA-F0-9]+
+var [a-zA-Z_]+
 
 %%
 
 {white} { }
 
 {double} { yylval = atof(yytext); return NUMBER; }
+{hex}	{ yylval = (double)strtol(yytext, NULL, 16); return NUMBER; }
 "false" { yylval = 0; return NUMBER; }
 "true"	{ yylval = 1; return NUMBER; }
 "null"	{ yylval = 0; return NUMBER; }
@@ -36,6 +36,12 @@ var [a-zA-Z]+
 
 "&&"	{ return AND; }
 "||"	{ return OR; }
+
+"&"	{ return BITAND; }
+"|"	{ return BITOR; }
+"~"	{ return BITNOT; }
+">>"	{ return SHIFTR; }
+"<<"	{ return SHIFTL; }
 
 ">="	{ return GET; }
 "<="	{ return LET; }

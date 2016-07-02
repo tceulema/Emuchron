@@ -9,7 +9,7 @@
 # - Set the wait delay between dates using variable 'w'
 #
 # Usage example (with analog HMS, wait delay of 0.25 sec):
-# cs 1
+# cs 2
 # vs w=250
 # e s ../script/year.txt
 #

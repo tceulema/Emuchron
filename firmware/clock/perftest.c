@@ -5,44 +5,50 @@
 
 //
 // This module is not a clock but instead is a high level glcd graphics
-// performance test suite to be run on Monochron clock hardware.
+// performance test suite to be run on Monochron clock hardware and in the
+// Emuchron emulator.
 // The main purpose of this test suite is to get insight in the performance of
-// high level glcd graphics functions. The test suite is used to verify whether
-// (perceived) performance improvements in high level glcd graphics functions
-// actually deliver or not, and whether new/optimized graphics code is worth
-// any (substantial) increase in atmel glcd object size.
+// high and low level glcd graphics functions. The test suite is used to verify
+// whether (perceived) performance improvements in these glcd graphics
+// functions actually deliver or not, and whether new/optimized graphics code
+// is worth any (substantial) increase in atmel glcd object size.
 //
 // When building Monochron firmware, this module should be the only 'clock' in
 // the Monochron[] array as it is designed to run indefinitely. Again, this is
 // a test tool and not a functional clock. On Monochron, once the cycle()
 // method of this 'clock' is called, it will never return control to main().
-// This module however requires the analog clock module to build as its
-// functionality is used by a test in the glcdLine suite.
-// 
-// The code will ofcourse run in the Emuchron emulator, but as the emulator
-// runs on most likely an Intel/AMD class cpu, its speed performance results
-// are irrelevant. However, information related to bytes sent to and read from
-// the lcd, user calls to set the lcd cursor, and byte and bit efficiency are
-// useful metrics that are not retrieved while running the test on Monochron.
-// Therefore, most insight in performance is gained by combining the test
-// results from both the Emuchron emulator and Monochron hardware.
-// Running a test using the glut device, a test usually completes within a
-// second. Running a test using the ncurses device a test will take much
-// longer to complete but still less than on actual hardware. From a glcd
-// statistics point of view it does not matter which lcd device is used.
-//
 // In contrast with Monochron, in the emulator at the root level in a module,
 // a 'q' keypress will exit the test suite and returns to the mchron caller
 // function. In most cases this will be the mchron command prompt.
+// 
+// The code also runs in the Emuchron emulator, but as the emulator runs on
+// most likely an Intel/AMD class cpu, its speed performance results are
+// irrelevant. However, information related to commands and bytes sent to and
+// lcd data read from the controllers, and user calls to set the lcd cursor are
+// useful metrics that are not retrieved while running the test on Monochron.
+// Therefore, most insight in performance is gained by combining the statistics
+// test results from the Emuchron emulator and test run time from the actual
+// Monochron hardware.
+//
+// Running a test using the glut device, a test usually completes within a
+// second. Running a test using the ncurses device a test will take much
+// longer to complete but still less than on actual hardware. From a glcd and
+// controller statistics point of view it does not matter which lcd device is
+// used. It is therefor recommended to use the glut device only since it runs
+// in its own thread and is therefor so much faster than the ncurses device.
+//
+// Note that this module requires the analog clock module to build as its
+// functionality is used by a test in the glcdLine suite.
 //
 // The following high level glcd graphics functions are tested:
-// - glcdCircle2 (specific use of glcdDot)
+// - glcdCircle2
 // - glcdDot
-// - glcdLine (specific use of glcdDot)
+// - glcdLine
 // - glcdFillCircle2 (specific use of glcdFillRectangle2)
 // - glcdFillRectangle2
 // - glcdPutStr3
 // - glcdPutStr3v
+// - glcdPutStr
 //
 // The following high level glcd graphics function is not tested:
 // - glcdRectangle (covered by glcdFillRectangle2 tests)
@@ -77,7 +83,7 @@
 #ifdef EMULIN
 #include <stdio.h>
 #include "../emulator/stub.h"
-#include "../emulator/lcd.h"
+#include "../emulator/controller.h"
 #endif
 #ifndef EMULIN
 #include "../util.h"
@@ -90,8 +96,9 @@
 #include "analog.h"
 
 // Loop values for individual tests. These loop values are set such that a
-// test run on Monochron hardware in Emuchron v1.3 lasts about 2 minutes.
-#define PERF_CIRCLE2_1		125
+// test, built for Emuchron v1.3 using avr-gcc 4.3.5 (Debian 6), runs on
+// Monochron hardware in about 2 minutes.
+/*#define PERF_CIRCLE2_1	125
 #define PERF_CIRCLE2_2		162
 #define PERF_DOT_1		30
 #define PERF_DOT_2		39
@@ -111,7 +118,38 @@
 #define PERF_PUTSTR3V_1		648
 #define PERF_PUTSTR3V_2		1354
 #define PERF_PUTSTR3V_3		824
-#define PERF_PUTSTR3V_4		1508
+#define PERF_PUTSTR3V_4		1508*/
+
+// Refer to appendix B in Emuchron_Manual.pdf [support].
+// Draw performance for most glcd functions has improved considerably since
+// Emuchron v1.3, the first time when performance tests were run, let alone
+// since Emuchron v1.0. For some tests the run time in v2.1 has become too low
+// to make a proper evaluation of test time results.
+// Therefore, for Emuchron v2.1 the test loop values are reset in such a way
+// that a test, built for Emuchron v2.1 using avr-gcc 4.3.5 (Debian 6), runs on
+// Monochron hardware in about 2 minutes.
+#define PERF_CIRCLE2_1		214
+#define PERF_CIRCLE2_2		500
+#define PERF_DOT_1		59
+#define PERF_DOT_2		72
+#define PERF_LINE_1		3
+#define PERF_LINE_2		26
+#define PERF_FILLCIRCLE2_1	276
+#define PERF_FILLCIRCLE2_2	912
+#define PERF_FILLRECTANGLE2_1	1139
+#define PERF_FILLRECTANGLE2_2	5898
+#define PERF_FILLRECTANGLE2_3	3593
+#define PERF_FILLRECTANGLE2_4	3510
+#define PERF_PUTSTR3_1		1109
+#define PERF_PUTSTR3_2		2142
+#define PERF_PUTSTR3_3		1025
+#define PERF_PUTSTR3_4		2142
+#define PERF_PUTSTR3_5		2017
+#define PERF_PUTSTR3V_1		857
+#define PERF_PUTSTR3V_2		2043
+#define PERF_PUTSTR3V_3		1027
+#define PERF_PUTSTR3V_4		2336
+#define PERF_PUTSTR_1		5130
 
 // Defines on button press action flavors
 #define PERF_WAIT_CONTINUE	0
@@ -131,14 +169,15 @@ typedef struct
   u08 endMin;
   u08 endHour;
   u16 loopsDone;
-  long elementsDrawn; 
+  long elementsDrawn;
 } testStats_t;
 
-// Functional date/time variables
+// Functional date/time/init variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
+extern volatile uint8_t mcClockInit;
 
 // Functional alarm variables
 extern volatile uint8_t mcAlarmSwitch;
@@ -172,11 +211,12 @@ static u08 perfTestFillRectangle2(void);
 static u08 perfTestLine(void);
 static u08 perfTestPutStr3(void);
 static u08 perfTestPutStr3v(void);
+static u08 perfTestPutStr(void);
 
 // Runtime environment for the performance test
 static testStats_t testStats;
 
-// Text string for glcdPutStr3/glcdPutStr3v tests
+// Text string for glcdPutStr/glcdPutStr3/glcdPutStr3v tests
 static char textLine[33];
 
 //
@@ -211,6 +251,8 @@ void perfCycle(void)
     if (perfTestPutStr3() == GLCD_TRUE)
       break;
     if (perfTestPutStr3v() == GLCD_TRUE)
+      break;
+    if (perfTestPutStr() == GLCD_TRUE)
       break;
   }
 
@@ -283,7 +325,7 @@ static u08 perfTestCircle2(void)
       {
         glcdCircle2(64, 32, j, counter % 3, mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
         counter++;
       }
@@ -294,7 +336,7 @@ static u08 perfTestCircle2(void)
       {
         glcdCircle2(64, 32, j, counter % 3, mcBgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
         counter++;
       }
@@ -334,11 +376,9 @@ static u08 perfTestCircle2(void)
       {
         // Paint small circles
         for (y = 8; y < 58; y = y + 12)
-        {
           glcdCircle2(x, y, 5, 0, mcFgColor);
-        }
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -346,11 +386,9 @@ static u08 perfTestCircle2(void)
       {
         // Clear small circles
         for (y = 8; y < 58; y = y + 12)
-        {
           glcdCircle2(x, y, 5, 0, mcBgColor);
-        }
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -412,11 +450,9 @@ static u08 perfTestDot(void)
         for (x = 0; x < GLCD_XPIXELS; x++)
         {
           for (y = j; y < GLCD_YPIXELS; y = y + 8)
-          {
             glcdDot(x, y, mcFgColor);
-          }
 #ifdef EMULIN
-          lcdDeviceFlush(0);
+          ctrlLcdFlush();
 #endif
         }
       }
@@ -427,11 +463,9 @@ static u08 perfTestDot(void)
         for (x = 0; x < GLCD_XPIXELS; x++)
         {
           for (y = j; y < GLCD_YPIXELS; y = y + 8)
-          {
             glcdDot(x, y, mcBgColor);
-          }
 #ifdef EMULIN
-          lcdDeviceFlush(0);
+          ctrlLcdFlush();
 #endif
         }
       }
@@ -473,11 +507,9 @@ static u08 perfTestDot(void)
         for (x = 0; x < GLCD_XPIXELS; x++)
         {
           for (y = j; y < GLCD_YPIXELS; y = y + 8)
-          {
             glcdDot(x, y, (i + 1) & 0x1);
-          }
 #ifdef EMULIN
-          lcdDeviceFlush(0);
+          ctrlLcdFlush();
 #endif
         }
       }
@@ -488,11 +520,9 @@ static u08 perfTestDot(void)
         for (x = 0; x < GLCD_XPIXELS; x++)
         {
           for (y = j; y < GLCD_YPIXELS; y = y + 8)
-          {
             glcdDot(x, y, (i + 1) & 0x1);
-          }
 #ifdef EMULIN
-          lcdDeviceFlush(0);
+          ctrlLcdFlush();
 #endif
         }
       }
@@ -559,7 +589,7 @@ static u08 perfTestLine(void)
       {
         analogCycle();
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
         // Do statistics
         testStats.elementsDrawn = testStats.elementsDrawn + 3;
@@ -571,6 +601,7 @@ static u08 perfTestLine(void)
           interruptTest = GLCD_TRUE;
           break;
         }
+        mcClockInit = GLCD_FALSE;
         mcUpdAlarmSwitch = GLCD_FALSE;
       }
 
@@ -605,11 +636,11 @@ static u08 perfTestLine(void)
         // Draw and remove the line
         glcdLine(xA, yA, xB, yB, mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
         glcdLine(xA, yA, xB, yB, mcBgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -675,7 +706,7 @@ static u08 perfTestFillCircle2(void)
           counter++;
         glcdFillCircle2(64, 32, j, counter % 6, (j + counter) % 2);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
         counter++;
       }
@@ -717,11 +748,9 @@ static u08 perfTestFillCircle2(void)
       {
         // Paint small circles
         for (y = 8; y < 58; y = y + 12)
-        {
           glcdFillCircle2(x, y, 5, pattern, color);
-        }
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -808,10 +837,10 @@ static u08 perfTestFillRectangle2(void)
             (x + y + i) % 6, i % 2);
           dy = y + dy + 1;
 #ifdef EMULIN
-         lcdDeviceFlush(0);
+         ctrlLcdFlush();
 #endif
         }
-        dx = x + dx + 1;   
+        dx = x + dx + 1;
       }
 
       // Do statistics
@@ -860,10 +889,10 @@ static u08 perfTestFillRectangle2(void)
       {
         y = x % 6;
       }
-      glcdFillRectangle2(4, 4, 50, 35, ALIGN_AUTO, y, ((i / 5) + 1) & 0x1); 
-      glcdFillRectangle2(27, 17, 50, 45, ALIGN_AUTO, y, ((i / 5) + 1) & 0x1); 
+      glcdFillRectangle2(4, 4, 50, 35, ALIGN_AUTO, y, ((i / 5) + 1) & 0x1);
+      glcdFillRectangle2(27, 17, 50, 45, ALIGN_AUTO, y, ((i / 5) + 1) & 0x1);
 #ifdef EMULIN
-      lcdDeviceFlush(0);
+      ctrlLcdFlush();
 #endif
       x++;
 
@@ -912,9 +941,9 @@ static u08 perfTestFillRectangle2(void)
       {
         y = x % 6;
       }
-      glcdFillRectangle2(1, 1, 126, 60, i % 3, y, ((i / 5) + 1) & 0x1); 
+      glcdFillRectangle2(1, 1, 126, 60, i % 3, y, ((i / 5) + 1) & 0x1);
 #ifdef EMULIN
-      lcdDeviceFlush(0);
+      ctrlLcdFlush();
 #endif
       x++;
 
@@ -951,9 +980,9 @@ static u08 perfTestFillRectangle2(void)
     y = 0;
     for (i = 0; i < PERF_FILLRECTANGLE2_4; i++)
     {
-      glcdFillRectangle2(1, 1, 126, 60, (i * 5) % 3, i % 3 + 1, i & 0x1); 
+      glcdFillRectangle2(1, 1, 126, 60, (i * 5) % 3, i % 3 + 1, i & 0x1);
 #ifdef EMULIN
-      lcdDeviceFlush(0);
+      ctrlLcdFlush();
 #endif
 
       // Do statistics
@@ -1017,7 +1046,7 @@ static u08 perfTestPutStr3(void)
       {
         glcdPutStr3(1, y, FONT_5X7N, textLine, 1, 1, mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -1059,7 +1088,7 @@ static u08 perfTestPutStr3(void)
       {
         glcdPutStr3(2, y, FONT_5X7N, textLine, 3, 3, mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -1100,7 +1129,7 @@ static u08 perfTestPutStr3(void)
       {
         glcdPutStr3(2, y, FONT_5X5P, textLine, 1, 1, mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -1142,7 +1171,7 @@ static u08 perfTestPutStr3(void)
       {
         glcdPutStr3(4, y, FONT_5X5P, textLine, 3, 3, mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -1184,7 +1213,7 @@ static u08 perfTestPutStr3(void)
       {
         glcdPutStr3(1, y, FONT_5X7N, textLine, 1, 1, mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -1250,7 +1279,7 @@ static u08 perfTestPutStr3v(void)
         glcdPutStr3v(x, 61, FONT_5X5P, ORI_VERTICAL_BU, textLine, 1, 1,
           mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -1293,7 +1322,7 @@ static u08 perfTestPutStr3v(void)
         glcdPutStr3v(x, 60, FONT_5X7N, ORI_VERTICAL_BU, textLine, 3, 2,
           mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -1336,7 +1365,7 @@ static u08 perfTestPutStr3v(void)
         glcdPutStr3v(x, 2, FONT_5X7N, ORI_VERTICAL_TD, textLine, 1, 1,
           mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
@@ -1379,13 +1408,78 @@ static u08 perfTestPutStr3v(void)
         glcdPutStr3v(x, 4, FONT_5X5P, ORI_VERTICAL_TD, textLine, 3, 2,
           mcFgColor);
 #ifdef EMULIN
-        lcdDeviceFlush(0);
+        ctrlLcdFlush();
 #endif
       }
 
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 7;
+
+      // Check for keypress interrupt
+      button = perfButtonGet();
+      if (button != 0)
+      {
+        interruptTest = GLCD_TRUE;
+        break;
+      }
+    }
+
+    // End test and report statistics
+    button = perfTestEnd(interruptTest);
+  }
+
+  return GLCD_FALSE;
+}
+
+//
+// Function: perfTestPutStr
+//
+// Performance test of glcdPutStr()
+//
+static u08 perfTestPutStr(void)
+{
+  u08 button;
+  u08 interruptTest;
+  int i;
+  u08 y;
+  char text = '\0';
+
+  // Give test suite welcome screen
+  button = perfSuiteWelcome("glcdPutStr");
+  if (button == 'q')
+    return GLCD_TRUE;
+  else if (button != BTTN_PLUS)
+    return GLCD_FALSE;
+
+  // Test 1: Draw text lines, beging the most common use for this function.
+  button = perfTestInit("glcdPutStr", 1);
+  while (button == BTTN_PLUS)
+  {
+    // Prepare display for test
+    glcdClearScreen(mcBgColor);
+
+    // Fill screen text strings
+    interruptTest = GLCD_FALSE;
+    perfTestBegin();
+    for (i = 0; i < PERF_PUTSTR_1; i++)
+    {
+      // Generate text string
+      perfTextCreate(21, &text);
+
+      // Paint strings
+      for (y = 0; y < GLCD_CONTROLLER_YPAGES; y++)
+      {
+        glcdSetAddress(1, y);
+        glcdPutStr(textLine, mcFgColor);
+#ifdef EMULIN
+        ctrlLcdFlush();
+#endif
+      }
+
+      // Do statistics
+      testStats.loopsDone++;
+      testStats.elementsDrawn = testStats.elementsDrawn + 8;
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1435,23 +1529,15 @@ static u08 perfButtonWait(u08 type)
   // Give wait message
   glcdFillRectangle2(0, 58, 127, 5, ALIGN_TOP, FILL_BLANK, mcFgColor);
   if (type == PERF_WAIT_CONTINUE)
-  {
     glcdPutStr2(1, 58, FONT_5X5P, "press button to continue", mcFgColor);
-  }
   else if (type == PERF_WAIT_ENTER_SKIP)
-  {
     glcdPutStr2(1, 58, FONT_5X5P, "+ = enter, set/menu = skip", mcFgColor);
-  }
   else if (type == PERF_WAIT_START_SKIP)
-  {
     glcdPutStr2(1, 58, FONT_5X5P, "+ = start, set/menu = skip", mcFgColor);
-  }
   else // type == PERF_WAIT_RESTART_END
-  {
     glcdPutStr2(1, 58, FONT_5X5P, "+ = restart, set/menu = end", mcFgColor);
-  }
 #ifdef EMULIN
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 #endif
 
   // Clear any button pressed and wait for button
@@ -1465,13 +1551,15 @@ static u08 perfButtonWait(u08 type)
 #else
   // Get +,s,m,q, others default to MENU button
   char ch = kbWaitKeypress(GLCD_FALSE);
+  if (ch >= 'A' && ch <= 'Z')
+    ch = ch - 'A' + 'a';
   if (ch == '+')
     button = BTTN_PLUS;
-  else if (ch == 's' || ch == 'S')    
+  else if (ch == 's')    
     button = BTTN_SET;
-  else if (ch == 'm' || ch == 'M')    
+  else if (ch == 'm')    
     button = BTTN_MENU;
-  else if (ch == 'q' || ch == 'Q')
+  else if (ch == 'q')
     button = 'q';
   else
     button = BTTN_MENU;
@@ -1541,8 +1629,8 @@ static void perfTestBegin(void)
 #ifdef EMULIN
   // In case we're using glut, give the lcd device some time to catch up
   _delay_ms(250);
-  // Reset glcd/lcd statistics
-  lcdStatsReset();
+  // Reset glcd/controller statistics
+  ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
 #endif
 
   // Clear previous test statistics
@@ -1582,13 +1670,13 @@ static u08 perfTestEnd(u08 interruptTest)
   // In case we're using glut, give the lcd device some time to catch up
   _delay_ms(250);
 
-  // Give glcd/lcd statistics
-  lcdStatsPrint();
+  // Give test end result and glcd/controller statistics
   printf("test   : %s - %02d\n", testStats.text, testStats.testId);
   if (interruptTest == GLCD_FALSE)
     printf("status : %s\n", "completed");
   else
     printf("status : %s\n", "aborted");
+  ctrlStatsPrint(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
 #endif
 
   // Give test statistics screen
@@ -1672,7 +1760,7 @@ static u08 perfTestInit(char *label, u08 testId)
 static void perfTestTimeInit(void)
 {
   mcClockOldTS = mcClockNewTS = mcClockOldTM = mcClockNewTM = 0;
-  mcClockOldTH = mcClockNewTH = 0;
+  mcClockOldTH = mcClockNewTH = 1;
   mcClockOldDD = mcClockNewDD = mcClockOldDM = mcClockNewDM = 1;
   mcClockOldDY = mcClockNewDY = 15;
   mcAlarming = GLCD_FALSE;
@@ -1697,7 +1785,7 @@ static u08 perfTestTimeNext(void)
     // Next second
     mcClockNewTS++;
   }
-  else if (mcClockNewTM != 22)
+  else if (mcClockNewTM != 59)
   {
     // Next minute
     mcClockNewTS = 0;
@@ -1705,10 +1793,10 @@ static u08 perfTestTimeNext(void)
   }
   else
   {
-    // End of 23 minute duration
+    // End of hour duration
     mcClockNewTS = 0;
     mcClockNewTM = 0;
-    mcClockNewTH = 0;
+    mcClockNewTH = 1;
     return GLCD_TRUE;
   }
 

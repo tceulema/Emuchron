@@ -6,6 +6,8 @@
 #ifndef INTERPRETER_H
 #define INTERPRETER_H
 
+#include <stdio.h>
+
 // The program counter control block execution logic types
 #define PC_CONTINUE		0
 #define PC_REPEAT_FOR		1
@@ -57,6 +59,9 @@
 // The max number of mchron command line arguments per argument type
 #define ARG_TYPE_COUNT_MAX	10
 
+// Generic stack trace header
+#define CMD_STACK_TRACE		"--- stack trace ---\n"
+
 // Definition of a structure holding a single command line, originating from
 // the command line prompt or from a command file
 typedef struct _cmdLine_t
@@ -79,8 +84,8 @@ typedef struct _cmdPcCtrl_t
   char *cbArg1;				// Malloc-ed control block argument 1
   char *cbArg2;				// Malloc-ed control block argument 2
   char *cbArg3;				// Malloc-ed control block argument 3
-  struct _cmdLine_t *cmdLineParent;	// Pointer to associated parent command
-  struct _cmdLine_t *cmdLineChild;	// Pointer to associated child command
+  cmdLine_t *cmdLineParent;		// Pointer to associated parent command
+  cmdLine_t *cmdLineChild;		// Pointer to associated child command
   struct _cmdPcCtrl_t *prev;		// Pointer to previous list element
   struct _cmdPcCtrl_t *next;		// Pointer to next list element
 } cmdPcCtrl_t;
@@ -109,7 +114,7 @@ typedef struct _cmdArg_t
 {
   int argType;				// Argument type
   char *argName;			// Argument name
-  struct _cmdArgDomain_t *cmdArgDomain;	// Argument domain
+  cmdArgDomain_t *cmdArgDomain;		// Argument domain
 } cmdArg_t;
 
 // Definition of a structure holding a single mchron command with argument
@@ -118,7 +123,7 @@ typedef struct _cmdCommand_t
 {
   char *cmdName;			// The mchron command name
   int cmdPcCtrlType;			// Program counter control block type
-  struct _cmdArg_t *cmdArg;		// Array of command argument profiles
+  cmdArg_t *cmdArg;			// Array of command argument profiles
   int argCount;				// Profile argument count
   int (*cmdHandler)(cmdLine_t *);	// Handler for regular commands
   int (*cbHandler)(cmdLine_t **);	// Handler for control block commands
@@ -133,8 +138,8 @@ typedef struct _cmdDict_t
 {
   char cmdGroup;			// The mchron command group identifier
   char *cmdGroupDescr;			// The command group description
-  struct _cmdCommand_t *cmdCommand;	// Array of mchron commands in group
-  int commandCount;                     // Command group size
+  cmdCommand_t *cmdCommand;		// Array of mchron commands in group
+  int commandCount;			// Command group size
 } cmdDict_t;
 #endif
 

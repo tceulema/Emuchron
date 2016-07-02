@@ -27,6 +27,10 @@
 // your clock will 'hiccup' and appear jittery.
 #define ANIMTICK_MS	75
 
+// Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
+// Note: This will cost you ~615 bytes of Monochron program and data space.
+#define MARIO
+
 // Two-tone alarm beep
 #define ALARM_FREQ_1	4000
 #define ALARM_FREQ_2	3750
@@ -48,8 +52,7 @@
 #define BTTN_PLUS	0x04
 
 // Pin definitions
-// Note: there's more in KS0108.h for the display
-
+// Note: there's more in ks0108.h [firmware] for the display
 #define ALARM_DDR	DDRB
 #define ALARM_PIN	PINB
 #define ALARM_PORT	PORTB
@@ -79,9 +82,6 @@
 // The default readout rate was ~5.7Hz that has been increased
 // to ~8.5Hz. This was done to detect changes in seconds faster,
 // leading to a more smooth 'seconds tick' animation in clocks.
-#define OCR2B_BITSHIFT	0
-#define OCR2B_PLUS	1
-#define OCR2A_VALUE	16
 // Uncomment to implement i2ctime readout @ ~5.7Hz
 //#define TIMER2_RETURN_1	80
 //#define TIMER2_RETURN_2	6
@@ -115,8 +115,10 @@
 
 // Function prototypes
 void alarmStateSet(void);
-void alarmTimeGet(uint8_t alarmId, volatile uint8_t *hour, volatile uint8_t *min);
-void alarmTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min);
+void alarmTimeGet(uint8_t alarmId, volatile uint8_t *hour,
+  volatile uint8_t *min);
+void alarmTimeSet(uint8_t alarmId, volatile uint8_t hour,
+  volatile uint8_t min);
 void beep(uint16_t freq, uint8_t duration);
 uint8_t dotw(uint8_t mon, uint8_t day, uint8_t yr);
 uint8_t i2bcd(uint8_t x);

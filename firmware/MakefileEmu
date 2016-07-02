@@ -24,21 +24,15 @@ STUB = -DEMULIN
 # uncommented. Keep the flag below and that code section in sync.
 #BDEBUG = --debug
 
-# Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
-# There is a similar switch in Makefile that should be in sync with this one.
-# Note: This will cost you ~615 bytes of Monochron program and data space.
-#       In Emuchron program and data space is of no concern.
-MARIO = -DMARIO
-
 # The clock and emulator source files and target
-CSRC = emulator/stub.c emulator/lcd.c emulator/lcdglut.c emulator/lcdncurses.c \
-  emulator/scanutil.c emulator/mchronutil.c emulator/listvarutil.c \
-  emulator/mchron.c \
+CSRC = emulator/stub.c emulator/controller.c emulator/lcdglut.c \
+  emulator/lcdncurses.c emulator/scanutil.c emulator/mchronutil.c \
+  emulator/listutil.c emulator/varutil.c emulator/mchron.c \
   monomain.c ks0108.c glcd.c config.c anim.c \
-  clock/analog.c clock/bigdigit.c clock/digital.c clock/mosquito.c clock/nerd.c \
-  clock/perftest.c clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c \
-  clock/slider.c clock/spotfire.c clock/cascade.c clock/speeddial.c \
-  clock/spiderplot.c clock/trafficlight.c
+  clock/analog.c clock/bigdigit.c clock/digital.c clock/example.c \
+  clock/mosquito.c clock/nerd.c clock/perftest.c clock/pong.c clock/puzzle.c \
+  clock/qr.c clock/qrencode.c clock/slider.c clock/spotfire.c clock/cascade.c \
+  clock/speeddial.c clock/spiderplot.c clock/trafficlight.c
 FSRC = emulator/expr.l
 BSRC = emulator/expr.y
 EVALSRC = emulator/expr.c
@@ -93,7 +87,7 @@ $(EVALOBJ):	$(BOBJ) $(FOBJ) $(EVALSRC)
 
 # Create c object file for c source file
 %.o:	%.c
-	$(CC) -c $(CFLAGS) $(STUB) $(MARIO) -o $@ $<
+	$(CC) -c $(CFLAGS) $(STUB) -o $@ $<
 
 # Create mchron out of object files and libraries
 $(TARGET):	$(COBJ) $(EVALOBJ)

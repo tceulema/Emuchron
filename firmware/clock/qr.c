@@ -29,11 +29,7 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcU8Util1;
-extern volatile uint8_t mcUpdAlarmSwitch;
-extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcMchronClock;
@@ -94,7 +90,8 @@ extern unsigned char qrframe[];
 // therefore believed that the actual numbers per cycle are slightly lower than
 // shown here, so consider them worst-case scenario values.
 //
-// CPU time to complete a single mask (+/- 1 msec), using avr-gcc 4.3.5.
+// The CPU time to complete a single mask (+/- 1 msec), using avr-gcc 4.3.5 and
+// the Emuchron v1.2 codebase, is as follows:
 // Mask 0: (not relevant; can easily be combined with other tasks in state 1)
 // Mask 1: 30 msec
 // Mask 2: 29 msec
@@ -126,17 +123,16 @@ extern unsigned char qrframe[];
 // This means that a total of 5 x 0.075 + 0.013 = 0.388 seconds is needed.
 // You will notice this timelag upon initializing a QR clock.
 
-// mcU8Util2 holds the state (=active chunk) of the QR generation process as
+// mcU8Util1 holds the state (=active chunk) of the QR generation process as
 // described above
-extern volatile uint8_t mcU8Util2;
+extern volatile uint8_t mcU8Util1;
 
-// mcU8Util3 contains the clockId of the active clock
+// mcU8Util2 contains the clockId of the active clock
 // CHRON_QR_HM  - Draw QR every minute
 // CHRON_QR_HMS - Draw QR every second
-extern volatile uint8_t mcU8Util3;
+extern volatile uint8_t mcU8Util2;
 
 // Local function prototypes
-static void qrAlarmAreaUpdate(void);
 static void qrDraw(void);
 static void qrMarkerDraw(u08 x, u08 y);
 
@@ -154,14 +150,14 @@ static char *msgAprilFools = "The cake is a lie.";
 void qrCycle(void)
 {
   // Update alarm info in clock
-  qrAlarmAreaUpdate();
+  animAlarmAreaUpdate(QR_ALARM_X_START, QR_ALARM_Y_START, ALARM_AREA_ALM_ONLY);
 
   // Only if a time event, init or QR cycle is flagged we need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE &&
-      mcU8Util2 == 0)
+      mcU8Util1 == 0)
     return;
 
-  if (mcU8Util2 == 0)
+  if (mcU8Util1 == 0)
   {
     DEBUGP("Update QR");
   }
@@ -169,7 +165,7 @@ void qrCycle(void)
   // Verify changes in date+time
   if (mcClockTimeEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
   {
-    if (mcU8Util3 == CHRON_QR_HMS || mcClockInit == GLCD_TRUE ||
+    if (mcU8Util2 == CHRON_QR_HMS || mcClockInit == GLCD_TRUE ||
         mcClockNewTH != mcClockOldTH || mcClockNewTM != mcClockOldTM ||
         mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
         mcClockNewDY != mcClockOldDY)
@@ -184,12 +180,12 @@ void qrCycle(void)
       // On first line add "HH:MM" or "HH:MM:SS"
       animValToStr(mcClockNewTH, (char *)strinbuf);
       strinbuf[2] = ':';
-      animValToStr(mcClockNewTM, (char *)&(strinbuf[3]));
-      if (mcU8Util3 == CHRON_QR_HMS)
+      animValToStr(mcClockNewTM, (char *)&strinbuf[3]);
+      if (mcU8Util2 == CHRON_QR_HMS)
       {
         // HMS clock so add seconds
         strinbuf[5] = ':';
-        animValToStr(mcClockNewTS, (char *)&(strinbuf[6]));
+        animValToStr(mcClockNewTS, (char *)&strinbuf[6]);
         offset = 3;
       }
       strinbuf[5 + offset] = '\n';
@@ -199,9 +195,7 @@ void qrCycle(void)
       {
         // Add special message on april 1st
         for (i = 0; msgAprilFools[i] != '\0'; i++)
-        {
           strinbuf[i + offset + 6] = msgAprilFools[i];
-        }
         strinbuf[i + offset + 6] = '\0';
       }
       else
@@ -217,11 +211,11 @@ void qrCycle(void)
         }
 
         // Put day in QR string
-        animValToStr(mcClockNewDD, (char *)&(strinbuf[14 + offset]));
+        animValToStr(mcClockNewDD, (char *)&strinbuf[14 + offset]);
 
         // Put year in QR string
-        animValToStr(20, (char *)&(strinbuf[18 + offset]));
-        animValToStr(mcClockNewDY, (char *)&(strinbuf[20 + offset]));
+        animValToStr(20, (char *)&strinbuf[18 + offset]);
+        animValToStr(mcClockNewDY, (char *)&strinbuf[20 + offset]);
 
         // Fill up with spaces and comma
         strinbuf[9 + offset]  = ' ';
@@ -231,42 +225,42 @@ void qrCycle(void)
       }
 
       // Start first cycle in generation of QR
-      mcU8Util2 = 1;
+      mcU8Util1 = 1;
     }
   }
 
   // Check the state of the QR generation process and take appropriate action
-  if (mcU8Util2 == 1)
+  if (mcU8Util1 == 1)
   {
     // Init QR generation and try the first mask (= mask 0)
     qrGenInit();
     qrMaskTry(0);
     // Set state for next QR generation cycle
-    mcU8Util2++;
+    mcU8Util1++;
   }
-  else if (mcU8Util2 >= 2 && mcU8Util2 <= 4)
+  else if (mcU8Util1 >= 2 && mcU8Util1 <= 4)
   {
     // Try two of 6 QR masks (1..6)
     // Mask combination for a state: 1+4, 2+5, 3+6
-    qrMaskTry(mcU8Util2 - 1);
-    qrMaskTry(mcU8Util2 + 2);
+    qrMaskTry(mcU8Util1 - 1);
+    qrMaskTry(mcU8Util1 + 2);
     // Set state for next QR generation cycle
-    mcU8Util2++;
+    mcU8Util1++;
   }
-  else if (mcU8Util2 == 5)
+  else if (mcU8Util1 == 5)
   {
     // Try mask 7 and apply the best QR mask found
     qrMaskTry(7);
     qrMaskApply();
     // Set state for next QR generation cycle
-    mcU8Util2++;
+    mcU8Util1++;
   }
-  else if (mcU8Util2 == 6)
+  else if (mcU8Util1 == 6)
   {
     // Draw the QR
     qrDraw();
     // We're all done for this QR so next state is QR idle
-    mcU8Util2 = 0;
+    mcU8Util1 = 0;
   }
 }
 
@@ -280,7 +274,7 @@ void qrInit(u08 mode)
   DEBUGP("Init QR");
 
   // Get the clockId
-  mcU8Util3 = mcClockPool[mcMchronClock].clockId;
+  mcU8Util2 = mcClockPool[mcMchronClock].clockId;
 
   // Start from scratch
   if (mode == DRAW_INIT_FULL)
@@ -334,68 +328,9 @@ void qrInit(u08 mode)
 
   // Force the alarm info area to init itself
   mcAlarmSwitch = ALARM_SWITCH_NONE;
-  mcU8Util1 = GLCD_FALSE;
 
   // Set initial QR generation state to idle
-  mcU8Util2 = 0;
-}
-
-//
-// Function: qrAlarmAreaUpdate
-//
-// Draw update in QR clock alarm area
-//
-static void qrAlarmAreaUpdate(void)
-{
-  u08 inverseAlarmArea = GLCD_FALSE;
-  u08 newAlmDisplayState = GLCD_FALSE;
-  char msg[6];
-
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
-  {
-    if (mcAlarmSwitch == ALARM_SWITCH_ON)
-    {
-      // Show alarm time
-      animValToStr(mcAlarmH, msg);
-      msg[2] = ':';
-      animValToStr(mcAlarmM, &(msg[3]));
-      glcdPutStr2(QR_ALARM_X_START, QR_ALARM_Y_START, FONT_5X5P, msg, mcFgColor);
-    }
-    else
-    {
-      // Clear area (remove alarm time)
-      glcdFillRectangle(QR_ALARM_X_START - 1, QR_ALARM_Y_START - 1, 19, 7,
-        mcBgColor);
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-    glcdFillRectangle2(QR_ALARM_X_START - 1, QR_ALARM_Y_START - 1, 19, 7,
-      ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+  mcU8Util1 = 0;
 }
 
 //

@@ -4,7 +4,10 @@
 # Purpose: Test glcdFillRectangle2()
 #
 
-# Erase LCD display and paint the function name
+# Give help message
+hm --- press 'q' to quit --- 
+
+# Erase lcd display and paint the function name
 le
 pa f 0 0 5x5p h 1 1 glcdFillRectangle2
 

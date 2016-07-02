@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'stub.h'
-// Title    : Stub definitions for MONOCHRON Emulator
+// Title    : Stub definitions for emuchron emulator
 //*****************************************************************************
 
 #ifndef STUB_H
@@ -56,8 +56,9 @@
 // Emulator timer stub cycle state
 #define CYCLE_NOWAIT		0
 #define CYCLE_WAIT		1
-#define CYCLE_REQ_NOWAIT	2
-#define CYCLE_REQ_WAIT		3
+#define CYCLE_WAIT_STATS	2
+#define CYCLE_REQ_NOWAIT	3
+#define CYCLE_REQ_WAIT		4
 
 // Keyboard input mode
 #define KB_MODE_LINE		0

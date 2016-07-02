@@ -14,7 +14,7 @@
 // Remember that the BBR is #defined for each F_CPU in util.h
 void uart_init(uint16_t BRR)
 {
-  UBRR0 = BRR;               // set baudrate counter
+  UBRR0 = BRR;	// set baudrate counter
 
   UCSR0B = _BV(RXEN0) | _BV(TXEN0);
   UCSR0C = _BV(USBS0) | (3<<UCSZ00);

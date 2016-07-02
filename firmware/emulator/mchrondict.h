@@ -43,8 +43,8 @@
 // Dictionary build-up step 1: argument domain value profiles
 //
 
-// Alarm switch position: 0..1
-cmdArgDomain_t argNumSwitchPosition =
+// Switch/bit position: 0..1
+cmdArgDomain_t argNumOffOn =
 { DOM_NUM_MAX, "", 0, 1, "0 = off, 1 = on" };
 
 // Beep duration: 1..255
@@ -115,6 +115,14 @@ cmdArgDomain_t argNumBacklight =
 cmdArgDomain_t argCharColor =
 { DOM_CHAR_LIST, "bf", 0, 0, "b = background, f = foreground" };
 
+// Lcd controller id: 0..1
+cmdArgDomain_t argNumController =
+{ DOM_NUM_MAX, "", 0, GLCD_NUM_CONTROLLERS - 1, NULL };
+
+// Lcd controller lcd data
+cmdArgDomain_t argNumLcdData =
+{ DOM_NUM_MAX, "", 0, 255, NULL };
+
 // Lcd x position: max 127
 cmdArgDomain_t argNumPosX =
 { DOM_NUM_MAX, "", 0, GLCD_XPIXELS - 1, NULL };
@@ -122,6 +130,18 @@ cmdArgDomain_t argNumPosX =
 // Lcd y position: max 63
 cmdArgDomain_t argNumPosY =
 { DOM_NUM_MAX, "", 0, GLCD_YPIXELS - 1, NULL };
+
+// Lcd controller x position: max 63
+cmdArgDomain_t argNumCtrlPosX =
+{ DOM_NUM_MAX, "", 0, GLCD_CONTROLLER_XPIXELS - 1, NULL };
+
+// Lcd controller y page position: max 7
+cmdArgDomain_t argNumCtrlPageY =
+{ DOM_NUM_MAX, "", 0, GLCD_CONTROLLER_YPAGES - 1, NULL };
+
+// Lcd controller x position: max 63
+cmdArgDomain_t argNumCtrlStartLine =
+{ DOM_NUM_MAX, "", 0, GLCD_CONTROLLER_YPIXELS - 1, NULL };
 
 // Rectangle fill align: 0..2
 cmdArgDomain_t argNumAlign =
@@ -151,9 +171,13 @@ cmdArgDomain_t argNumHour =
 cmdArgDomain_t argNumMinSec =
 { DOM_NUM_MAX, "", 0, 59, NULL };
 
-// Variable name: [a-zA-Z]* or '*'
-cmdArgDomain_t argVarName =
-{ DOM_VAR_NAME, "", 0, 0, "word of [a-zA-Z] characters, '*' = all" };
+// Variable name: [a-zA-Z_]* or '*'
+cmdArgDomain_t argVarName1 =
+{ DOM_VAR_NAME, "", 0, 0, "word of [a-zA-Z_] characters, '*' = all" };
+
+// Variable name: [a-zA-Z_]*
+cmdArgDomain_t argVarName2 =
+{ DOM_VAR_NAME, "", 0, 0, "word of [a-zA-Z_] characters" };
 
 // Wait delay: max 1M
 cmdArgDomain_t argNumDelay =
@@ -225,7 +249,7 @@ cmdArg_t argComments[] =
 // Command 'a*'
 // Argument profile for alarm switch position
 cmdArg_t argAlarmPos[] =
-{ { ARG_UNUM,    "position",    &argNumSwitchPosition },
+{ { ARG_UNUM,    "position",    &argNumOffOn },
   { ARG_END,     "",            NULL } };
 // Argument profile for set alarm
 cmdArg_t argAlarmSet[] =
@@ -273,6 +297,9 @@ cmdArg_t argHelpCmd[] =
 cmdArg_t argHelpExpr[] =
 { { ARG_NUM,     "number",      &argInfoNumber },
   { ARG_END,     "",            NULL } };
+// Argument profile for help message
+cmdArg_t argHelpMsg[] =
+{ { ARG_STRING,  "message",     &argInfoText } };
 
 // Command 'i*'
 // Argument profile for if-else-if
@@ -285,9 +312,35 @@ cmdArg_t argIfThen[] =
   { ARG_END,     "",            NULL } };
 
 // Command 'l*'
-// Argument profile for LCD backlight set
-cmdArg_t argLcdBlSet[] =
+// Argument profile for lcd backlight set
+cmdArg_t argLcdBLSet[] =
 { { ARG_UNUM,    "backlight",   &argNumBacklight },
+  { ARG_END,     "",            NULL } };
+// Argument profile for controller cursor
+cmdArg_t argLcdCursSet[] =
+{ { ARG_UNUM,    "controller",  &argNumController },
+  { ARG_UNUM,    "x", 		&argNumCtrlPosX },
+  { ARG_UNUM,    "yline",	&argNumCtrlPageY },
+  { ARG_END,     "",            NULL } };
+// Argument profile for controller display
+cmdArg_t argLcdDispSet[] =
+{ { ARG_UNUM,    "controller-0",&argNumOffOn },
+  { ARG_UNUM,    "controller-1",&argNumOffOn },
+  { ARG_END,     "",            NULL } };
+// Argument profile for controller lcd read
+cmdArg_t argLcdRead[] =
+{ { ARG_UNUM,    "controller",  &argNumController },
+  { ARG_WORD,    "variable",    &argVarName2 },
+  { ARG_END,     "",            NULL } };
+// Argument profile for controller lcd write
+cmdArg_t argLcdWrite[] =
+{ { ARG_UNUM,    "controller",  &argNumController },
+  { ARG_UNUM,    "data",        &argNumLcdData },
+  { ARG_END,     "",            NULL } };
+// Argument profile for controller startline
+cmdArg_t argLcdSLineSet[] =
+{ { ARG_UNUM,    "controller-0",&argNumCtrlStartLine },
+  { ARG_UNUM,    "controller-1",&argNumCtrlStartLine },
   { ARG_END,     "",            NULL } };
 
 // Command 'm'
@@ -390,11 +443,11 @@ cmdArg_t argTimeSet[] =
 // Command 'v*'
 // Argument profile for variable print
 cmdArg_t argVarPrint[] =
-{ { ARG_WORD,    "variable",    &argVarName },
+{ { ARG_WORD,    "variable",    &argVarName1 },
   { ARG_END,     "",            NULL } };
 // Argument profile for variable reset
 cmdArg_t argVarReset[] =
-{ { ARG_WORD,    "variable",    &argVarName },
+{ { ARG_WORD,    "variable",    &argVarName1 },
   { ARG_END,     "",            NULL } };
 // Argument profile for variable value set
 cmdArg_t argVarSet[] =
@@ -433,7 +486,7 @@ cmdCommand_t cmdGroupBeep[] =
 
 // All commands for command group 'c' (clock)
 cmdCommand_t cmdGroupClock[] =
-{ { "cf",  PC_CONTINUE,     CMDARGS(argClockFeed),   CMDHANDLER(doClockFeed),      "feed clock time+keyboard" },
+{ { "cf",  PC_CONTINUE,     CMDARGS(argClockFeed),   CMDHANDLER(doClockFeed),      "feed clock time/keyboard events" },
   { "cs",  PC_CONTINUE,     CMDARGS(argClockSelect), CMDHANDLER(doClockSelect),    "select clock" } };
 
 // All commands for command group 'd' (date)
@@ -449,7 +502,8 @@ cmdCommand_t cmdGroupExecute[] =
 cmdCommand_t cmdGroupHelp[] =
 { { "h",   PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doHelp),           "show help" },
   { "hc",  PC_CONTINUE,     CMDARGS(argHelpCmd),     CMDHANDLER(doHelpCmd),        "show command details" },
-  { "he",  PC_CONTINUE,     CMDARGS(argHelpExpr),    CMDHANDLER(doHelpExpr),       "show result of expression" } };
+  { "he",  PC_CONTINUE,     CMDARGS(argHelpExpr),    CMDHANDLER(doHelpExpr),       "show result of expression" },
+  { "hm",  PC_CONTINUE,     CMDARGS(argHelpMsg),     CMDHANDLER(doHelpMsg),        "show help message" } };
 
 // All commands for command group 'i' (if)
 cmdCommand_t cmdGroupIf[] =
@@ -460,13 +514,20 @@ cmdCommand_t cmdGroupIf[] =
 
 // All commands for command group 'l' (lcd)
 cmdCommand_t cmdGroupLcd[] =
-{ { "lbs", PC_CONTINUE,     CMDARGS(argLcdBlSet),    CMDHANDLER(doLcdBacklightSet),"set lcd backlight brightness" },
+{ { "lbs", PC_CONTINUE,     CMDARGS(argLcdBLSet),    CMDHANDLER(doLcdBacklightSet),"set lcd backlight brightness" },
+  { "lcs", PC_CONTINUE,     CMDARGS(argLcdCursSet),  CMDHANDLER(doLcdCursorSet),   "set controller lcd cursor" },
+  { "lds", PC_CONTINUE,     CMDARGS(argLcdDispSet),  CMDHANDLER(doLcdDisplaySet),  "switch controller lcd display on/off" },
   { "le",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdErase),       "erase lcd display" },
-  { "li",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdInverse),     "inverse lcd display" } };
+  { "li",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdInverse),     "inverse lcd display" },
+  { "lp",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdPrint),       "print controller state/registers" },
+  { "lr",  PC_CONTINUE,     CMDARGS(argLcdRead),     CMDHANDLER(doLcdRead),        "read controller lcd data in variable" },
+  { "lss", PC_CONTINUE,     CMDARGS(argLcdSLineSet), CMDHANDLER(doLcdStartLineSet),"set controller lcd start line" },
+  { "lw",  PC_CONTINUE,     CMDARGS(argLcdWrite),    CMDHANDLER(doLcdWrite),       "write data to controller lcd" }
+ };
 
 // All commands for command group 'm' (monochron)
 cmdCommand_t cmdGroupMonochron[] =
-{ { "m",   PC_CONTINUE,     CMDARGS(argMonochron),   CMDHANDLER(doMonochron),      "run monochron application" } };
+{ { "m",   PC_CONTINUE,     CMDARGS(argMonochron),   CMDHANDLER(doMonochron),      "start monochron application" } };
 
 // All commands for command group 'p' (paint)
 cmdCommand_t cmdGroupPaint[] =
@@ -486,8 +547,8 @@ cmdCommand_t cmdGroupRepeat[] =
 
 // All commands for command group 's' (statistics)
 cmdCommand_t cmdGroupStats[] =
-{ { "sp",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doStatsPrint),     "print statistics" },
-  { "sr",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doStatsReset),     "reset statistics" } };
+{ { "sp",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doStatsPrint),     "print application statistics" },
+  { "sr",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doStatsReset),     "reset application statistics" } };
 
 // All commands for command group 't' (time)
 cmdCommand_t cmdGroupTime[] =

@@ -18,46 +18,46 @@
 #include "pong.h"
 
 // This is a tradeoff between sluggish and too fast to see
-#define MAX_BALL_SPEED	5 // Note this is in vector arith.
-#define BALL_RADIUS	2 // In pixels
+#define MAX_BALL_SPEED		5	// Note this is in vector arith.
+#define BALL_RADIUS		2	// In pixels
 
 // This reduces the random angle degree range to 0+range .. 180-range
-// per pi rad
-#define MIN_BALL_ANGLE	35
+// per pi rad preventing to steep angles
+#define MIN_BALL_ANGLE		35
 
 // Pixel location of HOUR10 HOUR1 MINUTE10 and MINUTE1 digits
-#define DISPLAY_H10_X	30
-#define DISPLAY_H1_X	45
-#define DISPLAY_M10_X	70
-#define DISPLAY_M1_X	85
+#define DISPLAY_H10_X		30
+#define DISPLAY_H1_X		45
+#define DISPLAY_M10_X		70
+#define DISPLAY_M1_X		85
 
 // How big our screen is in pixels
-#define SCREEN_W	128
-#define SCREEN_H	64
+#define SCREEN_W		128
+#define SCREEN_H		64
 
 // Buffer space from the top
-#define DISPLAY_TIME_Y	4
+#define DISPLAY_TIME_Y		4
 
-// How big are the pixels (for math purposes)
-#define DISPLAY_DIGITW	10
-#define DISPLAY_DIGITH	16
+// The size of a digit in pixels (for math and intersect purposes)
+#define DISPLAY_DIGITW		8
+#define DISPLAY_DIGITH		16
 
-// Paddle locations
-#define RIGHTPADDLE_X	(SCREEN_W - PADDLE_W - 10)
-#define LEFTPADDLE_X	10
+// Paddle x locations
+#define RIGHTPADDLE_X		(SCREEN_W - PADDLE_W - 10)
+#define LEFTPADDLE_X		10
 
 // Paddle size (in pixels) and max speed for AI
-#define PADDLE_H	12
-#define PADDLE_W	3
-#define MAX_PADDLE_SPEED 5
+#define PADDLE_H		12
+#define PADDLE_W		3
+#define MAX_PADDLE_SPEED	5
 
 // How thick the top and bottom lines are in pixels
-#define BOTBAR_H	2
-#define TOPBAR_H	2
+#define BOTBAR_H		2
+#define TOPBAR_H		2
 
 // Specs of the middle line
-#define MIDLINE_W	1
-#define MIDLINE_H	(SCREEN_H / 16) // how many 'stipples'
+#define MIDLINE_W		1
+#define MIDLINE_H		(SCREEN_H / 16)	// how many 'stipples'
 
 // Whether we are displaying time (99% of the time)
 // alarm (for a few sec when alarm is switched on)
@@ -68,10 +68,14 @@
 #define SCORE_MODE_ALARM	3
 
 // Time in app cycles (representing ~3 secs) for non-time info to be displayed
-#define SCORE_TIMEOUT	(u08)(1000L / ANIMTICK_MS * 3 + 0.5)
+#define SCORE_TIMEOUT		(u08)(1000L / ANIMTICK_MS * 3 + 0.5)
 
 // Time in app cycles (representing ~2 sec) to wait before starting a new game
-#define PLAY_COUNTDOWN	(u08)(1000L / ANIMTICK_MS * 2 + 0.5)
+#define PLAY_COUNTDOWN		(u08)(1000L / ANIMTICK_MS * 2 + 0.5)
+
+// Uncomment this if you want to keep the ball always in the vertical centre
+// of the display. Give it a try and you'll see what I mean...
+//#define BALL_VCENTERED
 
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
@@ -84,11 +88,27 @@ extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
-extern volatile uint8_t mcU8Util1, mcU8Util2, mcU8Util3, mcU8Util4;
 // mcU8Util1 = flashing the paddles during alarm/snooze
 // mcU8Util2 = score mode
 // mcU8Util3 = previous score mode
 // mcU8Util4 = score display timeout timer
+extern volatile uint8_t mcU8Util1, mcU8Util2, mcU8Util3, mcU8Util4;
+
+// The big digit font character set
+static const unsigned char __attribute__ ((progmem)) bigFont[] =
+{
+  0xFF, 0x81, 0x81, 0xFF, // 0
+  0x00, 0x00, 0x00, 0xFF, // 1
+  0x9F, 0x91, 0x91, 0xF1, // 2
+  0x91, 0x91, 0x91, 0xFF, // 3
+  0xF0, 0x10, 0x10, 0xFF, // 4
+  0xF1, 0x91, 0x91, 0x9F, // 5
+  0xFF, 0x91, 0x91, 0x9F, // 6
+  0x80, 0x80, 0x80, 0xFF, // 7
+  0xFF, 0x91, 0x91, 0xFF, // 8 
+  0xF1, 0x91, 0x91, 0xFF, // 9
+  0x00, 0x00, 0x00, 0x00, // <space>
+};
 
 // Specific stuff for the pong clock
 static uint8_t left_score, right_score;
@@ -120,6 +140,7 @@ static void initanim(void);
 static void step(void);
 static void draw(void);
 static void setscore(void);
+static void draw_paddle(int8_t x, int8_t oldY, int8_t newY);
 static void draw_score(uint8_t redraw_digits);
 static uint8_t intersectrect(uint8_t x1, uint8_t y1, uint8_t w1, uint8_t h1,
   uint8_t x2, uint8_t y2, uint8_t w2, uint8_t h2);
@@ -227,7 +248,7 @@ static uint16_t crand(uint8_t type)
   pongRandVal = mcCycleCounter * pongRandSeed + pongRandBase;
 
   if (type == 1)
-    return pongRandVal & 0x3; 
+    return pongRandVal & 0x3;
   else if (type == 2)
     return (pongRandVal >> 1) & 0x1;
   else
@@ -236,12 +257,18 @@ static uint16_t crand(uint8_t type)
   return 0;
 }
 
+//
+// Function: setscore
+//
+// Set the values for the left and right score digits
+//
 static void setscore(void)
 {
   if (mcU8Util2 != mcU8Util3)
   {
     // There is a new score mode so force a redraw
     redraw_score = 1;
+    // Sync last with current mode
     mcU8Util3 = mcU8Util2;
   }
 
@@ -271,15 +298,14 @@ static void setscore(void)
   }
 }
 
+//
+// Function: initanim
+//
+// Initialize the animation data
+//
 static void initanim(void)
 {
   float angle = random_angle_rads();
-
-  DEBUG(putstring("screen width: "));
-  DEBUG(uart_putw_dec(GLCD_XPIXELS));
-  DEBUG(putstring("\n\rscreen height: "));
-  DEBUG(uart_putw_dec(GLCD_YPIXELS));
-  DEBUG(putstring_nl(""));
 
   // Init everything for a smooth pong startup
   mcU8Util2 = mcU8Util3 = SCORE_MODE_TIME;
@@ -304,6 +330,11 @@ static void initanim(void)
   ball_dy = MAX_BALL_SPEED * cos(angle);
 }
 
+//
+// Function: initdisplay
+//
+// Draw the initial pong clock
+//
 static void initdisplay(void)
 {
   u08 newAlmDisplayState = GLCD_FALSE;
@@ -314,23 +345,21 @@ static void initdisplay(void)
   // Clear display
   glcdClearScreen(mcBgColor);
 
-  // Draw top line
+  // Draw top and bottom line
   glcdFillRectangle(0, 0, GLCD_XPIXELS, 2, mcFgColor);
-
-  // Draw bottom line
   glcdFillRectangle(0, GLCD_YPIXELS - 2, GLCD_XPIXELS, 2, mcFgColor);
 
-  // Draw left paddle
+  // Draw left and right paddle
   if (mcAlarming == GLCD_TRUE && newAlmDisplayState == GLCD_TRUE)
     glcdRectangle(LEFTPADDLE_X, leftpaddle_y, PADDLE_W, PADDLE_H, mcFgColor);
   else
-    glcdFillRectangle(LEFTPADDLE_X, leftpaddle_y, PADDLE_W, PADDLE_H, mcFgColor);
-
-  // Draw right paddle
+    glcdFillRectangle(LEFTPADDLE_X, leftpaddle_y, PADDLE_W, PADDLE_H,
+      mcFgColor);
   if (mcAlarming == GLCD_TRUE && newAlmDisplayState == GLCD_TRUE)
     glcdRectangle(RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H, mcFgColor);
   else
-    glcdFillRectangle(RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H, mcFgColor);
+    glcdFillRectangle(RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H,
+      mcFgColor);
 
   // Set initial alarm area state
   if (mcAlarming == GLCD_TRUE)
@@ -351,6 +380,16 @@ static void initdisplay(void)
   drawmidline();
 }
 
+//
+// Function: step
+//
+// Determine the next clock layout. In includes determining the next position
+// of the ball and with that determine the next position of the paddles,
+// signal ball bounces on the top/bottom of the play area and on the paddles,
+// signal a change in hour/min (so a paddle should miss the ball) and signal
+// the ball reaching the most left/right side of the field (so we restart the
+// game).
+//
 static void step(void)
 {
   float angle = 0;
@@ -364,22 +403,22 @@ static void step(void)
     // A change in hours has priority over change in minutes
     if (mcClockOldTH != mcClockNewTH)
     {
-      DEBUGP("Time change -> hours");
+      DEBUGP("time -> hours");
       hour_changed = 1;
     }
     else if (mcClockOldTM != mcClockNewTM)
     {
-      DEBUGP("Time change -> minutes");
+      DEBUGP("time -> minutes");
       minute_changed = 1;
     }
   }
 
-  //DEBUG(uart_putw_dec(mcClockTimeEvent)); 
-  //DEBUG(putstring(", ")); 
-  //DEBUG(uart_putw_dec(minute_changed)); 
-  //DEBUG(putstring(", ")); 
-  //DEBUG(uart_putw_dec(hour_changed)); 
-  //DEBUG(putstring_nl("")); 
+  //DEBUG(uart_putw_dec(mcClockTimeEvent));
+  //DEBUG(putstring(", "));
+  //DEBUG(uart_putw_dec(minute_changed));
+  //DEBUG(putstring(", "));
+  //DEBUG(uart_putw_dec(hour_changed));
+  //DEBUG(putstring_nl(""));
 
   // If we're waiting for a new game to start we don't want to calculate
   // new positions
@@ -412,14 +451,14 @@ static void step(void)
   }
   
   // For debugging, print the ball location
-  /*DEBUG(putstring("ball @ (")); 
-  DEBUG(uart_putw_dec(ball_x)); 
-  DEBUG(putstring(", ")); 
-  DEBUG(uart_putw_dec(ball_y)); 
+  /*DEBUG(putstring("ball @ ("));
+  DEBUG(uart_putw_dec(ball_x));
+  DEBUG(putstring(", "));
+  DEBUG(uart_putw_dec(ball_y));
   DEBUG(putstring_nl(")"));*/
 
   /************************************* LEFT & RIGHT WALLS */
-  // The ball hits either wall, the ball resets location & angle
+  // The ball hits either wall, the ball resets location
   if ((ball_x  > (SCREEN_W - BALL_RADIUS * 2)) || ((int8_t)ball_x <= 0))
   {
     if (DEBUGGING)
@@ -447,21 +486,15 @@ static void step(void)
     ball_x = (SCREEN_W / 2) - 2;
     ball_y = (SCREEN_H / 2) - 2;
 
-    // Draw paddles
-    glcdFillRectangle(LEFTPADDLE_X, left_keepout_top, PADDLE_W,
-      left_keepout_bot - left_keepout_top, mcBgColor);
-    glcdFillRectangle(RIGHTPADDLE_X, right_keepout_top, PADDLE_W,
-      right_keepout_bot - right_keepout_top, mcBgColor);
-
     right_keepout_top = right_keepout_bot = 0;
     left_keepout_top = left_keepout_bot = 0;
-    redraw_score = 1;
 
     // Clear hour/minute change signal
     minute_changed = hour_changed = 0;
 
-    // Set values for score display 
+    // Set values for score display and force score redraw
     setscore();
+    redraw_score = 1;
 
     // New serve: the game will be static for a few moment before it starts
     countdown = PLAY_COUNTDOWN;
@@ -486,11 +519,10 @@ static void step(void)
       dx = RIGHTPADDLE_X - (oldball_x + BALL_RADIUS * 2);
       // Now figure out what fraction that is of the motion and multiply
       // that by the dy
-
       dy = (dx / ball_dx) * ball_dy;
     
       if (intersectrect((oldball_x + dx), (oldball_y + dy), BALL_RADIUS * 2,
-           BALL_RADIUS * 2, RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H))
+          BALL_RADIUS * 2, RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H))
       {
         if (DEBUGGING)
         {
@@ -500,9 +532,9 @@ static void step(void)
             // uh oh
             putstring_nl("FAILED to miss");
           }
-          putstring("RCOLLISION  ball @ ("); uart_putw_dec(oldball_x + dx);
+          putstring("RCOLLISION ball @ ("); uart_putw_dec(oldball_x + dx);
           putstring(", "); uart_putw_dec(oldball_y + dy);
-          putstring(") & paddle @ ["); 
+          putstring(") & paddle @ [");
           uart_putw_dec(RIGHTPADDLE_X); putstring(", ");
           uart_putw_dec(rightpaddle_y); putstring("]");
         }
@@ -542,7 +574,8 @@ static void step(void)
         if (DEBUGGING)
         {
           putstring("Expect bounce @ "); uart_putw_dec(right_bouncepos); 
-          putstring("-> thru to "); uart_putw_dec(right_endpos); putstring("\n\r");
+          putstring("-> thru to "); uart_putw_dec(right_endpos);
+          putstring("\n\r");
         }
         if (right_bouncepos > right_endpos)
         {
@@ -568,7 +601,7 @@ static void step(void)
           right_dest = right_bouncepos + BALL_RADIUS - PADDLE_H / 2;
           if (DEBUGGING)
           {
-            putstring("R -> "); uart_putw_dec(right_dest); putstring_nl("");
+            putstring("hitR -> "); uart_putw_dec(right_dest); putstring_nl("");
           }
         }
         else
@@ -641,7 +674,7 @@ static void step(void)
     /************************************* LEFT PADDLE */
     // Check if we are bouncing off left paddle
     if ((((int8_t)ball_x) <= (LEFTPADDLE_X + PADDLE_W)) && 
-      (((int8_t)oldball_x) >= (LEFTPADDLE_X + PADDLE_W)))
+        (((int8_t)oldball_x) >= (LEFTPADDLE_X + PADDLE_W)))
     {
       // Check if we collided
       DEBUG(putstring_nl("coll?"));
@@ -655,7 +688,7 @@ static void step(void)
       dy = (dx / ball_dx) * ball_dy;
 
       if (intersectrect((oldball_x + dx), (oldball_y + dy), BALL_RADIUS * 2,
-           BALL_RADIUS * 2, LEFTPADDLE_X, leftpaddle_y, PADDLE_W, PADDLE_H))
+          BALL_RADIUS * 2, LEFTPADDLE_X, leftpaddle_y, PADDLE_W, PADDLE_H))
       {
         if (DEBUGGING)
         {
@@ -693,7 +726,8 @@ static void step(void)
       } 
       if (DEBUGGING)
       {
-        putstring(" tix = "); uart_putw_dec(ticksremaining); putstring_nl("");
+        putstring(" tix = "); uart_putw_dec(ticksremaining);
+        putstring_nl("");
       }
       // Otherwise, it didn't bounce...will probably hit the left wall
     }
@@ -708,18 +742,19 @@ static void step(void)
         if (DEBUGGING)
         {
           putstring("Expect bounce @ "); uart_putw_dec(left_bouncepos); 
-          putstring("-> thru to "); uart_putw_dec(left_endpos); putstring("\n\r");
+          putstring("-> thru to "); uart_putw_dec(left_endpos);
+          putstring("\n\r");
         }
       
         if (left_bouncepos > left_endpos)
         {
           left_keepout_top = left_endpos;
-          left_keepout_bot = left_bouncepos + BALL_RADIUS*2;
+          left_keepout_bot = left_bouncepos + BALL_RADIUS * 2;
         }
         else
         {
           left_keepout_top = left_bouncepos;
-          left_keepout_bot = left_endpos + BALL_RADIUS*2;
+          left_keepout_bot = left_endpos + BALL_RADIUS * 2;
         }
         //if(DEBUGGING)
         //{
@@ -743,18 +778,18 @@ static void step(void)
           if (left_keepout_top <= (TOPBAR_H + PADDLE_H))
           {
             // The ball is near the top so make sure it ends up right below it
-            DEBUG(putstring_nl("at the top"));
+            //DEBUG(putstring_nl("at the top"));
             left_dest = left_keepout_bot + 1;
           }
           else if (left_keepout_bot >= (SCREEN_H - BOTBAR_H - PADDLE_H - 1))
           {
             // The ball is near the bottom so make sure it ends up right above it
-            DEBUG(putstring_nl("at the bottom"));
+            //DEBUG(putstring_nl("at the bottom"));
             left_dest = left_keepout_top - PADDLE_H - 1;
           }
           else
           {
-            DEBUG(putstring_nl("in the middle"));
+            //DEBUG(putstring_nl("in the middle"));
             if (crand(2))
               left_dest = left_keepout_top - PADDLE_H - 1;
             else
@@ -822,6 +857,11 @@ static void step(void)
     rightpaddle_y = (SCREEN_H - PADDLE_H - BOTBAR_H - 1);
 }
 
+//
+// Function: drawmidline
+//
+// Draw the dashed vertical line in the middle of the play area
+//
 static void drawmidline(void)
 {
   uint8_t i;
@@ -831,28 +871,26 @@ static void drawmidline(void)
     if (mcBgColor)
       glcdDataWrite(0xF0);
     else
-      glcdDataWrite(0x0F);  
+      glcdDataWrite(0x0F);
   }
   glcdSetAddress((SCREEN_W - MIDLINE_W) / 2, i);
   if (mcBgColor)
-    glcdDataWrite(0x30);  
+    glcdDataWrite(0x30);
   else
-    glcdDataWrite(0xCF);  
+    glcdDataWrite(0xCF);
 }
 
+//
+// Function: draw
+//
+// Draw the new layout of the clock. It will remove ball from its old location
+// and redraw it on its new location, it will redraw the paddles and flash
+// its center upon alarming, it will update the score in case anything has
+// changed. It will also redraw an unchanged score and middle line when they
+// overlap with the old ball location.
+//
 static void draw(void)
 {
-  uint8_t redraw_digits = 0;
-  u08 newAlmDisplayState = GLCD_FALSE;
-  u08 inverseAlarmArea = GLCD_FALSE;
-  u08 foundRightIntersect =
-    intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2,
-    RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H);
-
-  // The flashing state of the paddles in case of alarming
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
   // Decide what to do with the ball
   if (countdown > 0)
   {
@@ -873,11 +911,11 @@ static void draw(void)
   {
     // Regular game play so the ball moved from a to b
 
-    // Erase old ball
-    glcdFillRectangle(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2, mcBgColor);
-
-    // Draw new ball
-    glcdFillRectangle(ball_x, ball_y, BALL_RADIUS * 2, BALL_RADIUS * 2, mcFgColor);
+    // Erase old ball and draw new one
+    glcdFillRectangle(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2,
+      mcBgColor);
+    glcdFillRectangle(ball_x, ball_y, BALL_RADIUS * 2, BALL_RADIUS * 2,
+      mcFgColor);
 
     // Draw middle lines around where the ball may have intersected it?
     if (intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2, BALL_RADIUS * 2,
@@ -888,121 +926,98 @@ static void draw(void)
     }
   }
 
-  // Clear left paddle when needed
-  if (oldleftpaddle_y != leftpaddle_y)
-  {
-    glcdFillRectangle(LEFTPADDLE_X, oldleftpaddle_y, PADDLE_W, PADDLE_H, mcBgColor);
-  }
+#ifdef BALL_VCENTERED
+  // Keep the ball always in the vertical centre of the display. This means
+  // that the entire play field will shift vertically up or down to keep the
+  // ball vertically centered. For this we'll use the lcd controller
+  // 'startline' register that will do the vertical shift of lcd image data
+  // in hardware.
+  // The use of this feature in this clock is rather useless apart from the
+  // fact that it nicely demonstrates what the startline register actually
+  // does :-)
+  u08 i;
+  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+    glcdControlWrite(i, GLCD_START_LINE | 
+      ((u08)ball_y + SCREEN_H / 2 + 2) % SCREEN_H);
+#endif
 
-  // There are quite a few options on redrawing the left paddle
-  if (oldleftpaddle_y != leftpaddle_y)
-  {
-    // Full redraw left paddle depending on alarm state
-    if (mcAlarming == GLCD_TRUE && newAlmDisplayState == GLCD_TRUE)
-    {
-      //DEBUGP("Left open");
-      glcdRectangle(LEFTPADDLE_X, leftpaddle_y, PADDLE_W, PADDLE_H, mcFgColor);
-    }
-    else
-    {
-      //DEBUGP("Left closed");
-      glcdFillRectangle(LEFTPADDLE_X, leftpaddle_y, PADDLE_W, PADDLE_H, mcFgColor);
-    }
-  }
-  else if (mcAlarming == GLCD_TRUE && newAlmDisplayState != mcU8Util1)
-  {
-    // Paddle fill toggle while alarming
-    inverseAlarmArea = GLCD_TRUE;
-  }
-  else if (mcAlarming == GLCD_FALSE && mcU8Util1 == GLCD_TRUE)
-  {
-    // Restore to full paddle after alarming has ended
-    inverseAlarmArea = GLCD_TRUE;
-  }
+  // Move the paddles
+  draw_paddle(LEFTPADDLE_X, oldleftpaddle_y, leftpaddle_y);
+  draw_paddle(RIGHTPADDLE_X, oldrightpaddle_y, rightpaddle_y);
 
-  // Invert centre of paddle if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-  {
-    /*if (newAlmDisplayState == GLCD_TRUE)
-    {
-      DEBUGP("Left inverse: open");
-    }
-    else
-    {
-      DEBUGP("Left inverse: closed");
-    }*/
-    glcdFillRectangle2(LEFTPADDLE_X + 1, leftpaddle_y + 1, 1, PADDLE_H - 2,
-      ALIGN_AUTO, FILL_INVERSE, mcFgColor);
-  }
-
-  // Reset indicator for right paddle
-  inverseAlarmArea = GLCD_FALSE;
-
-  // Clear right paddle when needed
-  if (oldrightpaddle_y != rightpaddle_y || foundRightIntersect)
-  {
-    glcdFillRectangle(RIGHTPADDLE_X, oldrightpaddle_y, PADDLE_W, PADDLE_H, mcBgColor);
-  }
-
-  // There are quite a few options on redrawing the right paddle
-  if (oldrightpaddle_y != rightpaddle_y || foundRightIntersect)
-  {
-    // Draw right paddle depending on alarm state
-    if (mcAlarming == GLCD_TRUE && newAlmDisplayState == GLCD_TRUE)
-    {
-      //DEBUGP("Right open");
-      glcdRectangle(RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H, mcFgColor);
-    }
-    else
-    {
-      //DEBUGP("Right closed");
-      glcdFillRectangle(RIGHTPADDLE_X, rightpaddle_y, PADDLE_W, PADDLE_H, mcFgColor);
-    }
-  }
-  else if (mcAlarming == GLCD_TRUE && newAlmDisplayState != mcU8Util1)
-  {
-    // Paddle fill toggle while alarming
-    inverseAlarmArea = GLCD_TRUE;
-  }
-  else if (mcAlarming == GLCD_FALSE && mcU8Util1 == GLCD_TRUE)
-  {
-    // Restore to full paddle after alarming has ended
-    inverseAlarmArea = GLCD_TRUE;
-  }
-
-  // Invert centre of paddle if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-  {
-    /*if (newAlmDisplayState == GLCD_TRUE)
-    {
-      DEBUGP("Right inverse: open");
-    }
-    else
-    {
-      DEBUGP("Right inverse: closed");
-    }*/
-    glcdFillRectangle2(RIGHTPADDLE_X + 1, rightpaddle_y + 1, 1, PADDLE_H - 2,
-      ALIGN_AUTO, FILL_INVERSE, mcFgColor);
-  }
-
-  // Set compare value for next cycle
+  // Set flashing state for next cycle
   if (mcAlarming == GLCD_TRUE)
-    mcU8Util1 = newAlmDisplayState;
-  else
-    mcU8Util1 = GLCD_FALSE;
-
-  // Draw score
-  if (redraw_score)
   {
-    redraw_digits = 1;
-    redraw_score = 1;
+    // The flashing state of the paddles in case of alarming
+    if ((mcCycleCounter & 0x0F) >= 8)
+      mcU8Util1 = GLCD_TRUE;
+    else
+      mcU8Util1 = GLCD_FALSE;
   }
-  draw_score(redraw_digits);
+  else
+  {
+    mcU8Util1 = GLCD_FALSE;
+  }
+
+  // Draw score and clear force redraw flag (if set anyway)
+  draw_score(redraw_score);
+  redraw_score = 0;
     
   // Redraw ball just in case it got (partially) covered by the score 
-  glcdFillRectangle(ball_x, ball_y, BALL_RADIUS * 2, BALL_RADIUS * 2, mcFgColor);
+  glcdFillRectangle(ball_x, ball_y, BALL_RADIUS * 2, BALL_RADIUS * 2,
+    mcFgColor);
 }
 
+//
+// Function: draw_paddle
+//
+// Draw the left or right paddle
+//
+static void draw_paddle(int8_t x, int8_t oldY, int8_t newY)
+{
+  u08 newAlmDisplayState = GLCD_FALSE;
+  u08 inverseAlarmArea = GLCD_FALSE;
+
+  // The flashing state of the paddles in case of alarming
+  if ((mcCycleCounter & 0x0F) >= 8)
+    newAlmDisplayState = GLCD_TRUE;
+
+  // Clear paddle when needed
+  if (oldY != newY)
+    glcdFillRectangle(x, oldY, PADDLE_W, PADDLE_H, mcBgColor);
+
+  // There are quite a few options on redrawing a paddle
+  if (oldY != newY)
+  {
+    // Draw filled or open paddle depending on alarm state
+    if (mcAlarming == GLCD_TRUE && newAlmDisplayState == GLCD_TRUE)
+      glcdRectangle(x, newY, PADDLE_W, PADDLE_H, mcFgColor);
+    else
+      glcdFillRectangle(x, newY, PADDLE_W, PADDLE_H, mcFgColor);
+  }
+  else if (mcAlarming == GLCD_TRUE && newAlmDisplayState != mcU8Util1)
+  {
+    // Paddle fill toggle while alarming
+    inverseAlarmArea = GLCD_TRUE;
+  }
+  else if (mcAlarming == GLCD_FALSE && mcU8Util1 == GLCD_TRUE)
+  {
+    // Restore to full paddle after alarming has ended
+    inverseAlarmArea = GLCD_TRUE;
+  }
+
+  // Invert centre of paddle if needed
+  if (inverseAlarmArea == GLCD_TRUE)
+    glcdFillRectangle2(x + 1, newY + 1, 1, PADDLE_H - 2, ALIGN_AUTO,
+      FILL_INVERSE, mcFgColor);
+}
+
+//
+// Function: intersectrect
+//
+// Determine whether two rectangles overlap one another.
+// Returns value 1 when that is the case.
+//
 static uint8_t intersectrect(uint8_t x1, uint8_t y1, uint8_t w1, uint8_t h1,
   uint8_t x2, uint8_t y2, uint8_t w2, uint8_t h2)
 {
@@ -1022,56 +1037,47 @@ static uint8_t intersectrect(uint8_t x1, uint8_t y1, uint8_t w1, uint8_t h1,
   return 1;
 }
 
-// 8 pixels high
-static const unsigned char __attribute__ ((progmem)) BigFont[] =
-{
-  0xFF, 0x81, 0x81, 0xFF,// 0
-  0x00, 0x00, 0x00, 0xFF,// 1
-  0x9F, 0x91, 0x91, 0xF1,// 2
-  0x91, 0x91, 0x91, 0xFF,// 3
-  0xF0, 0x10, 0x10, 0xFF,// 4
-  0xF1, 0x91, 0x91, 0x9F,// 5
-  0xFF, 0x91, 0x91, 0x9F,// 6
-  0x80, 0x80, 0x80, 0xFF,// 7
-  0xFF, 0x91, 0x91, 0xFF,// 8 
-  0xF1, 0x91, 0x91, 0xFF,// 9
-  0x00, 0x00, 0x00, 0x00,// SPACE
-};
-
+//
+// Function: draw_score
+//
+// Draw the full score in case the score data has changed or when a score
+// element intersects with the old ball location
+//
 static void draw_score(uint8_t redraw_digits)
 {
   // Draw digits for 'hours'
   if (redraw_digits || intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2,
-      BALL_RADIUS * 2, DISPLAY_H10_X, DISPLAY_TIME_Y, DISPLAY_DIGITW, DISPLAY_DIGITH))
-  {
+      BALL_RADIUS * 2, DISPLAY_H10_X, DISPLAY_TIME_Y, DISPLAY_DIGITW,
+      DISPLAY_DIGITH))
     drawbigdigit(DISPLAY_H10_X, DISPLAY_TIME_Y, left_score / 10);
-  }
   if (redraw_digits || intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2,
-      BALL_RADIUS * 2, DISPLAY_H1_X, DISPLAY_TIME_Y, DISPLAY_DIGITW, DISPLAY_DIGITH))
-  {
+      BALL_RADIUS * 2, DISPLAY_H1_X, DISPLAY_TIME_Y, DISPLAY_DIGITW,
+      DISPLAY_DIGITH))
     drawbigdigit(DISPLAY_H1_X, DISPLAY_TIME_Y, left_score % 10);
-  }
 
   // Draw digits for 'minutes'
   if (redraw_digits || intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2,
-      BALL_RADIUS * 2, DISPLAY_M10_X, DISPLAY_TIME_Y, DISPLAY_DIGITW, DISPLAY_DIGITH))
-  {
+      BALL_RADIUS * 2, DISPLAY_M10_X, DISPLAY_TIME_Y, DISPLAY_DIGITW,
+      DISPLAY_DIGITH))
     drawbigdigit(DISPLAY_M10_X, DISPLAY_TIME_Y, right_score / 10);
-  }
   if (redraw_digits || intersectrect(oldball_x, oldball_y, BALL_RADIUS * 2,
-      BALL_RADIUS * 2, DISPLAY_M1_X, DISPLAY_TIME_Y, DISPLAY_DIGITW, DISPLAY_DIGITH))
-  {
+      BALL_RADIUS * 2, DISPLAY_M1_X, DISPLAY_TIME_Y, DISPLAY_DIGITW,
+      DISPLAY_DIGITH))
     drawbigdigit(DISPLAY_M1_X, DISPLAY_TIME_Y, right_score % 10);
-  }
 }
 
+//
+// Function: drawbigdigit
+//
+// Draw a single big digit
+//
 static void drawbigdigit(uint8_t x, uint8_t y, uint8_t n)
 {
   uint8_t i, j;
   
   for (i = 0; i < 4; i++)
   {
-    uint8_t d = pgm_read_byte(BigFont + (n * 4) + i);
+    uint8_t d = pgm_read_byte(bigFont + (n * 4) + i);
     for (j = 0; j < 8; j++)
     {
       if (d & _BV(7 - j))
@@ -1082,6 +1088,11 @@ static void drawbigdigit(uint8_t x, uint8_t y, uint8_t n)
   }
 }
 
+//
+// Function: random_angle_rads
+//
+// Get a random angle in range 0..pi radials
+//
 static float random_angle_rads(void)
 {
   uint16_t angleRand = crand(0);
@@ -1108,6 +1119,14 @@ static float random_angle_rads(void)
   return angle;
 }
 
+//
+// Function: calculate_keepout
+//
+// Simulate a ball bounce and determine where the ball will end up
+// on the other side of the play field. We need this to determine
+// where the receiving paddle should move to in order to bounce
+// the ball (or to avoid it in case of a time change).
+//
 static uint8_t calculate_keepout(float theball_x, float theball_y,
   float theball_dx, float theball_dy, uint8_t *keepout1, uint8_t *keepout2)
 {
@@ -1127,13 +1146,13 @@ static uint8_t calculate_keepout(float theball_x, float theball_y,
     sim_ball_y += sim_ball_dy;
     sim_ball_x += sim_ball_dx;
   
-    if (sim_ball_y  > (int8_t)(SCREEN_H - BALL_RADIUS * 2 - BOTBAR_H))
+    if (sim_ball_y > (int8_t)(SCREEN_H - BALL_RADIUS * 2 - BOTBAR_H))
     {
       sim_ball_y = SCREEN_H - BALL_RADIUS * 2 - BOTBAR_H;
       sim_ball_dy *= -1;
     }
 
-    if (sim_ball_y <  TOPBAR_H)
+    if (sim_ball_y < TOPBAR_H)
     {
       sim_ball_y = TOPBAR_H;
       sim_ball_dy *= -1;
@@ -1142,46 +1161,38 @@ static uint8_t calculate_keepout(float theball_x, float theball_y,
     if ((((int8_t)sim_ball_x + BALL_RADIUS * 2) >= RIGHTPADDLE_X) && 
          ((old_sim_ball_x + BALL_RADIUS * 2) < RIGHTPADDLE_X))
     {
-      // check if we collided with the right paddle
-      
-      // first determine the exact position at which it would collide
+      // Check if we collided with the right paddle
+      // First determine the exact position at which it would collide
       dx = RIGHTPADDLE_X - (old_sim_ball_x + BALL_RADIUS * 2);
-      // now figure out what fraction that is of the motion and multiply that by the dy
+      // Now figure out what fraction that is of the motion and multiply that by the dy
       dy = (dx / sim_ball_dx) * sim_ball_dy;
-    
-      if (DEBUGGING)
+      /*if (DEBUGGING)
       {
         putstring("RCOLL@ ("); uart_putw_dec(old_sim_ball_x + dx);
         putstring(", "); uart_putw_dec(old_sim_ball_y + dy);
-      }
-      
+      }*/
       *keepout1 = old_sim_ball_y + dy; 
       collided = 1;
     }
     else if (((int8_t)sim_ball_x <= (LEFTPADDLE_X + PADDLE_W)) && 
         (old_sim_ball_x > (LEFTPADDLE_X + PADDLE_W)))
     {
-      // check if we collided with the left paddle
-
-      // first determine the exact position at which it would collide
+      // Check if we collided with the left paddle
+      // First determine the exact position at which it would collide
       dx = (LEFTPADDLE_X + PADDLE_W) - old_sim_ball_x;
-      // now figure out what fraction that is of the motion and multiply that by the dy
+      // Now figure out what fraction that is of the motion and multiply that by the dy
       dy = (dx / sim_ball_dx) * sim_ball_dy;
-    
       /*if (DEBUGGING)
       {
         putstring("LCOLL@ ("); uart_putw_dec(old_sim_ball_x + dx);
         putstring(", "); uart_putw_dec(old_sim_ball_y + dy);
       }*/
-      
       *keepout1 = old_sim_ball_y + dy; 
       collided = 1;
     }
+
     if (!collided)
-    {
       tix++;
-    }
-    
     /*if (DEBUGGING)
     {
       putstring("\tSIMball @ ["); uart_putw_dec(sim_ball_x);

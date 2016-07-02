@@ -5,7 +5,7 @@
 #          and numeric argument expressions
 #
 
-# Erase LCD display
+# Erase lcd display
 le
 
 # Set horizontal and vertical display size
@@ -15,18 +15,18 @@ vs ver=63
 vs lines=6
 
 # Paint in total 5x5 lines twice
-rf factor=1 factor<=lines-1 factor=factor+1
+rf factor=1/lines factor<1 factor=factor+1/lines
   # From left to top and left to bottom
-  pl f 0 ver/lines*factor (hor-(hor/lines*factor))/2 0
-  pl f 0 ver/lines*factor (hor/lines*factor)/2 ver
-  pl f 64 ver/lines*factor (hor-(hor/lines*factor))/2+64 0
-  pl f 64 ver/lines*factor (hor/lines*factor)/2+64 ver
+  pl f 0 ver*factor (hor-hor*factor)/2 0
+  pl f 0 ver*factor hor*factor/2 ver
+  pl f 64 ver*factor (hor-hor*factor)/2+64 0
+  pl f 64 ver*factor hor*factor/2+64 ver
 
   # From right to top and right to bottom
-  pl f hor/2 ver-(ver/lines*factor) (hor-(hor/lines*factor))/2 0
-  pl f hor/2 ver-(ver/lines*factor) (hor/lines*factor)/2 ver
-  pl f hor ver-(ver/lines*factor) (hor-(hor/lines*factor))/2+64 0
-  pl f hor ver-(ver/lines*factor) (hor/lines*factor)/2+64 ver
+  pl f hor/2 ver*factor hor*factor/2 0
+  pl f hor/2 ver*factor (hor-hor*factor)/2 ver
+  pl f hor ver*factor hor*factor/2+64 0
+  pl f hor ver*factor (hor-hor*factor)/2+64 ver
 rn
 
 # Paint the glcdline function name in a rectangle box

@@ -4,7 +4,7 @@
 # Purpose: Show the several fill types for glcdFillRectangle2()
 #
 
-# Erase LCD display and paint the function name
+# Erase lcd display and paint the function name
 le
 pa f 1 1 5x5p h 1 1 glcdfillrectangle2 - fill patterns
 

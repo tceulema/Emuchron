@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'ks0108.c'
-// Title    : Graphic LCD driver for HD61202/KS0108 displays
+// Title    : Graphic lcd driver for HD61202/KS0108 displays
 //*****************************************************************************
 
 #ifndef EMULIN
@@ -9,24 +9,30 @@
 #include <avr/interrupt.h>
 #include "util.h"
 #else
-#include "emulator/stub.h"
 #include "emulator/stubrefs.h"
 #include "emulator/mchronutil.h"
-#include "emulator/lcd.h"
+#include "emulator/controller.h"
 #endif
 
 #include "global.h"
 #include "ks0108.h"
 
-// Global variables
-GrLcdStateType GrLcdState;
+// Definition of a structure that holds the functional lcd cursor and
+// the active y line cursor in both controllers
+// (x=0..127, y=0..7)
+typedef struct _glcdLcdCursor_t
+{
+  unsigned char lcdXAddr;
+  unsigned char lcdYAddr;
+  unsigned char ctrlY[GLCD_NUM_CONTROLLERS];
+} glcdLcdCursor_t;
+
+// The functional lcd cursor
+static glcdLcdCursor_t glcdLcdCursor;
 
 // Local function prototypes
 static void glcdBusyWait(u08 controller);
-//static u08 glcdControlRead(u08 controller);
 static void glcdControlSelect(u08 controller);
-static void glcdControlWrite(u08 controller, u08 data);
-static void glcdHome(void);
 static void glcdInitHW(void);
 static void glcdReset(u08 resetState);
 static void glcdSetXAddress(u08 xAddr);
@@ -39,23 +45,12 @@ static void glcdSetYAddress(u08 yAddr);
 //
 void glcdInit(u08 color)
 {
-  u08 i;
-
-  // Initialize hardware
+  // Initialize hardware and bring lcd out of reset
   glcdInitHW();
-
-  // Bring lcd out of reset
   glcdReset(FALSE);
 
-  // Turn on lcd
-  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-    glcdControlWrite(i, GLCD_ON_CTRL | GLCD_ON_DISPLAY);
-
-  // Clear lcd
+  // Initialize each controller in the lcd by clearing the screen
   glcdClearScreen(color);
-
-  // Initialize lcd cursor position
-  glcdHome();
 }
 
 //
@@ -72,7 +67,7 @@ static void glcdInitHW(void)
   //TODO: make setup of chip select lines contingent on how
   // many controllers are actually in the display
 
-  // Initialize LCD control lines levels
+  // Initialize lcd control lines levels
   cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
@@ -89,7 +84,7 @@ static void glcdInitHW(void)
 #ifdef GLCD_CTRL_RESET
   cbi(GLCD_CTRL_RESET_PORT, GLCD_CTRL_RESET);
 #endif
-  // Initialize LCD control port to output
+  // Initialize lcd control port to output
   sbi(GLCD_CTRL_RS_DDR, GLCD_CTRL_RS);
   sbi(GLCD_CTRL_RW_DDR, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_DDR, GLCD_CTRL_E);
@@ -106,11 +101,11 @@ static void glcdInitHW(void)
 #ifdef GLCD_CTRL_RESET
   sbi(GLCD_CTRL_RESET_DDR, GLCD_CTRL_RESET);
 #endif
-  // Initialize LCD data
+  // Initialize lcd data
   GLCD_DATAH_PORT &= ~(0xF0);
   GLCD_DATAL_PORT &= ~(0x0F);
   //outb(GLCD_DATA_PORT, 0x00);
-  // Initialize LCD data port to output
+  // Initialize lcd data port to output
   GLCD_DATAH_DDR |= 0xF0;
   GLCD_DATAL_DDR |= 0x0F;
   //outb(GLCD_DATA_DDR, 0xFF);
@@ -172,10 +167,18 @@ static void glcdBusyWait(u08 controller)
 //
 // Function: glcdControlWrite
 //
-// Write to the lcd controller
+// Send command to the lcd controller
 //
-static void glcdControlWrite(u08 controller, u08 data)
+void glcdControlWrite(u08 controller, u08 data)
 {
+#ifdef EMULIN
+  // Check if controller is out of bounds (should never happen)
+  if (controller >= GLCD_NUM_CONTROLLERS)
+    emuCoreDump(__func__, controller, 0, 0, data);
+
+  // Execute the action in the controller
+  ctrlExecute(CTRL_METHOD_COMMAND, controller, data);
+#endif
 #ifdef GLCD_PORT_INTERFACE
   cli();
   // Wait until lcd not busy
@@ -216,7 +219,7 @@ static void glcdControlWrite(u08 controller, u08 data)
 //
 // Read from the lcd controller
 //
-/*static u08 glcdControlRead(u08 controller)
+/*u08 glcdControlRead(u08 controller)
 {
   register u08 data;
 #ifdef GLCD_PORT_INTERFACE
@@ -311,13 +314,20 @@ static void glcdControlSelect(u08 controller)
 //
 void glcdDataWrite(u08 data)
 {
+  register u08 controller =
+    (glcdLcdCursor.lcdXAddr >> GLCD_CONTROLLER_XPIXBITS);
 #ifdef EMULIN
-  // Write to lcd emulator device
-  lcdWriteStub(data);
+  // Check if administrative cursor is out of bounds (should never happen)
+  if (controller >= GLCD_NUM_CONTROLLERS ||
+      glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
+      glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
+    emuCoreDump(__func__, controller, glcdLcdCursor.lcdXAddr,
+      glcdLcdCursor.lcdYAddr, data);
+
+  // Write data to controller lcd buffer
+  ctrlExecute(CTRL_METHOD_WRITE, controller, data);
 #else
 #ifdef GLCD_PORT_INTERFACE
-  register u08 controller = (GrLcdState.lcdXAddr/GLCD_CONTROLLER_XPIXELS);
-
   cli();
   // Wait until lcd not busy
   glcdBusyWait(controller);
@@ -366,10 +376,18 @@ void glcdDataWrite(u08 data)
 u08 glcdDataRead(void)
 {
   register u08 data;
-  register u08 controller = (GrLcdState.lcdXAddr / GLCD_CONTROLLER_XPIXELS);
+  register u08 controller =
+    (glcdLcdCursor.lcdXAddr >> GLCD_CONTROLLER_XPIXBITS);
 #ifdef EMULIN
-  // Read from LCD emulator device
-  data = lcdReadStub(controller);
+  // Check if administrative cursor is out of bounds (should never happen)
+  if (controller >= GLCD_NUM_CONTROLLERS ||
+      glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
+      glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
+    emuCoreDump(__func__, controller, glcdLcdCursor.lcdXAddr,
+      glcdLcdCursor.lcdYAddr, 0);
+
+  // Read data from controller lcd buffer
+  data = ctrlExecute(CTRL_METHOD_READ, controller, 0);
 #else
 #ifdef GLCD_PORT_INTERFACE
   cli();
@@ -413,6 +431,7 @@ u08 glcdDataRead(void)
 //
 static void glcdReset(u08 resetState)
 {
+  u08 i;
   // Reset lcd if argument is true.
   // Run lcd if argument is false.
 #ifdef GLCD_PORT_INTERFACE
@@ -423,37 +442,22 @@ static void glcdReset(u08 resetState)
     sbi(GLCD_CTRL_RESET_PORT, GLCD_CTRL_RESET);
 #endif
 #endif
-}
 
-//
-// Function: glcdHome
-//
-// Set the lcd cursor to top left position
-//
-static void glcdHome(void)
-{
-  u08 i;
-
-  // Initialize addresses/positions
-  glcdStartLine(0);
-  glcdSetAddress(0,0);
-
-  // Initialize local data structures
+  // Init admin of controller y page so it will sync at the first cursor request
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-  {
-    GrLcdState.ctrlr[i].xAddr = 0;
-    GrLcdState.ctrlr[i].yAddr = 0;
-  }
+    glcdLcdCursor.ctrlY[i] = 255;
 }
 
 //
 // Function: glcdClearScreen
 //
-// Clear the lcd contents using the specified color
+// Clear the lcd contents using the specified color, and reset the controller
+// display and startline settings that may have been modified by functional
+// clock code
 //
 void glcdClearScreen(u08 color)
 {
-  u08 pageAddr;
+  u08 i;
   u08 xAddr;
   u08 data;
 
@@ -462,50 +466,71 @@ void glcdClearScreen(u08 color)
   else
     data = 0x00;
 
-  // Clear lcd.
-  // Loop through all pages.
-  for (pageAddr = 0; pageAddr < (GLCD_YPIXELS >> 3); pageAddr++)
+  // Clear lcd by looping through all pages
+  for (i = 0; i < GLCD_CONTROLLER_YPAGES; i++)
   {
     // Set page address
-    glcdSetAddress(0, pageAddr);
+    glcdSetAddress(0, i);
 
     // Clear all lines of this page of display memory
     for (xAddr = 0; xAddr < GLCD_XPIXELS; xAddr++)
       glcdDataWrite(data);
+  }
+
+  // Enable all controller displays and reset startline to 0
+  glcdResetScreen();
+}
+
+//
+// Function: glcdResetScreen
+//
+// Reset the lcd display by enabling display and setting startline to 0
+//
+void glcdResetScreen(void)
+{
+  u08 i;
+
+  // Switch on display and reset startline
+  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+  {
+    glcdControlWrite(i, GLCD_START_LINE | 0);
+    glcdControlWrite(i, GLCD_ON_CTRL | GLCD_ON_DISPLAY);
   }
 }
 
 //
 // Function: glcdStartLine
 //
-// Set the lcd controller cursor to the specified line
+// Display the controller lcd data with a vertical pixel offset value
 //
-void glcdStartLine(u08 start)
+/*void glcdStartLine(u08 startLine)
 {
-  glcdControlWrite(0, GLCD_START_LINE | start);
-  glcdControlWrite(1, GLCD_START_LINE | start);
-}
+  u08 i;
+
+  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+    glcdControlWrite(i, GLCD_START_LINE | startLine);
+}*/
 
 //
 // Function: glcdSetAddress
 //
-// Set the lcd cursor position
+// Set the lcd cursor position in one of the lcd controllers
 //
 void glcdSetAddress(u08 x, u08 yLine)
 {
-  // Set addresses
 #ifdef EMULIN
-  extern long long lcdLcdSetAddress;
+  extern long long ctrlLcdSetAddress;
 
-  lcdLcdSetAddress++;
-  if (x >= GLCD_XPIXELS || yLine >= GLCD_YPIXELS / 8)
-  {
-    // We should never get here
+  // Check if requested cursor is out of bounds (should never happen)
+  ctrlLcdSetAddress++;
+  if (x >= GLCD_XPIXELS || (yLine >> GLCD_CONTROLLER_YPAGEBITS) > 0)
     emuCoreDump(__func__, 0, x, yLine, 0);
-  }
 #endif
-  glcdSetYAddress(yLine);
+  // Set cursor x and y address.
+  // The set address functions are setup such that we must set the x position
+  // first to get the destination controller and only then set the y position.
   glcdSetXAddress(x);
+  glcdSetYAddress(yLine);
 }
 
 //
@@ -515,21 +540,12 @@ void glcdSetAddress(u08 x, u08 yLine)
 //
 static void glcdSetXAddress(u08 xAddr)
 {
-  u08 i;
-
   // Record address change locally
-  GrLcdState.lcdXAddr = xAddr;
+  glcdLcdCursor.lcdXAddr = xAddr;
 
-  // Clear y (col) address on all controllers
-  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-  {
-    glcdControlWrite(i, GLCD_SET_Y_ADDR | 0x00);
-    GrLcdState.ctrlr[i].xAddr = 0;
-  }
-
-  // Set y (col) address on destination controller
-  glcdControlWrite((GrLcdState.lcdXAddr / GLCD_CONTROLLER_XPIXELS),
-    GLCD_SET_Y_ADDR | (GrLcdState.lcdXAddr & 0x3F));
+  // Set x address on destination controller (confusingly named GLCD_SET_Y_ADDR)
+  glcdControlWrite(glcdLcdCursor.lcdXAddr >> GLCD_CONTROLLER_XPIXBITS,
+    GLCD_SET_Y_ADDR | (glcdLcdCursor.lcdXAddr & GLCD_CONTROLLER_XPIXMASK));
 }
 
 //
@@ -539,14 +555,16 @@ static void glcdSetXAddress(u08 xAddr)
 //
 static void glcdSetYAddress(u08 yAddr)
 {
-  u08 i;
+  u08 controller = glcdLcdCursor.lcdXAddr >> GLCD_CONTROLLER_XPIXBITS;
 
   // Record address change locally
-  GrLcdState.lcdYAddr = yAddr;
+  glcdLcdCursor.lcdYAddr = yAddr & GLCD_CONTROLLER_YPAGEMASK;
 
-  // Set page address for all controllers
-  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-    glcdControlWrite(i, GLCD_SET_PAGE | yAddr);
+  // Set page address on destination controller only when changed
+  if (glcdLcdCursor.lcdYAddr == glcdLcdCursor.ctrlY[controller])
+    return;
+  glcdLcdCursor.ctrlY[controller] = glcdLcdCursor.lcdYAddr;
+  glcdControlWrite(controller, GLCD_SET_PAGE | glcdLcdCursor.lcdYAddr);
 }
 
 //
@@ -556,15 +574,35 @@ static void glcdSetYAddress(u08 yAddr)
 //
 void glcdNextAddress(void)
 {
-  register u08 controller = (GrLcdState.lcdXAddr/GLCD_CONTROLLER_XPIXELS);
+  // Moving to the next logical x address is more complicated than it seems
+  // since we need to map a logical address into a controller address with a
+  // potential controller address overflow situation. Also, a read/write action
+  // performed on a controller almost always results in an automatic increment
+  // of the cursor in the controller.
+  // The following situations apply:
+  // - Go to x+1 in current controller on current y line.
+  //   This is done automatically in the controller after the 2nd sequential
+  //   read or after every write operation.
+  // - At end of controller 0, move to x=0 in controller 1 on current y line.
+  //   Explicitly set controller 1 cursor.
+  // - Reset to x=0 in controller 0 on current y line.
+  //   Explicitly set controller 0 cursor.
 
-  // Increment our local address counter
-  GrLcdState.ctrlr[controller].xAddr++;
-  GrLcdState.lcdXAddr++;
-  if (GrLcdState.lcdXAddr >= GLCD_XPIXELS)
+  if (glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS - 1)
   {
-    GrLcdState.lcdYAddr++;
-    glcdSetYAddress(GrLcdState.lcdYAddr);
+    // We're at the end of an lcd line; init cursor on controller 0 on
+    // current line
     glcdSetXAddress(0);
+  }  
+  else
+  {
+    // Next x
+    glcdLcdCursor.lcdXAddr++;
+    if ((glcdLcdCursor.lcdXAddr & GLCD_CONTROLLER_XPIXMASK) == 0)
+    {
+      // We move to next controller; init cursor on that controller
+      glcdSetXAddress(glcdLcdCursor.lcdXAddr);
+      glcdSetYAddress(glcdLcdCursor.lcdYAddr);
+    }
   }
 }

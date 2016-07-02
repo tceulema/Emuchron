@@ -34,7 +34,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
@@ -48,38 +47,36 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
 //
 void spotTrafLightCycle(void)
 {
-  // Update alarm info in clock
-  spotAlarmAreaUpdate();
-
-  // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+  // Update common Spotfire clock elements and check if clock requires update
+  if (spotCommonUpdate() == GLCD_FALSE)
     return;
 
   DEBUGP("Update TrafficLight");
 
-  // Update common parts of a Spotfire clock
-  spotCommonUpdate();
-
   // Verify changes in sec
   if ((mcClockNewTS / 20 != mcClockOldTS / 20) || mcClockInit == GLCD_TRUE)
-    spotTrafSegmentUpdate(TRAF_BOX_X_START + 2 * TRAF_BOX_X_OFFSET_SIZE + TRAF_SEG_X_OFFSET,
+    spotTrafSegmentUpdate(
+      TRAF_BOX_X_START + 2 * TRAF_BOX_X_OFFSET_SIZE + TRAF_SEG_X_OFFSET,
       TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 20, mcClockOldTS, mcClockNewTS);
 
   // Verify changes in min
   if ((mcClockNewTM / 20 != mcClockOldTM / 20) || mcClockInit == GLCD_TRUE)
-    spotTrafSegmentUpdate(TRAF_BOX_X_START + TRAF_BOX_X_OFFSET_SIZE + TRAF_SEG_X_OFFSET,
+    spotTrafSegmentUpdate(
+      TRAF_BOX_X_START + TRAF_BOX_X_OFFSET_SIZE + TRAF_SEG_X_OFFSET,
       TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 20, mcClockOldTM, mcClockNewTM);
 
   // Verify changes in hour
   if ((mcClockNewTH / 8 != mcClockOldTH / 8) || mcClockInit == GLCD_TRUE)
-    spotTrafSegmentUpdate(TRAF_BOX_X_START + TRAF_SEG_X_OFFSET,
+    spotTrafSegmentUpdate(
+      TRAF_BOX_X_START + TRAF_SEG_X_OFFSET,
       TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 8, mcClockOldTH, mcClockNewTH);
 }
 
 //
 // Function: spotTrafLightInit
 //
-// Initialize the LCD display for use as a Spotfire QuintusVisuals Traffic Light
+// Initialize the LCD display for use as a Spotfire QuintusVisuals
+// Traffic Light
 //
 void spotTrafLightInit(u08 mode)
 {
@@ -95,14 +92,14 @@ void spotTrafLightInit(u08 mode)
   for (i = 0; i <= 2; i++)
   {
     x = TRAF_BOX_X_START + i * TRAF_BOX_X_OFFSET_SIZE;
-    glcdRectangle(x, TRAF_BOX_Y_START, TRAF_BOX_WIDTH, TRAF_BOX_LENGTH, mcFgColor);
+    glcdRectangle(x, TRAF_BOX_Y_START, TRAF_BOX_WIDTH, TRAF_BOX_LENGTH,
+      mcFgColor);
+
     // Each traffic light has three segments
     for (j = 0; j <= 2; j++)
-    {
       glcdCircle2(x + TRAF_SEG_X_OFFSET,
         TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET + j * TRAF_SEG_Y_OFFSET_SIZE,
         TRAF_SEG_RADIUS, CIRCLE_FULL, mcFgColor);
-    }
   }
   spotAxisInit(CHRON_TRAFLIGHT);
 }

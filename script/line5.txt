@@ -5,7 +5,7 @@
 #          sin() and cos() based lines.
 #
 
-# Erase LCD display
+# Erase lcd display
 le
 
 # Big circle

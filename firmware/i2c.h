@@ -78,9 +78,11 @@ void i2cSetBitrate(u16 bitrateKHz);
 //void i2cSetLocalDeviceAddr(u08 deviceAddr, u08 genCallEn);
 
 // Set the user function which handles receiving (incoming) data as a slave
-//void i2cSetSlaveReceiveHandler(void (*i2cSlaveRx_func)(u08 receiveDataLength, u08* receiveData));
+//void i2cSetSlaveReceiveHandler
+//  (void (*i2cSlaveRx_func)(u08 receiveDataLength, u08* receiveData));
 // Set the user function which handles transmitting (outgoing) data as a slave
-//void i2cSetSlaveTransmitHandler(u08 (*i2cSlaveTx_func)(u08 transmitDataLengthMax, u08* transmitData));
+//void i2cSetSlaveTransmitHandler
+//  (u08 (*i2cSlaveTx_func)(u08 transmitDataLengthMax, u08* transmitData));
 
 // Low-level I2C transaction commands 
 // Send an I2C start condition in Master mode
@@ -92,8 +94,8 @@ void i2cWaitForComplete(void);
 // Send an (address|R/W) combination or a data byte over I2C
 void i2cSendByte(u08 data);
 // Receive a data byte over I2C  
-// ackFlag = TRUE if recevied data should be ACK'ed
-// ackFlag = FALSE if recevied data should be NACK'ed
+// ackFlag = TRUE if received data should be ACK'ed
+// ackFlag = FALSE if received data should be NACK'ed
 void i2cReceiveByte(u08 ackFlag);
 // Pick up the data that was received with i2cReceiveByte()
 u08 i2cGetReceivedByte(void);

@@ -2,7 +2,8 @@
 mchron - Emuchron emulator command line tool
 
 Use: mchron [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]
-            [-d <logfile>] [-h]
+            [-d <logfile>] [-b] [-h]
+  -b            - Backlight brightness support in ncurses terminal
   -d <logfile>  - Debug logfile name
   -g <geometry> - Geometry (x,y) of glut window
                   Default: "520x264"
@@ -24,6 +25,8 @@ Examples:
 
 Commands:
   '#'   - Comments
+          Argument: <comments>
+              comments: optional ascii text
   'ap'  - Set alarm switch position
           Argument: <position>
               position: 0 = off, 1 = on
@@ -41,11 +44,11 @@ Commands:
               mode: 'c' = start in single cycle mode, 'n' = start normal
   'cs'  - Select clock
           Argument: <clock>
-              clock: 0 = [detach], 1 = analogHMS, 2 = analogHM, 3 = digitalHMS,
-                     4 = digitalHM, 5 = mosquito, 6 = nerd, 7 = pong,
-                     8 = puzzle, 9 = slider, 10 = cascade, 11 = speed,
-                     12 = spider, 13 = traffic, 14 = bigdigOne, 15 = bigdigTwo,
-                     16 = qrHMS, 17 = qrHM, 18 = perftest
+              clock: 0 = [detach], 1 = example, 2 = analogHMS, 3 = analogHM,
+                     4 = digitalHMS, 5 = digitalHM, 6 = mosquito, 7 = nerd,
+                     8 = pong, 9 = puzzle, 10 = slider, 11 = cascade,
+                     12 = speed, 13 = spider, 14 = traffic, 15 = bigdigOne,
+                     16 = bigdigTwo, 17 = qrHMS, 18 = qrHM, 19 = perftest
   'dr'  - Reset clock date to system date
   'ds'  - Set date
           Arguments: <day> <month> <year>
@@ -63,20 +66,45 @@ Commands:
   'he'  - Help expression
           Argument: <number>
               number: expression
+  'hm'  - Help message
+          Argument: <message>
+              message: ascii text
   'iei' - If else if then
-          Arguments: <condition>
+          Argument: <condition>
               condition: expression determining block execution
   'iel' - If else
   'ien' - If end
   'iif' - If then
-          Arguments: <condition>
+          Argument: <condition>
               condition: expression determining block execution
-  'lbs' - Set lcd backlight brightness (glut support only)
+  'lbs' - Set lcd backlight brightness
           Argument: <backlight>
-              backlight: 0..16
+              backlight: 0..16 (0 = dim .. 16 = bright)
+  'lcs' - Set controller lcd cursor
+          Arguments: <controller> <x> <yline> 
+              controller: 0, 1
+              x: 0..63
+              yline: 0..7
+  'lds' - Switch controller lcd display on/off
+          Arguments: <controller-0> <controller-1>
+              controller-0: 0 = off, 1 = on
+              controller-1: 0 = off, 1 = on
   'le'  - Erase lcd display
   'li'  - Inverse lcd display
-  'm'   - Start Monochron emulator
+  'lp'  - Print controller state/registers
+  'lr'  - Read controller lcd data in variable
+          Arguments: <controller> <variable> 
+              controller: 0, 1
+              variable: word of [a-zA-Z_] characters
+  'lss' - Set controller lcd start line
+          Arguments: <controller-0> <controller-1> 
+              controller-0: 0..63
+              controller-1: 0..63
+  'lw'  - Write data to controller lcd
+          Arguments: <controller> <data> 
+              controller: 0, 1
+              data: 0..255
+  'm'   - Start Monochron application
           Arguments: <mode> <eeprom>
               mode: 'c' = start in single cycle mode, 'n' = start normal
               eeprom: 'k' = keep, 'r' = reset
@@ -156,8 +184,8 @@ Commands:
               condition: expression determining loop continuation
               post: expression executed after each loop
   'rn'  - Repeat next
-  'sp'  - Print statistics on stub and lcd device
-  'sr'  - Reset statistics on stub and lcd device
+  'sp'  - Print application statistics
+  'sr'  - Reset application statistics
   'tf'  - Flush Monochron time and date to active clock
   'tp'  - Print time/date/alarm
   'tr'  - Reset time to system time
@@ -168,18 +196,18 @@ Commands:
               sec: 0..59
   'vp'  - Print value of variable(s)
           Argument: <variable>
-              variable: word of [a-zA-Z] characters, '*' = all
+              variable: word of [a-zA-Z_] characters, '*' = all
   'vr'  - Reset variable(s)
           Argument: <variable>
-              variable: word of [a-zA-Z] characters, '*' = all
+              variable: word of [a-zA-Z_] characters, '*' = all
   'vs'  - Set value of variable 
           Argument: <assignment>
               assignment: <variable>=<expression>
   'w'   - Wait for keypress or amount of time
           Argument: <delay>
-              delay: 0 = wait for keypress, >0 = wait (msec)
-          When waiting for keypress, a 'q' will return control back to the
-          mchron command prompt
+              delay: 0 = wait for keypress, 1..1000000 = wait (msec)
+          When waiting, a 'q' will return control back to the mchron command
+          prompt
   'x'   - Exit
 
 Examples:

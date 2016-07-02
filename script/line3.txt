@@ -4,7 +4,7 @@
 # Purpose: This script is used for testing gldcdLine()
 #
 
-# Erase LCD display
+# Erase lcd display
 le
 
 # Set verariables for hororizontal and verertical display size

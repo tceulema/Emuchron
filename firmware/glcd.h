@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'glcd.h'
-// Title    : Graphic LCD API functions
+// Title    : Graphic lcd API functions
 //*****************************************************************************
 
 #ifndef GLCD_H
@@ -60,7 +60,7 @@ void glcdRectangle(u08 x, u08 y, u08 a, u08 b, u08 color);
 void glcdFillRectangle(u08 x, u08 y, u08 a, u08 b, u08 color);
 void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType, u08 color);
 
-// Draw full/dotted/filled circle of <radius> at <xcenter,ycenter>
+// Draw full/dotted/filled circle of <radius> at <xCenter,yCenter>
 void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color);
 void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType, u08 color);
 

@@ -1,19 +1,18 @@
 //*****************************************************************************
 // Filename : 'stub.c'
-// Title    : Stub functionality for MONOCHRON Emulator
+// Title    : Stub functionality for emuchron emulator
 //*****************************************************************************
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
-#include <errno.h>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include "stub.h"
-#include "lcd.h"
 #include "mchronutil.h"
 #include "scanutil.h"
 #include "../ks0108.h"
@@ -70,7 +69,7 @@ uint16_t PORTD = 0;
 uint16_t PINB = 0;
 uint16_t PIND = 0;
 
-// Stuff for debugging
+// Debug output file
 FILE *debugFile = NULL;
 
 // Keypress hold data
@@ -89,19 +88,20 @@ static u08 stubBacklight = 16;
 // Active help function when running an emulator
 static void (*stubHelp)(void) = NULL;
 
-// Stuff for event handler stub
+// Event handler stub data
 static int eventCycleState = CYCLE_NOWAIT;
 static int eventInit = GLCD_TRUE;
 
-// Local stuff for date/time and timer statistics
+// Date/time and timer statistics data
 static double timeDelta = 0L;
 static struct timeval timestampNext;
 static int inTimeCount = 0;
 static int outTimeCount = 0;
+static int singleCycleCount = 0;
 static double waitTotal = 0L;
 static int minSleep = ANIMTICK_MS + 1;
 
-// Local stuff for terminal settings for stdin keypress mode
+// Terminal settings for stdin keypress mode data
 static struct termios oldt, newt;
 static int kbMode = KB_MODE_LINE;
 
@@ -485,7 +485,7 @@ char kbWaitDelay(int delay)
     if (timeDiff >= 250000)
       tvWait.tv_usec = 250000;
     else
-      tvWait.tv_usec = timeDiff; 
+      tvWait.tv_usec = timeDiff;
 
     // Wait
     select(0, NULL, NULL, NULL, &tvWait);
@@ -553,6 +553,8 @@ char kbWaitKeypress(int allowQuit)
     select(0, NULL, NULL, NULL, &t);
   }
   ch = getchar();
+  if (ch >= 'A' && ch <= 'Z')
+    ch = ch - 'A' + 'a';
 
   // Return to line mode if needed
   if (myKbMode == KB_MODE_LINE)
@@ -597,7 +599,7 @@ void stubDelay(int x)
   if (x == KEYPRESS_DLY_1)
     return;
   sleepThis.tv_sec = 0;
-  sleepThis.tv_usec = x * 1000; 
+  sleepThis.tv_usec = x * 1000;
   select(0, NULL, NULL, NULL, &sleepThis);
 }
 
@@ -649,7 +651,7 @@ char stubEventGet(void)
   uint8_t keypress = GLCD_FALSE;
 
   // Flush the lcd device
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
 
   // Get timediff with previous call
   (void) gettimeofday(&tv, NULL);
@@ -674,7 +676,7 @@ char stubEventGet(void)
     if (minSleep > (int)(timeDiff / 1000))
       minSleep = (int)(timeDiff / 1000);
     sleepThis.tv_sec = 0;
-    sleepThis.tv_usec = timeDiff; 
+    sleepThis.tv_usec = timeDiff;
     select(0, NULL, NULL, NULL, &sleepThis);
 
     // Set next timestamp based on previous one
@@ -709,14 +711,18 @@ char stubEventGet(void)
   if ((OCR2B >> OCR2B_BITSHIFT) != stubBacklight)
   {
     stubBacklight = (OCR2B >> OCR2B_BITSHIFT);
-    lcdDeviceBacklightSet((u08)stubBacklight);
+    ctrlLcdBacklightSet((u08)stubBacklight);
   }
 
   // Check if we run in single timer cycle
-  if (eventCycleState == CYCLE_REQ_WAIT || eventCycleState == CYCLE_WAIT)
+  if (eventCycleState == CYCLE_REQ_WAIT || eventCycleState == CYCLE_WAIT ||
+      eventCycleState == CYCLE_WAIT_STATS)
   {
     struct timeval t;
     char waitChar = '\0';
+
+    // Statistics
+    singleCycleCount++;
 
     // Reset any keypress hold
     hold = GLCD_FALSE;
@@ -726,10 +732,24 @@ char stubEventGet(void)
     if (eventCycleState == CYCLE_REQ_WAIT)
     {
       alarmSoundStop();
-      printf("<cycle: c = next cycle, other key will resume> ");
+      printf("<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
       fflush(stdout);
       // Continue in single cycle mode
       eventCycleState = CYCLE_WAIT;
+    }
+
+    // If we're in cycle mode with stats print the stats that are current
+    // after the last executed clock cycle, and repeat the cycle mode help
+    // message
+    if (eventCycleState == CYCLE_WAIT_STATS)
+    {
+      // Print and glcd/controller performance statistics
+      printf("\n");
+      //stubStatsPrint();
+      ctrlStatsPrint(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
+      printf("<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
+      fflush(stdout);
+      ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
     }
 
     // Wait for keypress every 75 msec interval
@@ -740,19 +760,32 @@ char stubEventGet(void)
       select(0, NULL, NULL, NULL, &t);
     }
 
-    // Clear buffer
+    // Clear buffer and make uppercase char a lowercase char
     while (kbHit())
       waitChar = getchar();
+    if (waitChar >= 'A' && waitChar <= 'Z')
+      waitChar = waitChar - 'A' + 'a';
 
-    // Verify keypress
-    if (waitChar != 'c' && waitChar != 'C')
+    // Verify keypress and its impact on the wait state
+    if (waitChar != 'c' && waitChar != 'p')
     {
-      // Not a 'c' character: resume normal mode
+      // Not a 'c' or 'p' character: resume to normal mode state
       eventCycleState = CYCLE_REQ_NOWAIT;
       printf("\n");
 
       // Resume alarm audio (when needed)
       playPid = -1;
+    }
+    else if (eventCycleState == CYCLE_WAIT && waitChar == 'p')
+    {
+      // Move from wait state to wait with statistics
+      eventCycleState = CYCLE_WAIT_STATS;
+      ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
+    }
+    else if (eventCycleState == CYCLE_WAIT_STATS && waitChar == 'c')
+    {
+      // Move from wait with statistics state back to wait
+      eventCycleState = CYCLE_WAIT;
     }
     waitChar = '\0';
   }
@@ -772,8 +805,8 @@ char stubEventGet(void)
     // Start playing the alarm sound
     alarmSoundStart();
   }
-  else if (playPid >= 0 && (alarming == GLCD_FALSE ||
-      snoozeTimer > 0 || eventCycleState == CYCLE_WAIT))
+  else if (playPid >= 0 && (alarming == GLCD_FALSE || snoozeTimer > 0 ||
+      eventCycleState == CYCLE_WAIT))
   {
     // Stop playing the alarm sound
     alarmSoundStop();
@@ -783,8 +816,11 @@ char stubEventGet(void)
   pressed = 0;
   while (kbHit())
   {
+    // Get keyboard character and make uppercase char a lowercase char
     keypress = GLCD_TRUE;
     c = getchar();
+    if (c >= 'A' && c <= 'Z')
+      c = c - 'A' + 'a';
 
     // Detect button hold start/end
     if (c == lastchar)
@@ -797,18 +833,18 @@ char stubEventGet(void)
       hold = GLCD_FALSE;
     }
 
-    if (c == 'a' || c == 'A')
+    if (c == 'a')
     {
       // Toggle the alarm switch
       alarmSwitchToggle(GLCD_TRUE);
     }
-    else if (c == 'c' || c == 'C')
+    else if (c == 'c')
     {
       // Init single timer cycle
       if (eventCycleState == CYCLE_NOWAIT)
         eventCycleState = CYCLE_REQ_WAIT;
     }
-    else if (c == 'h' || c == 'H')
+    else if (c == 'h')
     {
       // Provide help
       if (stubHelp != NULL)
@@ -816,33 +852,33 @@ char stubEventGet(void)
       else
         printf("no help available\n");
     }
-    else if (c == 'm' || c == 'M')
+    else if (c == 'm')
     {
       // Menu button
       just_pressed = just_pressed | BTTN_MENU;
       pressed = pressed | BTTN_MENU;
     }
-    else if (c == 'p' || c == 'P')
+    else if (c == 'p')
     {
       // Print stub and glcd/lcd performance statistics
       printf("statistics:\n");
       stubStatsPrint();
-      lcdStatsPrint();
+      ctrlStatsPrint(CTRL_STATS_FULL);
     }
-    else if (c == 'r' || c == 'R')
+    else if (c == 'r')
     {
       // Reset stub and glcd/lcd performance statistics
       stubStatsReset();
-      lcdStatsReset();
+      ctrlStatsReset(CTRL_STATS_FULL);
       printf("statistics reset\n");
     }
-    else if (c == 's' || c == 'S')
+    else if (c == 's')
     {
       // Set button
       just_pressed = just_pressed | BTTN_SET;
       pressed = pressed | BTTN_SET;
     }
-    else if (c == 't' || c == 'T')
+    else if (c == 't')
     {
       // Print time/date/alarm
       emuTimePrint();
@@ -1028,13 +1064,14 @@ void stubPutstring(char *x, char *format)
 //
 void stubStatsPrint(void)
 {
-  printf("stub   : cycle=%d msec, inTime=%d, outTime=%d\n         ",
-    STUB_CYCLE / 1000, inTimeCount, outTimeCount);
+  printf("stub   : cycle=%d msec, inTime=%d, outTime=%d, singleCycle=%d\n",
+    STUB_CYCLE / 1000, inTimeCount, outTimeCount, singleCycleCount);
 
   if (inTimeCount == 0)
-    printf("avgSleep=- msec, ");
+    printf("         avgSleep=- msec, ");
   else
-    printf("avgSleep=%d msec, ",(int)(waitTotal / (double)inTimeCount / 1000));
+    printf("         avgSleep=%d msec, ",
+      (int)(waitTotal / (double)inTimeCount / 1000));
 
   if (minSleep == ANIMTICK_MS + 1)
     printf("minSleep=- msec\n");
@@ -1052,6 +1089,7 @@ void stubStatsReset(void)
   // Reset stub statistics
   inTimeCount = 0;
   outTimeCount = 0;
+  singleCycleCount = 0;
   waitTotal = 0.0L;
   minSleep = ANIMTICK_MS + 1;
 }

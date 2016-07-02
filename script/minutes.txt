@@ -9,7 +9,7 @@
 # - Select a clock (if not selected there's no visual feedback)
 #
 # Usage example (with analog HM):
-# cs 2
+# cs 3
 # e s ../script/minutes.txt
 #
 

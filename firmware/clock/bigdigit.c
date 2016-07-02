@@ -42,20 +42,16 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcU8Util1;
-extern volatile uint8_t mcUpdAlarmSwitch;
-extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
 
 // Force digit draw
-extern volatile uint8_t mcU8Util2;
+extern volatile uint8_t mcU8Util1;
 // Active clock id
-extern volatile uint8_t mcU8Util3;
+extern volatile uint8_t mcU8Util2;
 
 // Labels for clock
 static char labelTime[] = "HH:MM:SS";
@@ -86,74 +82,74 @@ static const unsigned char __attribute__ ((progmem)) bigdigYPos[] =
 // Store the item identifier per clock. This allows to re-init on the
 // last active item upon re-initializing a big digit clock. You will
 // appreciate it mostly when returning from the configuration menu.
-static uint8_t bigdigOneState = 0;
-static uint8_t bigdigTwoState = 0;
+static uint8_t bigDigOneState = 0;
+static uint8_t bigDigTwoState = 0;
 
 // Local function prototypes
-static void bigdigAlarmAreaUpdate(void);
-static void bigdigItemInvert(void);
+static void bigDigItemInvert(void);
 
 //
-// Function: bigdigButton
+// Function: bigDigButton
 //
 // Process pressed button for bigdigit clock
 //
-void bigdigButton(u08 pressedButton)
+void bigDigButton(u08 pressedButton)
 {
   // Unmark current item
-  bigdigItemInvert();
+  bigDigItemInvert();
 
   // Move to next item
-  if (mcU8Util3 == CHRON_BIGDIG_ONE)
+  if (mcU8Util2 == CHRON_BIGDIG_ONE)
   {
-    bigdigOneState = bigdigOneState + 1;
-    if (bigdigOneState == (uint8_t)sizeof(bigdigYPos))
+    bigDigOneState = bigDigOneState + 1;
+    if (bigDigOneState == (uint8_t)sizeof(bigdigYPos))
     {
       // Restart at beginning
-      bigdigOneState = 0;
+      bigDigOneState = 0;
     }
   }
   else
   {
-    bigdigTwoState = bigdigTwoState + 2;
-    if (bigdigTwoState == (uint8_t)sizeof(bigdigYPos))
+    bigDigTwoState = bigDigTwoState + 2;
+    if (bigDigTwoState == (uint8_t)sizeof(bigdigYPos))
     {
       // Restart at beginning
-      bigdigTwoState = 0;
+      bigDigTwoState = 0;
     }
   }
 
   // Mark next item
-  bigdigItemInvert();
+  bigDigItemInvert();
 }
 
 //
-// Function: bigdigCycle
+// Function: bigDigCycle
 //
 // Update the LCD display of a bigdigit clock
 //
-void bigdigCycle(void)
+void bigDigCycle(void)
 {
   u08 oldVal = 0;
   u08 newVal = 0;
   uint8_t bigdigState;
 
-  // Update alarm info in clock
-  bigdigAlarmAreaUpdate();
+  // Update alarm/date info in clock
+  animAlarmAreaUpdate(BIGDIG_ALARM_X_START, BIGDIG_ALARM_Y_START,
+    ALARM_AREA_ALM_ONLY);
 
   // Only if a time event or init or force (due to button press) is flagged
   // we need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE &&
-      mcU8Util2 == GLCD_FALSE)
+      mcU8Util1 == GLCD_FALSE)
     return;
 
   DEBUGP("Update BigDigit");
 
   // Get current state
-  if (mcU8Util3 == CHRON_BIGDIG_ONE)
-    bigdigState = bigdigOneState;
+  if (mcU8Util2 == CHRON_BIGDIG_ONE)
+    bigdigState = bigDigOneState;
   else
-    bigdigState = bigdigTwoState;
+    bigdigState = bigDigTwoState;
 
   // Get the digit(s) to update
   switch (bigdigState / 2)
@@ -187,7 +183,7 @@ void bigdigCycle(void)
     newVal = mcClockNewDY;
     break;
   }
-  if (mcU8Util3 == CHRON_BIGDIG_ONE)
+  if (mcU8Util2 == CHRON_BIGDIG_ONE)
   {
     if ((bigdigState & 0x1) == 0)
     {
@@ -202,18 +198,18 @@ void bigdigCycle(void)
   }
 
   // Draw digit(s) only when needed
-  if (oldVal != newVal || mcClockInit == GLCD_TRUE || mcU8Util2 == GLCD_TRUE)
+  if (oldVal != newVal || mcClockInit == GLCD_TRUE || mcU8Util1 == GLCD_TRUE)
   {
     char digits[3];
 
     // Set the string to be drawn
     animValToStr(newVal, digits);
 
-    if (mcU8Util3 == CHRON_BIGDIG_ONE)
+    if (mcU8Util2 == CHRON_BIGDIG_ONE)
     {
       // Draw the single big digit
-      glcdPutStr3(BIGDIG_ONE_X_START, BIGDIG_ONE_Y_START, FONT_5X7N, &(digits[1]),
-        BIGDIG_ONE_X_SCALE, BIGDIG_ONE_Y_SCALE, mcFgColor);
+      glcdPutStr3(BIGDIG_ONE_X_START, BIGDIG_ONE_Y_START, FONT_5X7N,
+        &digits[1], BIGDIG_ONE_X_SCALE, BIGDIG_ONE_Y_SCALE, mcFgColor);
     }
     else
     {
@@ -221,7 +217,8 @@ void bigdigCycle(void)
       u08 addLocX = 0;
 
       // Check if only the right-most digit needs to be drawn; faster UI
-      if (mcClockInit == GLCD_FALSE && mcU8Util2 == GLCD_FALSE && oldVal / 10 == newVal / 10)
+      if (mcClockInit == GLCD_FALSE && mcU8Util1 == GLCD_FALSE &&
+          oldVal / 10 == newVal / 10)
       {
         // Draw only the right-most digit
         digitsPtr++;
@@ -235,22 +232,22 @@ void bigdigCycle(void)
   }
 
   // Clear force flag (if set anyway)
-  mcU8Util2 = GLCD_FALSE;
+  mcU8Util1 = GLCD_FALSE;
 }
 
 //
-// Function: bigdigInit
+// Function: bigDigInit
 //
 // Initialize the LCD display of bigdigit clock
 //
-void bigdigInit(u08 mode)
+void bigDigInit(u08 mode)
 {
   u08 labelLen;
 
   DEBUGP("Init Bigdigit");
 
   // Get the clockId
-  mcU8Util3 = mcClockPool[mcMchronClock].clockId;
+  mcU8Util2 = mcClockPool[mcMchronClock].clockId;
 
   // Draw static clock layout
   if (mode == DRAW_INIT_FULL)
@@ -258,7 +255,7 @@ void bigdigInit(u08 mode)
     // Full init so we start from scratch
     glcdClearScreen(mcBgColor);
   }
-  else if (mcU8Util3 == CHRON_BIGDIG_ONE)
+  else if (mcU8Util2 == CHRON_BIGDIG_ONE)
   {
     // Clear the most left part of the two digit area. The rest is
     // overwritten by the single digit clock
@@ -287,78 +284,19 @@ void bigdigInit(u08 mode)
   }
 
   // Invert the current selected item
-  bigdigItemInvert();
+  bigDigItemInvert();
 
   // Force the alarm info area to init itself
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
-  mcU8Util1 = GLCD_FALSE;
+  if (mode == DRAW_INIT_FULL)
+    mcAlarmSwitch = ALARM_SWITCH_NONE;
 }
 
 //
-// Function: bigdigAlarmAreaUpdate
-//
-// Draw update in bigdigit clock alarm area
-//
-static void bigdigAlarmAreaUpdate(void)
-{
-  u08 inverseAlarmArea = GLCD_FALSE;
-  u08 newAlmDisplayState = GLCD_FALSE;
-  char msg[6];
-
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
-  {
-    if (mcAlarmSwitch == ALARM_SWITCH_ON)
-    {
-      // Show alarm time
-      animValToStr(mcAlarmH, msg);
-      msg[2] = ':';
-      animValToStr(mcAlarmM, &(msg[3]));
-      glcdPutStr2(BIGDIG_ALARM_X_START, BIGDIG_ALARM_Y_START, FONT_5X5P,
-        msg, mcFgColor);
-    }
-    else
-    {
-      // Clear area (remove alarm time)
-      glcdFillRectangle(BIGDIG_ALARM_X_START - 1, BIGDIG_ALARM_Y_START - 1,
-        19, 7, mcBgColor);
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-    glcdFillRectangle2(BIGDIG_ALARM_X_START - 1, BIGDIG_ALARM_Y_START - 1,
-      19, 7, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
-}
-
-//
-// Function: bigdigItemInvert
+// Function: bigDigItemInvert
 //
 // Invert time/date item.
 //
-static void bigdigItemInvert(void)
+static void bigDigItemInvert(void)
 {
   u08 x;
   u08 y;
@@ -367,14 +305,14 @@ static void bigdigItemInvert(void)
 
   // Get pointer to current state and define extra size to (un)invert
   // per single or two digit clock
-  if (mcU8Util3 == CHRON_BIGDIG_ONE)
+  if (mcU8Util2 == CHRON_BIGDIG_ONE)
   {
-    bigdigState = bigdigOneState;
+    bigdigState = bigDigOneState;
     sizeAdd = 0;
   }
   else
   {
-    bigdigState = bigdigTwoState;
+    bigdigState = bigDigTwoState;
     sizeAdd = BIGDIG_FONT_WIDTH + 1;
   }
 
@@ -397,6 +335,6 @@ static void bigdigItemInvert(void)
     ALIGN_AUTO, FILL_INVERSE, mcFgColor);
 
   // And force the digit to be drawn
-  mcU8Util2 = GLCD_TRUE;
+  mcU8Util1 = GLCD_TRUE;
 }
 

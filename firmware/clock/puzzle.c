@@ -38,10 +38,11 @@
 #define PUZZLE_HELP_RIGHT_X	70
 #define PUZZLE_HELP_TEXT_OFFSET	11
 
+// Structure defining the graphics properties of a clock bulk
 typedef struct _bulbDriver_t
 {
-  u08 colorCode;	// draw color: 0 = foreground, 1 = background
-  u08 fillType;		// circle fill type
+  u08 colorCode;	// Draw color: 0 = foreground, 1 = background
+  u08 fillType;		// Circle fill type
 } bulbDriver_t;
 
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
@@ -49,11 +50,7 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcU8Util1;
-extern volatile uint8_t mcUpdAlarmSwitch;
-extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern char animHour[];
@@ -63,9 +60,9 @@ extern char animDay[];
 extern char animMonth[];
 extern char animYear[];
 // Display timer for help page
-extern volatile uint8_t mcU8Util2;
+extern volatile uint8_t mcU8Util1;
 // Display mode for clock
-extern volatile uint8_t mcU8Util3;
+extern volatile uint8_t mcU8Util2;
 
 // Arrays with help page left/right panel text strings
 static char *puzzleHelpMsgsLeft[] =
@@ -104,9 +101,8 @@ static bulbDriver_t bulbDriver[] =
 };
 
 // Local function prototypes
-static void puzzleAlarmAreaUpdate(void);
 static void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
-    u08 newVal1, u08 newVal2, u08 newVal3, u08 high, u08 init);
+  u08 newVal1, u08 newVal2, u08 newVal3, u08 high, u08 init);
 static void puzzleHelp(void);
 
 //
@@ -117,19 +113,19 @@ static void puzzleHelp(void);
 void puzzleButton(u08 pressedButton)
 {
   // Provide help page or switch back to clock
-  if (mcU8Util3 == PUZZLE_MODE_CLOCK)
+  if (mcU8Util2 == PUZZLE_MODE_CLOCK)
   {
     // Provide help page
     DEBUGP("Clock -> Help");
-    mcU8Util2 = PUZZLE_HELP_TIMEOUT;
-    mcU8Util3 = PUZZLE_MODE_HELP;
+    mcU8Util1 = PUZZLE_HELP_TIMEOUT;
+    mcU8Util2 = PUZZLE_MODE_HELP;
     puzzleHelp();
   }
   else
   {
     // The mode change is processed in puzzleCycle()
     DEBUGP("Help -> Clock");
-    mcU8Util3 = PUZZLE_MODE_CLOCK;
+    mcU8Util2 = PUZZLE_MODE_CLOCK;
   }
 }
 
@@ -140,13 +136,13 @@ void puzzleButton(u08 pressedButton)
 //
 void puzzleCycle(void)
 {
-  if ((mcU8Util2 == 1 && mcClockTimeEvent == GLCD_TRUE) ||
-      (mcU8Util2 > 0 && mcU8Util3 == PUZZLE_MODE_CLOCK))
+  if ((mcU8Util1 == 1 && mcClockTimeEvent == GLCD_TRUE) ||
+      (mcU8Util1 > 0 && mcU8Util2 == PUZZLE_MODE_CLOCK))
   {
     // Switch back from help page to clock
     animClockDraw(DRAW_INIT_FULL);
   } 
-  else if (mcU8Util3 == PUZZLE_MODE_HELP)
+  else if (mcU8Util2 == PUZZLE_MODE_HELP)
   {
     // We're in help mode so no screen updates, but decrease
     // helppage timeout counter when appropriate
@@ -154,15 +150,16 @@ void puzzleCycle(void)
     {
       char counter[3];
 
-      mcU8Util2--;
-      animValToStr(mcU8Util2, counter);
+      mcU8Util1--;
+      animValToStr(mcU8Util1, counter);
       glcdPutStr2(120,  1, FONT_5X5P, counter, mcFgColor);
     }
     return;
   }
 
   // Update alarm info in clock
-  puzzleAlarmAreaUpdate();
+  animAlarmAreaUpdate(PUZZLE_ALARM_X_START, PUZZLE_ALARM_Y_START,
+    ALARM_AREA_ALM_ONLY);
 
   // Only if a time event or init is flagged we need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
@@ -232,70 +229,10 @@ void puzzleInit(u08 mode)
   
   // Force the alarm info area to init itself
   mcAlarmSwitch = ALARM_SWITCH_NONE;
-  mcU8Util1 = GLCD_FALSE;
 
   // Reset the parameters for the clock/help page
-  mcU8Util2 = 0;
-  mcU8Util3 = PUZZLE_MODE_CLOCK;
-}
-
-//
-// Function: puzzleAlarmAreaUpdate
-//
-// Draw update in puzzle clock alarm area
-//
-static void puzzleAlarmAreaUpdate(void)
-{
-  u08 inverseAlarmArea = GLCD_FALSE;
-  u08 newAlmDisplayState = GLCD_FALSE;
-  char msg[6];
-
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
-  {
-    if (mcAlarmSwitch == ALARM_SWITCH_ON)
-    {
-      // Show alarm time
-      animValToStr(mcAlarmH, msg);
-      msg[2] = ':';
-      animValToStr(mcAlarmM, &(msg[3]));
-      glcdPutStr2(PUZZLE_ALARM_X_START, PUZZLE_ALARM_Y_START, FONT_5X5P,
-        msg, mcFgColor);
-    }
-    else
-    {
-      // Clear area (remove alarm time)
-      glcdFillRectangle(PUZZLE_ALARM_X_START - 1, PUZZLE_ALARM_Y_START - 1,
-        19, 7, mcBgColor);
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-    glcdFillRectangle2(PUZZLE_ALARM_X_START - 1, PUZZLE_ALARM_Y_START - 1,
-      19, 7, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+  mcU8Util1 = 0;
+  mcU8Util2 = PUZZLE_MODE_CLOCK;
 }
 
 //
@@ -304,7 +241,7 @@ static void puzzleAlarmAreaUpdate(void)
 // Update a single bulb row of a puzzle clock
 //
 static void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
-    u08 newVal1, u08 newVal2, u08 newVal3, u08 high, u08 init)
+  u08 newVal1, u08 newVal2, u08 newVal3, u08 high, u08 init)
 {
   u08 i;
   u08 bulbOld;
@@ -421,15 +358,11 @@ static void puzzleHelp(void)
   // Draw the help texts for the other bulbs
   // Left side
   for (i = 0; i < 6; i++)
-  {
     glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 22 + i * 7, FONT_5X5P,
       puzzleHelpMsgsLeft[i], mcFgColor);
-  }
   // Right side
   for (i = 0; i < 8; i++)
-  {
     glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 8 + i * 7, FONT_5X5P,
       puzzleHelpMsgsRight[i], mcFgColor);
-  }
 }
 

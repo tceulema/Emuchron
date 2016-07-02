@@ -308,7 +308,7 @@ static void enter_alarm_menu(void)
   // Put a small arrow next to 'Alarm'
   print_arrow(11);
   screenmutex--;
-  timeoutcounter = INACTIVITYTIMEOUT;  
+  timeoutcounter = INACTIVITYTIMEOUT;
 
   while (1)
   {
@@ -323,12 +323,12 @@ static void enter_alarm_menu(void)
     if (just_pressed || pressed)
     {
       // Button pressed so reset timoutcounter
-      timeoutcounter = INACTIVITYTIMEOUT;  
+      timeoutcounter = INACTIVITYTIMEOUT;
     }
     else if (!timeoutcounter)
     {
       // Timed out!
-      displaymode = SHOW_TIME;     
+      displaymode = SHOW_TIME;
       return;
     }
     if (just_pressed & BTTN_SET)
@@ -519,7 +519,7 @@ static void set_alarm(void)
   // Put a small arrow next to proper line
   print_arrow(11 + 8 * almPageDataId);
   screenmutex--;
-  timeoutcounter = INACTIVITYTIMEOUT;  
+  timeoutcounter = INACTIVITYTIMEOUT;
 
   // Get current alarm
   if (almPageDataId != 4)
@@ -542,12 +542,12 @@ static void set_alarm(void)
     if (just_pressed || pressed)
     {
       // Button pressed so reset timoutcounter
-      timeoutcounter = INACTIVITYTIMEOUT;  
+      timeoutcounter = INACTIVITYTIMEOUT;
     }
     else if (!timeoutcounter)
     {
       // Timed out!
-      displaymode = SHOW_TIME;     
+      displaymode = SHOW_TIME;
       return;
     }
     if (just_pressed & BTTN_SET)
@@ -692,7 +692,7 @@ static void set_backlight(void)
   print_arrow(43);
   screenmutex--;
 
-  timeoutcounter = INACTIVITYTIMEOUT;  
+  timeoutcounter = INACTIVITYTIMEOUT;
 
   while (1)
   {
@@ -709,13 +709,13 @@ static void set_backlight(void)
     if (just_pressed || pressed)
     {
       // Button pressed so reset timoutcounter
-      timeoutcounter = INACTIVITYTIMEOUT;  
+      timeoutcounter = INACTIVITYTIMEOUT;
     }
     else if (!timeoutcounter)
     {
       // Timed out!
       eeprom_write_byte((uint8_t *)EE_BRIGHT, OCR2B);
-      displaymode = SHOW_TIME;     
+      displaymode = SHOW_TIME;
       return;
     }
   
@@ -792,7 +792,7 @@ static void set_date(void)
   print_arrow(27);
   screenmutex--;
   
-  timeoutcounter = INACTIVITYTIMEOUT;  
+  timeoutcounter = INACTIVITYTIMEOUT;
 
   // Clear any hold data
   holdcounter = 0;
@@ -810,12 +810,12 @@ static void set_date(void)
     if (just_pressed || pressed)
     {
       // Button pressed so reset timoutcounter
-      timeoutcounter = INACTIVITYTIMEOUT;  
+      timeoutcounter = INACTIVITYTIMEOUT;
     }
     else if (!timeoutcounter)
     {
       // Timed out!
-      displaymode = SHOW_TIME;     
+      displaymode = SHOW_TIME;
       return;
     }
     if (just_pressed & BTTN_SET)
@@ -923,7 +923,7 @@ static void set_date(void)
       print_date(month, day, year, mode);
       screenmutex--;
       if (pressed & BTTN_PLUS)
-        _delay_ms(KEYPRESS_DLY_1);  
+        _delay_ms(KEYPRESS_DLY_1);
     }
   }
 }
@@ -947,7 +947,7 @@ static void set_display(void)
   print_arrow(35);
   screenmutex--;
 
-  timeoutcounter = INACTIVITYTIMEOUT;  
+  timeoutcounter = INACTIVITYTIMEOUT;
   while (1)
   {
 #ifdef EMULIN
@@ -963,13 +963,13 @@ static void set_display(void)
     if (just_pressed || pressed)
     {
       // Button pressed so reset timoutcounter
-      timeoutcounter = INACTIVITYTIMEOUT;  
+      timeoutcounter = INACTIVITYTIMEOUT;
     }
     else if (!timeoutcounter)
     {
       // Timed out!
       eeprom_write_byte((uint8_t *)EE_BGCOLOR, mcBgColor);
-      displaymode = SHOW_TIME;     
+      displaymode = SHOW_TIME;
       return;
     }
   
@@ -1057,7 +1057,7 @@ static void set_time(void)
   print_arrow(19);
   screenmutex--;
  
-  timeoutcounter = INACTIVITYTIMEOUT;  
+  timeoutcounter = INACTIVITYTIMEOUT;
 
   // Clear any hold data
   holdcounter = 0;
@@ -1074,12 +1074,12 @@ static void set_time(void)
     if (just_pressed || pressed)
     {
       // Button pressed so reset timoutcounter
-      timeoutcounter = INACTIVITYTIMEOUT;  
+      timeoutcounter = INACTIVITYTIMEOUT;
     }
     else if (!timeoutcounter)
     {
       // Timed out!
-      displaymode = SHOW_TIME;     
+      displaymode = SHOW_TIME;
       return;
     }
     if (just_pressed & BTTN_SET)

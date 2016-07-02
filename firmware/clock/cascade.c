@@ -35,7 +35,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
@@ -49,57 +48,41 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
 //
 void spotCascadeCycle(void)
 {
-  // Update alarm info in clock
-  spotAlarmAreaUpdate();
-
-  // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+  // Update common Spotfire clock elements and check if clock requires update
+  if (spotCommonUpdate() == GLCD_FALSE)
     return;
 
   DEBUGP("Update Cascade");
 
-  // Update common parts of a Spotfire clock
-  spotCommonUpdate();
-
   // Verify changes in sec
   if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-  {
     spotBarUpdate(CASC_SEC_X_START, CASC_Y_START, CASC_VAL_STEPS, CASC_HEIGHT_MAX,
       CASC_SNAPSHOT_WIDTH, mcClockOldTS, mcClockNewTS, CASC_VALUE_X_OFFSET,
       CASC_VALUE_Y_OFFSET, FILL_BLANK);
-  }
 
   // Verify changes in delta min to sec
   if (mcClockNewTM != mcClockOldTM || mcClockNewTS != mcClockOldTS || 
       mcClockInit == GLCD_TRUE)
-  {
     spotCascadeDeltaUpdate(CASC_MIN_X_START + CASC_DELTA_X_OFFSET, 
       mcClockOldTM, mcClockNewTM, mcClockOldTS, mcClockNewTS);
-  }  
 
   // Verify changes in min
   if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-  {
     spotBarUpdate(CASC_MIN_X_START, CASC_Y_START, CASC_VAL_STEPS, CASC_HEIGHT_MAX,
       CASC_SNAPSHOT_WIDTH, mcClockOldTM, mcClockNewTM, CASC_VALUE_X_OFFSET,
       CASC_VALUE_Y_OFFSET, FILL_BLANK);
-  }
 
   // Verify changes in delta hour to min
   if (mcClockNewTH != mcClockOldTH || mcClockNewTM != mcClockOldTM ||
       mcClockInit == GLCD_TRUE)
-  {
     spotCascadeDeltaUpdate(CASC_HOUR_X_START + CASC_DELTA_X_OFFSET, 
       mcClockOldTH, mcClockNewTH, mcClockOldTM, mcClockNewTM);
-  }
 
   // Verify changes in hour
   if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-  {
     spotBarUpdate(CASC_HOUR_X_START, CASC_Y_START, CASC_VAL_STEPS, CASC_HEIGHT_MAX,
       CASC_SNAPSHOT_WIDTH, mcClockOldTH, mcClockNewTH, CASC_VALUE_X_OFFSET,
       CASC_VALUE_Y_OFFSET, FILL_BLANK);
-  }
 }
 
 //
@@ -216,7 +199,7 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
   }
   barValue[barValLen] = (char)(barVal % 10 + '0');
   barValLen++;
-  barValue[barValLen] = '\0';  
+  barValue[barValLen] = '\0';
   barValLen = barValLen * 4 - 1; // Width in pixels
   glcdPutStr2(x + (CASC_DELTA_WIDTH - barValLen) / 2 + (CASC_DELTA_WIDTH % 2 == 0 ? 1 : 0),
     newDeltaBarYStart + CASC_DELTA_VALUE_Y_OFFSET, FONT_5X5P, barValue, mcFgColor);

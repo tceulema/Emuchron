@@ -7,8 +7,8 @@
 # - Select a clock (if not selected there's no visual feedback)
 #
 # Usage example (with digital HMS):
-# cs 3
-# e s ../script/clock.txt
+# cs 4
+# e s ../script/nextday.txt
 #
 
 # Make sure we're seeing a date

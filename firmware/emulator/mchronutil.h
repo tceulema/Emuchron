@@ -6,18 +6,19 @@
 #ifndef MCHRONUTIL_H
 #define MCHRONUTIL_H
 
-#include "lcd.h"
 #include "interpreter.h"
+#include "controller.h"
 
 // Definition of a structure to hold the main() arguments
 typedef struct _emuArgcArgv_t
 {
-  int argDebug;				// Index in argv for logfile argument
-  int argGlutGeometry;			// Index in argv for geometry argument
-  int argGlutPosition;			// Index in argv for window pos argument
-  int argTty;				// Index in argv for ncurses tty argument
-  int argLcdType;			// Index in argv for lcd device argument
-  lcdDeviceParam_t lcdDeviceParam;	// Processed args for lcd stub interface
+  int argBacklight;			// argv index for ncurses backlight arg
+  int argDebug;				// argv index for logfile arg
+  int argGlutGeometry;			// argv index for glut geometry arg
+  int argGlutPosition;			// argv index for glut window pos arg
+  int argLcdType;			// argv index for lcd device arg
+  int argTty;				// argv index for ncurses tty arg
+  ctrlDeviceArgs_t ctrlDeviceArgs;	// Processed args for lcd stub interface
 } emuArgcArgv_t;
 
 // mchron command argument translation functions

@@ -10,7 +10,7 @@
 # - Set the wait delay between timestamps using variable 'w'
 #
 # Usage example (with analog HM, minute step 1 and delay of 50 msec):
-# cs 2
+# cs 3
 # vs s=1
 # vs w=50
 # e s ../script/time-hm.txt

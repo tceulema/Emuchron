@@ -39,23 +39,24 @@
 
 // Specifics for alarm/date info area
 #define MOS_AD_BAR_Y_START	54
-#define MOS_AD_X_START		2
 #define MOS_AD_Y_START		(MOS_AD_BAR_Y_START + 3)
-#define MOS_AD_WIDTH		24
+#define MOS_DATE_X_START	2
+#define MOS_ALARM_X_START	109
+#define MOS_DATE_X_SIZE		23
 
 // Structure defining the admin data for a time element indicator
 typedef struct
 {
-  u08 startDelay;
-  u08 posX;
-  u08 posY;
-  u08 width;
-  float mathPosX;
-  float mathPosY;
-  float dx;
-  float dy;
-  s08 textOffset;
-  char *text;
+  u08 startDelay;	// Start move delay in clock cycles
+  u08 posX;		// Actual x position of element on display
+  u08 posY;		// Actual y position of element on display
+  u08 width;		// Width of text of time element (hour/min/sec)
+  float mathPosX;	// Mathematical x position of element
+  float mathPosY;	// Mathematical y position of element
+  float dx;		// The x delta per move step
+  float dy;		// The y delta per move step
+  s08 textOffset;	// The relative x starting point of element text
+  char *text;		// The element text (hour/min/sec)
 } timeElement_t;
 
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
@@ -63,19 +64,16 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcU8Util1;
-extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
+extern unsigned char *months[12];
 
 // Common text labels
 extern char animHour[];
 extern char animMin[];
 extern char animSec[];
-extern unsigned char *months[12];
 
 // Random value for determining the direction of the elements
 static u16 mosRandBase = M_PI * M_PI * 1000;
@@ -108,7 +106,6 @@ static timeElement_t elementMin;
 static timeElement_t elementHour;
 
 // Local function prototypes
-static void mosquitoAlarmAreaUpdate(void);
 static void mosquitoDirectionSet(void);
 static void mosquitoElementDirectionSet(timeElement_t *element);
 static void mosquitoElementDraw(timeElement_t *element, u08 value);
@@ -121,8 +118,28 @@ static void mosquitoElementMovePrep(timeElement_t *element);
 //
 void mosquitoCycle(void)
 {
-  // Update alarm info in clock
-  mosquitoAlarmAreaUpdate();
+  // Update alarm/date info in clock
+  animAlarmAreaUpdate(MOS_ALARM_X_START, MOS_AD_Y_START, ALARM_AREA_ALM_ONLY);
+
+  // Verify changes in date
+  if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
+      mcClockInit == GLCD_TRUE)
+  {
+    u08 pxDone;
+    char msg[4];
+
+    // Show new date and clean up potential remnants
+    pxDone = glcdPutStr2(MOS_DATE_X_START, MOS_AD_Y_START, FONT_5X5P,
+      (char *)months[mcClockNewDM - 1], mcFgColor) + MOS_DATE_X_START;
+    msg[0] = ' ';
+    animValToStr(mcClockNewDD, &msg[1]);
+    pxDone = pxDone +
+      glcdPutStr2(pxDone, MOS_AD_Y_START, FONT_5X5P, msg, mcFgColor) -
+      MOS_DATE_X_START;
+    if (pxDone <= MOS_DATE_X_SIZE)
+      glcdFillRectangle(MOS_DATE_X_START + pxDone, MOS_AD_Y_START,
+        MOS_DATE_X_SIZE - pxDone + 1, FILL_BLANK, mcBgColor);
+  }
 
   // Each minute change the direction of the elements
   if (mcClockTimeEvent == GLCD_TRUE &&
@@ -185,87 +202,9 @@ void mosquitoInit(u08 mode)
 
   // Force the alarm info area to init itself
   mcAlarmSwitch = ALARM_SWITCH_NONE;
-  mcU8Util1 = GLCD_FALSE;
 
   // Init the initial direction of each element
   mosquitoDirectionSet();
-}
-
-//
-// Function: mosquitoAlarmAreaUpdate
-//
-// Draw update in mosquito clock alarm area
-//
-static void mosquitoAlarmAreaUpdate(void)
-{
-  u08 inverseAlarmArea = GLCD_FALSE;
-  u08 newAlmDisplayState = GLCD_FALSE;
-  u08 pxDone = 0;
-  char msg[5];
-
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
-  {
-    if (mcAlarmSwitch == ALARM_SWITCH_ON)
-    {
-      // Show alarm time
-      animValToStr(mcAlarmH, msg);
-      msg[2] = ':';
-      animValToStr(mcAlarmM, &(msg[3]));
-      pxDone = glcdPutStr2(MOS_AD_X_START, MOS_AD_Y_START, FONT_5X5P, msg,
-        mcFgColor);
-    }
-    else
-    {
-      // Prior to showing the date clear border of inverse alarm area
-      // (if needed)
-      if (mcU8Util1 == GLCD_TRUE)
-      {
-        glcdRectangle(MOS_AD_X_START - 1, MOS_AD_Y_START - 1, 19, 7,
-          mcBgColor);
-        mcU8Util1 = GLCD_FALSE;
-      }
-
-      // Show date
-      msg[0] = ' ';
-      pxDone = glcdPutStr2(MOS_AD_X_START, MOS_AD_Y_START, FONT_5X5P,
-        (char *)months[mcClockNewDM - 1], mcFgColor) + MOS_AD_X_START;
-      animValToStr(mcClockNewDD, &(msg[1]));
-      pxDone = pxDone + glcdPutStr2(pxDone, MOS_AD_Y_START, FONT_5X5P, msg,
-        mcFgColor) - MOS_AD_X_START;
-    }
-
-    // Clean up any trailing remnants of previous text
-    if (pxDone < MOS_AD_WIDTH)
-      glcdFillRectangle(MOS_AD_X_START + pxDone, MOS_AD_Y_START,
-        MOS_AD_WIDTH - pxDone, 5, mcBgColor);
-  }
-
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-    glcdFillRectangle2(MOS_AD_X_START - 1, MOS_AD_Y_START - 1, 19, 7,
-      ALIGN_AUTO, FILL_INVERSE, mcBgColor);
 }
 
 //

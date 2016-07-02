@@ -1,0 +1,31 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Fill the screen using only controller commands and
+#          minimal cursor commands by making use of how the
+#          controller auto-increments its x cursor
+#
+
+# Clear lcd and reset statistics
+le
+sr
+
+# Fill the lcd display
+vs lcdbyte=0
+rf y=0 y<8 y=y+1
+  lcs 0 0 y
+  lcs 1 0 y
+  rf x=0 x<128 x=x+1
+    lw x>>6 lcdbyte
+    vs lcdbyte=(lcdbyte+1)&0xff
+  rn
+rn
+
+# Paint markers where the last cursor position is
+# (= bottom left of each controller)
+lw 0 0x55
+lw 1 0x55
+
+# Show the stats
+sp
+

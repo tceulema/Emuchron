@@ -4,16 +4,12 @@
 //*****************************************************************************
 
 %{
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
 #define YYSTYPE double
 
 // The following expression evaluator objects are the only ones that are
 // externally accessible
-double exprValue;	// The resulting expression value
-int exprAssign;		// Indicates whether the input expression is an assignment
+double exprValue;		// The resulting expression value
+unsigned char exprAssign;	// Indicates if input expression is an assignment
 
 // Variable error status flag (variable is not active)
 static int varError;
@@ -25,7 +21,7 @@ static double myDummy;
 // within this module or are bison generated parser functions.
 static double exprCompare(double valLeft, double valRight, int cond);
 static struct yy_buffer_state *yy_scan_string(const char[]);
-static void yy_delete_buffer (struct yy_buffer_state *b);
+static void yy_delete_buffer(struct yy_buffer_state *b);
 
 // The comparison logic conditions in exprCompare()
 #define COND_LT		0	// <
@@ -69,8 +65,8 @@ static double exprCompare(double valLeft, double valRight, int cond)
     // right values: comparing (0 vs <low number>) is likely to yield a
     // different result than when comparing (<low number> vs 0).
     // Example:
-    // Using expression below    : (0 == 1e-16) --> true
-    // Using expression in 'else': (1e-16 == 0) --> false
+    // Using logic in this 'then' branch: (0 == 1e-16) --> true
+    // Using logic in the 'else' branch : (1e-16 == 0) --> false
     // That is nasty!
     // Hence, in case either one of the left or right values is 0, always
     // use the expression below for consistent comparison results.
@@ -115,7 +111,9 @@ static double exprCompare(double valLeft, double valRight, int cond)
 %token QMARK COLON
 %token PLUS MINUS TIMES DIVIDE MODULO POWER
 %token SIN COS ABS FRAC INT
-%token AND OR LET GET LT GT EQ NEQ
+%token AND OR
+%token BITAND BITOR BITNOT SHIFTL SHIFTR
+%token LET GET LT GT EQ NEQ
 %token LEFT RIGHT
 %token END
 %token UNKNOWN
@@ -127,9 +125,12 @@ static double exprCompare(double valLeft, double valRight, int cond)
 %left QMARK COLON
 %left OR
 %left AND
+%left BITOR
+%left BITAND
 %left EQ NEQ
 %left LET GET LT GT
-%left PLUS MINUS
+%left SHIFTL SHIFTR
+%left PLUS MINUS BITNOT
 %left TIMES DIVIDE MODULO
 %left POWER
 %left NEG
@@ -162,7 +163,8 @@ Expression:
     // Fixed input number or constant (pi/true/false/null)
     NUMBER { $$ = $1; }
     // Get variable value
-    | VARIABLE { $$ = varValGet((int)$1, &varError); if (varError == 1) { YYERROR; } }
+    | VARIABLE { $$ = varValGet((int)$1, &varError);
+        if (varError == 1) { YYERROR; } }
     // Mathematical operator expressions
     | Expression PLUS Expression { $$ = $1 + $3; }
     | Expression MINUS Expression { $$ = $1 - $3; }
@@ -182,6 +184,17 @@ Expression:
     | FRAC LEFT Expression RIGHT { $$ = modf($3, &myDummy); }
     | INT LEFT Expression RIGHT { modf($3, &($$)); }
     | SIN LEFT Expression RIGHT { $$ = sin($3); }
+    // Bit operators
+    // Note: Bit operations are done on type unsigned int
+    | Expression BITAND Expression
+      { $$ = (double)((unsigned int)$1 & (unsigned int)$3); }
+    | Expression BITOR Expression
+      { $$ = (double)((unsigned int)$1 | (unsigned int)$3); }
+    | BITNOT Expression { $$ = (double)(~((unsigned int)$2)); }
+    | Expression SHIFTL Expression
+      { $$ = (double)((unsigned int)$1 << (unsigned int)$3); }
+    | Expression SHIFTR Expression
+      { $$ = (double)((unsigned int)$1 >> (unsigned int)$3); }
     // Boolean logic expressions
     // Note that function exprCompare() is defined at the top of this file
     | Expression AND Expression { $$ = $1 && $3; }
@@ -213,7 +226,7 @@ int exprEvaluate(char *argName, char *exprString, int exprStringLen)
 {
   struct yy_buffer_state *buf;
   char yyInput[exprStringLen + 1];
-  int retVal = CMD_RET_OK;
+  int parseResult;
 
   // Uncomment this to get bison runtime trace output.
   // This requires the bison compiler to use the --debug option.
@@ -233,7 +246,7 @@ int exprEvaluate(char *argName, char *exprString, int exprStringLen)
   buf = yy_scan_string(yyInput);
 
   // Parse the expression
-  retVal = yyparse();
+  parseResult = yyparse();
 
   // Cleanup (including returning malloc-ed memory during scan/parse)
   yy_delete_buffer(buf);
@@ -248,10 +261,10 @@ int exprEvaluate(char *argName, char *exprString, int exprStringLen)
   else if (varError == 2)
   {
     // Variable bucket overflow
-    printf("%s? internal bucket overflow\n", argName);
+    printf("%s? internal: bucket overflow\n", argName);
     return CMD_RET_ERROR;
   }
-  else if (retVal == 1)
+  else if (parseResult == 1)
   {
     // Error occured in scanning/parsing the expression string
     printf("%s? syntax error\n", argName);
@@ -270,6 +283,6 @@ int exprEvaluate(char *argName, char *exprString, int exprStringLen)
     return CMD_RET_ERROR;
   }
 
-  return retVal;
+  return CMD_RET_OK;
 }
 

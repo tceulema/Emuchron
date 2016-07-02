@@ -40,7 +40,7 @@ extern clockDriver_t monochron[];
 extern clockDriver_t *mcClockPool;
 
 // Indicates whether in the config menu something is busy writing
-// to the LCD, thus interfering with the process to update the time
+// to the lcd, thus interfering with the process to update the time
 // in the config screen.
 extern volatile uint8_t screenmutex;
 
@@ -174,10 +174,10 @@ int main(void)
   DDRB |= _BV(5);
   beep(4000, 100);
 
-  // Init LCD.
+  // Init lcd.
   // glcdInit locks and disables interrupts in one of its functions.
-  // If the LCD is not plugged in, glcd will run forever. For good
-  // reason, it would be desirable to know that the LCD is plugged in
+  // If the lcd is not plugged in, glcd will run forever. For good
+  // reason, it would be desirable to know that the lcd is plugged in
   // and working correctly as a result. This is why we are using a
   // watch dog timer. The lcd should be initialized in way less than
   // 500 ms.
@@ -689,7 +689,8 @@ void alarmStateSet(void)
 //
 // Get the requested alarm time from the eeprom
 //
-void alarmTimeGet(uint8_t alarmId, volatile uint8_t *hour, volatile uint8_t *min)
+void alarmTimeGet(uint8_t alarmId, volatile uint8_t *hour,
+  volatile uint8_t *min)
 {
   uint8_t *aHour, *aMin;
 
@@ -728,8 +729,8 @@ void alarmTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min)
     aMin = aHour + 1;
   }
 
-  eeprom_write_byte(aHour, hour);    
-  eeprom_write_byte(aMin, min);    
+  eeprom_write_byte(aHour, hour);
+  eeprom_write_byte(aMin, min);
 }
 
 //
@@ -767,7 +768,7 @@ void beep(uint16_t freq, uint8_t duration)
 //
 // Function: dotw
 //
-// Return the day number of the week
+// Return the day number of the week (0=Sun .. 6=Sat)
 //
 uint8_t dotw(uint8_t mon, uint8_t day, uint8_t yr)
 {

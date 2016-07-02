@@ -49,7 +49,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Common text labels
@@ -70,17 +69,11 @@ void spotSpiderPlotCycle(void)
 {
   char newVal[3];
 
-  // Update alarm info in clock
-  spotAlarmAreaUpdate();
-
-  // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+  // Update common Spotfire clock elements and check if clock requires update
+  if (spotCommonUpdate() == GLCD_FALSE)
     return;
 
   DEBUGP("Update SpiderPlot");
-
-  // Update common parts of a Spotfire clock
-  spotCommonUpdate();
 
   // Verify changes in time and update axis value
   if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
@@ -113,9 +106,9 @@ void spotSpiderPlotCycle(void)
     mcClockNewTH == mcClockOldTH && mcClockInit == GLCD_FALSE)
   {
     if ((u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
-         mcClockOldTS) ==
-         (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
-         mcClockNewTS))
+        mcClockOldTS) ==
+        (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
+        mcClockNewTS))
       return;
   }
 
@@ -144,7 +137,7 @@ void spotSpiderPlotCycle(void)
     CIRCLE_THIRD, mcFgColor);
   glcdCircle2(SPDR_X_START, SPDR_Y_START,
     (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / 3L * 2L + SPDR_AXIS_VAL_BEGIN),
-    CIRCLE_HALF_E, mcFgColor);   
+    CIRCLE_HALF_E, mcFgColor);
 }
 
 //
@@ -199,13 +192,9 @@ static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
   {
     startX = SPDR_X_START - (u08)(tmp * COSPI3);
     if (axisStart == SPDR_AXIS_MIN)
-    {
       startY = SPDR_Y_START + (u08)(tmp * SINPI3);
-    }
     else
-    {
       startY = SPDR_Y_START - (u08)(tmp * SINPI3);
-    }
   }
   // Get the x/y position of the axisEnd value
   if (axisEnd == SPDR_AXIS_SEC || axisEnd == SPDR_AXIS_MIN)
@@ -223,13 +212,9 @@ static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
   {
     endX = SPDR_X_START - (u08)(tmp * COSPI3);
     if (axisEnd == SPDR_AXIS_MIN)
-    {
       endY = SPDR_Y_START + (u08)(tmp * SINPI3);
-    }
     else
-    {
       endY = SPDR_Y_START - (u08)(tmp * SINPI3);
-    }
   }
 
   // Remove/add the connector line.

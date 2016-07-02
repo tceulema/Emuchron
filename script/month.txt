@@ -15,7 +15,7 @@
 # - Set the wait delay between dates using variable 'w'
 #
 # Usage example (with digital HMS for 31 days in Jan 2012):
-# cs 1
+# cs 4
 # vs y=12
 # vs m=1
 # vs d=31

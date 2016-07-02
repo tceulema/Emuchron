@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'font5x7p.h'
-// Title    : Graphic LCD 5x5 proportional font (ascii characters)
+// Title    : Graphic lcd 5x5 proportional font (ascii characters)
 //*****************************************************************************
 
 #ifndef FONT5X5P_H

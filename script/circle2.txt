@@ -1,7 +1,7 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Test glcdCircle2() and glcdFillCircle()
+# Purpose: Test glcdCircle2()
 #
 
 le

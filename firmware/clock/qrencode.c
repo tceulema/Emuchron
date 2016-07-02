@@ -9,11 +9,11 @@
 // It uses code from a great github project named qrduino that is published at
 // https://github.com/tz1/qrduino
 //
-// The qrencode code has been been tailored to run on Monochron. Not that
-// changes were actually required: the code compiles and runs perfectly on x64
-// Emuchron (after figuring out how to use it properly) and on Atmel AVR
-// Monochron. For functional, performance and object size reasons however, the
-// code has been modified to fit our Emuchron needs.
+// The qrencode code has been tailored to run on Monochron. Not that changes
+// were actually required: the code compiles and runs perfectly on x64 Emuchron
+// (after figuring out how to use it properly) and on Atmel AVR Monochron. For
+// functional, performance and object size reasons however, the code has been
+// modified to fit our Emuchron needs.
 // - Function qrencode(), that no longer resides in this module, is split up in
 //   three separate functions allowing to divide the workload for generating a
 //   QR over multiple functional requests. For more info on why this is done
@@ -276,10 +276,8 @@ static void initrspoly(unsigned char *genpoly)
   {
     genpoly[i + 1] = 1;
     for (j = i; j > 0; j--)
-    {
-      genpoly[j] = genpoly[j]
-          ? genpoly[j - 1] ^ gexp(modnn(glog(genpoly[j]) + i)) : genpoly[j - 1];
-    }
+      genpoly[j] =
+        genpoly[j] ? genpoly[j - 1] ^ gexp(modnn(glog(genpoly[j]) + i)) : genpoly[j - 1];
     genpoly[0] = gexp(modnn(glog(genpoly[0]) + i));
   }
   for (i = 0; i <= ECCBLKWID; i++)
@@ -298,7 +296,7 @@ static void appendrs(unsigned char *data, unsigned char dlen, unsigned char *ecb
     if (fb != 255)  // fb term is non-zero
     {
       for (j = 1; j < eclen; j++)
-          ecbuf[j-1] = ecbuf[j] ^ gexp(modnn(fb + genpoly[eclen - j]));
+        ecbuf[j-1] = ecbuf[j] ^ gexp(modnn(fb + genpoly[eclen - j]));
     }
     else
     {
@@ -384,9 +382,7 @@ static void stringtoqr(void)
       *dat++ = strinbuf[(NECCBLK1 * DATABLKW) + i + (j * (DATABLKW + 1))];
   }
   for (j = 0; j < NECCBLK2; j++)
-  {
     *dat++ = strinbuf[(NECCBLK1 * DATABLKW) + i + (j * (DATABLKW + 1))];
-  }
   for (i = 0; i < ECCBLKWID; i++)
   {
     for (j = 0; j < NECCBLK1 + NECCBLK2; j++)
@@ -429,56 +425,60 @@ static void fillframe(void)
     d = strinbuf[i];
     for (j = 0; j < 8; j++, d <<= 1)
     {
+      if (i || j)
+      {
+        do
+        {
+          // Find next fill position
+          if (ffgohv)
+          {
+            x--;
+          }
+          else
+          {
+            x++;
+            if (ffdecy)
+            {
+              if (y != 0)
+              {
+                y--;
+              }
+              else
+              {
+                x -= 2;
+                ffdecy = !ffdecy;
+                if (x == 6)
+                {
+                  x--;
+                  y = 9;
+                }
+              }
+            }
+            else
+            {
+              if (y != WD - 1)
+              {
+                y++;
+              }
+              else
+              {
+                x -= 2;
+                ffdecy = !ffdecy;
+                if (x == 6)
+                {
+                  x--;
+                  y -= 8;
+                }
+              }
+            }
+          }
+          ffgohv = !ffgohv;
+        } while (ismasked(x, y));
+      }
       if (0x80 & d)
       {
         SETQRBIT(x, y);
       }
-      do
-      { // Find next fill position
-        if (ffgohv)
-        {
-          x--;
-        }
-        else
-        {
-          x++;
-          if (ffdecy)
-          {
-            if (y != 0)
-            {
-              y--;
-            }
-            else
-            {
-              x -= 2;
-              ffdecy = !ffdecy;
-              if (x == 6)
-              {
-                x--;
-                y = 9;
-              }
-            }
-          }
-          else
-          {
-            if (y != WD - 1)
-            {
-              y++;
-            }
-            else
-            {
-              x -= 2;
-              ffdecy = !ffdecy;
-              if (x == 6)
-              {
-                x--;
-                y -= 8;
-              }
-            }
-          }
-        }
-        ffgohv = !ffgohv;
-      } while (ismasked(x, y));
     }
   }
 }

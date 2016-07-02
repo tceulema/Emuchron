@@ -1,6 +1,6 @@
 //*****************************************************************************
-// Filename : 'listvarutil.c'
-// Title    : Command list and variable utility routines for mchron emulator
+// Filename : 'listutil.c'
+// Title    : Command list utility routines for emuchron emulator
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
@@ -12,7 +12,7 @@
 // Monochron and emuchron defines
 #include "../ks0108.h"
 #include "scanutil.h"
-#include "listvarutil.h"
+#include "listutil.h"
 
 // From the variables that store the processed command line arguments
 // we only need the word arguments
@@ -24,32 +24,6 @@ extern cmdArg_t argCmd[];
 // This is me
 extern const char *__progname;
 
-// A structure to hold runtime information for a named numeric variable
-typedef struct _variable_t
-{
-  char *name;			// Variable name
-  int active;			// Whether variable is in use
-  double varValue;		// The current numeric value of the variable
-  struct _variable_t *prev;	// Pointer to preceding bucket member
-  struct _variable_t *next;	// Pointer to next bucket member
-} variable_t;
-
-// A structure to hold a list of numeric variables
-typedef struct _varbucket_t
-{
-  int count;			// Number of bucket members
-  struct _variable_t *var;	// Pointer to first bucket member
-} varbucket_t;
-
-// The administration of mchron variables.
-// Variables are spread over buckets. There are VAR_BUCKETS buckets.
-// Each bucket can contain up to VAR_BUCKET_SIZE variables.
-// Also administer the total number of bucket members in use.
-#define VAR_BUCKETS		26
-#define VAR_BUCKET_SIZE		512
-static varbucket_t varBucket[VAR_BUCKETS];
-static int varCount = 0;
-
 // Local function prototypes
 static int cmdLineComplete(cmdPcCtrl_t **cmdPcCtrlLast,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLineLast);
@@ -58,7 +32,6 @@ static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast,
 static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine);
 static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine);
-static int varPrintValue(char *var, double value, int detail);
 
 //
 // Function: cmdLineComplete
@@ -253,6 +226,7 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   if (fp == NULL)
   {
     printf("cannot open command file \"%s\"\n", fileName);
+    printf(CMD_STACK_TRACE);
     return CMD_RET_ERROR;
   }
 
@@ -300,17 +274,19 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   // Check if a control block command cannot be matched or command not found
   if (lineNumErr > 0)
   {
-    printf("%d:%s:%d:%s\n", fileExecDepth, fileName, lineNum,
-      cmdLineLast->input);
     printf("parse: command unmatched in block starting at line %d\n",
       lineNumErr);
+    printf(CMD_STACK_TRACE);
+    printf("%d:%s:%d:%s\n", fileExecDepth, fileName, lineNum,
+      cmdLineLast->input);
     return CMD_RET_ERROR;
   }
   else if (lineNumErr < 0)
   {
+    printf("parse: invalid command\n");
+    printf(CMD_STACK_TRACE);
     printf("%d:%s:%d:%s\n", fileExecDepth, fileName, lineNum,
       cmdLineLast->input);
-    printf("parse: invalid command\n");
     return CMD_RET_ERROR;
   }
 
@@ -322,11 +298,12 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
     if (searchPcCtrl->cmdLineChild == NULL)
     {
       // Unlinked control block
+      printf("parse: command unmatched in block starting at line %d\n",
+        searchPcCtrl->cmdLineParent->lineNum);
+      printf(CMD_STACK_TRACE);
       printf("%d:%s:%d:%s\n", fileExecDepth, fileName,
         searchPcCtrl->cmdLineParent->lineNum,
         searchPcCtrl->cmdLineParent->input);
-      printf("parse: command unmatched in block starting at line %d\n",
-        searchPcCtrl->cmdLineParent->lineNum);
       return CMD_RET_ERROR;
     }
     else
@@ -435,17 +412,19 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   // Check if a control block command cannot be matched or command not found
   if (lineNumErr > 0)
   {
-    printf("%d:%s:%d:%s\n", fileExecDepth, __progname, lineNum,
-      cmdLineLast->input);
     printf("parse: command unmatched in block starting at line %d\n",
       lineNumErr);
+    printf(CMD_STACK_TRACE);
+    printf("%d:%s:%d:%s\n", fileExecDepth, __progname, lineNum,
+      cmdLineLast->input);
     return CMD_RET_ERROR;
   }
   else if (lineNumErr < 0)
   {
+    printf("parse: invalid command\n");
+    printf(CMD_STACK_TRACE);
     printf("%d:%s:%d:%s\n", fileExecDepth, __progname, lineNum,
       cmdLineLast->input);
-    printf("parse: invalid command\n");
     return CMD_RET_ERROR;
   }
 
@@ -574,405 +553,5 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
   // Could not find an unlinked control block in entire list.
   // Report error on line 1.
   return 1;
-}
-
-//
-// Function: varClear
-//
-// Clear a named variable
-//
-int varClear(char *argName, char *var)
-{
-  int varId;
-  int bucketId;
-  int bucketListId;
-  int i = 0;
-  variable_t *delVar;
-
-  varId = varIdGet(var);
-  if (varId == -1)
-  {
-    printf("%s? internal bucket overflow\n", argName);
-    return CMD_RET_ERROR;
-  }
-
-  // Get reference to variable
-  bucketId = varId & 0xff;
-  bucketListId = (varId >> 8);
-  delVar = varBucket[bucketId].var;
-  for (i = 0; i < bucketListId; i++)
-    delVar = delVar->next;
-
-  // Remove variable from the list
-  if (delVar->prev != NULL)
-    delVar->prev->next = delVar->next;
-  else
-    varBucket[bucketId].var = delVar->next;
-  if (delVar->next != NULL)
-    delVar->next->prev = delVar->prev;
-
-  // Correct variable counters
-  (varBucket[bucketId].count)--;
-  varCount--;
-
-  // Return the malloced variable name and the structure itself
-  free(delVar->name);
-  free(delVar);
-
-  return CMD_RET_OK;
-}
-
-//
-// Function: varIdGet
-//
-// Get the id of a named variable using its name. When the name is scanned by
-// the flex lexer it is guaranteed to consist of any combination of [a-zA-Z]
-// characters. When used in commmand 'vp' or 'vr' the command handler function
-// is responsible for checking whether the var name consists of [a-zA-Z] chars
-// or a '*' string.
-// Return values:
-// >=0 : variable id (combination of bucket id and index in bucket)
-//  -1 : variable bucket overflow
-//
-int varIdGet(char *var)
-{
-  int bucketId;
-  int bucketListId;
-  int found = GLCD_FALSE;
-  int compare = 0;
-  int i = 0;
-  variable_t *checkVar;
-  variable_t *myVar;
-
-  // Create hash of first and optionally second character of var name to
-  // obtain variable bucket number
-  if (var[0] < 'a')
-    bucketId = var[0] - 'A';
-  else
-    bucketId = var[0] - 'a';
-  if (var[1] != '\0')
-  {
-    if (var[1] < 'a')
-      bucketId = bucketId + (var[1] - 'A');
-    else
-      bucketId = bucketId + (var[1] - 'a');
-    if (bucketId >= VAR_BUCKETS)
-      bucketId = bucketId - VAR_BUCKETS;
-  }
-
-  // Find the variable in the bucket
-  checkVar = varBucket[bucketId].var;
-  while (i < varBucket[bucketId].count && found == GLCD_FALSE)
-  {
-    compare = strcmp(checkVar->name, var);
-    if (compare == 0)
-    {
-      found = GLCD_TRUE;
-      bucketListId = i;
-    }
-    else
-    {
-      // Not done searching
-      if (i != varBucket[bucketId].count - 1)
-      {
-        // Next list member
-        checkVar = checkVar->next;
-        i++;
-      }
-      else
-      {
-        // Searched all list members and did not find variable
-        break;
-      }
-    }
-  }
-
-  if (found == GLCD_TRUE)
-  {
-    // Var name found
-    bucketListId = i;
-  }
-  else
-  {
-    // Var name not found in the bucket so let's add it.
-    // However, first check for bucket overflow.
-    if (varBucket[bucketId].count == VAR_BUCKET_SIZE)
-    {
-      printf("cannot register variable: %s\n", var);
-      return -1;
-    }
-
-    // Add variable to end of the bucket list
-    myVar = malloc(sizeof(variable_t));
-    myVar->name = malloc(strlen(var) + 1);
-    strcpy(myVar->name, var);
-    myVar->active = GLCD_FALSE;
-    myVar->varValue = 0;
-    myVar->next = NULL;
-
-    if (varBucket[bucketId].count == 0)
-    {
-      // Bucket is empty
-      varBucket[bucketId].var = myVar;
-      myVar->prev = NULL;
-      bucketListId = 0;
-    }
-    else
-    {
-      // Add to end of bucket list
-      checkVar->next = myVar;
-      myVar->prev = checkVar;
-      bucketListId = i + 1;
-    }
-
-    // Admin counters
-    (varBucket[bucketId].count)++;
-    varCount++;
-  }
-
-  // Var name is validated and its hashed bucket with bucket list index
-  // is returned
-  //printf("%s: bucket=%d index=%d\n", var, bucketId, bucketListId);
-  return (bucketListId << 8) + bucketId;
-}
-
-//
-// Function: varInit
-//
-// Initialize the named variable buckets
-//
-void varInit(void)
-{
-  int i;
-
-  for (i = 0; i < VAR_BUCKETS; i++)
-  {
-    varBucket[i].count = 0;
-    varBucket[i].var = NULL;
-  }
-  varCount = 0;
-}
-
-//
-// Function: varPrint
-//
-// Print the value of a single or all named variables
-//
-int varPrint(char *argName, char *var)
-{
-  // Get and print the value of one or all variables
-  if (strcmp(var, "*") == 0)
-  {
-    const int spaceCountMax = 60;
-    int spaceCount = 0;
-    int varInUse = 0;
-    int i;
-    int varIdx = 0;
-    int allSorted = GLCD_FALSE;
-
-    if (varCount != 0)
-    {
-      // Get pointers to all variables and then sort them
-      variable_t *myVar;
-      variable_t *varSort[varCount];
-
-      for (i = 0; i < VAR_BUCKETS; i++)
-      {
-        // Copy references to all bucket list members
-        myVar = varBucket[i].var;
-        while (myVar != NULL)
-        {
-          varSort[varIdx] = myVar;
-          myVar = myVar->next;
-          varIdx++;
-        }
-      }
-
-      // Sort the array based on var name
-      while (allSorted == GLCD_FALSE)
-      {
-        allSorted = GLCD_TRUE;
-        for (i = 0; i < varIdx - 1; i++)
-        {
-          if (strcmp(varSort[i]->name, varSort[i + 1]->name) > 0)
-          {
-            myVar = varSort[i];
-            varSort[i] = varSort[i + 1];
-            varSort[i + 1] = myVar;
-            allSorted = GLCD_FALSE;
-          }
-        }
-        varIdx--;
-      }
-
-      // Print the vars from the sorted array
-      for (i = 0; i < varCount; i++)
-      {
-        if (varSort[i]->active == GLCD_TRUE)
-        {
-          varInUse++;
-          spaceCount = spaceCount +
-            varPrintValue(varSort[i]->name, varSort[i]->varValue, GLCD_FALSE);
-          if (spaceCount % 10 != 0)
-          {
-            printf("%*s", 10 - spaceCount % 10, "");
-            spaceCount = spaceCount + 10 - spaceCount % 10;
-          }
-          if (spaceCount >= spaceCountMax)
-          {
-            spaceCount = 0;
-            printf("\n");
-          }
-        }
-      }
-    }
-
-    // End on newline if needed and provide variable summary
-    if (spaceCount != 0)
-      printf("\n");
-    printf("variables in use: %d\n", varInUse);
-  }
-  else
-  {
-    // Get and print the value of a single variable, when active
-    int varId;
-    double varValue = 0;
-    int varError = 0;
-
-    // Get var id
-    varId = varIdGet(var);
-    if (varId == -1)
-    {
-      printf("%s? internal bucket overflow\n", argName);
-      return CMD_RET_ERROR;
-    }
-
-    // Get var value
-    varValue = varValGet(varId, &varError);
-    if (varError == 1)
-      return CMD_RET_ERROR;
-
-    // Print var value
-    varPrintValue(var, varValue, GLCD_TRUE);
-    printf("\n");
-  }
-
-  return CMD_RET_OK;
-}
-
-//
-// Function: varPrintValue
-//
-// Print a single variable value and return the length
-// of the printed string
-//
-static int varPrintValue(char *var, double value, int detail)
-{
-  return printf("%s=", var) + cmdArgValuePrint(value, detail);
-}
-
-//
-// Function: varReset
-//
-// Reset all named variable data
-//
-void varReset(void)
-{
-  int i = 0;
-  variable_t *delVar;
-  variable_t *nextVar;
-
-  // Clear each bucket
-  for (i = 0; i < VAR_BUCKETS; i++)
-  {
-    // Clear all variable in bucket
-    nextVar = varBucket[i].var;
-    while (nextVar != NULL)
-    {
-      delVar = nextVar;
-      nextVar = delVar->next;
-      free(delVar->name);
-      free(delVar);
-    }
-    varBucket[i].count = 0;
-    varBucket[i].var = NULL;
-  }
-  varCount = 0;
-}
-
-//
-// Function: varValGet
-//
-// Get the value of a named variable using its id
-//
-double varValGet(int varId, int *varError)
-{
-  int bucketId;
-  int bucketListId;
-  int i = 0;
-  variable_t *myVar;
-
-  // Check if we have a valid id
-  if (varId < 0)
-  {
-    *varError = 1;
-    return 0;
-  }
-
-  // Get reference to variable
-  bucketId = varId & 0xff;
-  bucketListId = (varId >> 8);
-  myVar = varBucket[bucketId].var;
-  for (i = 0; i < bucketListId; i++)
-    myVar = myVar->next;
-
-  // Only an active variable has a value
-  if (myVar->active == 0)
-  {
-    printf("variable not in use: %s\n", myVar->name);
-    *varError = 1;
-    return 0;
-  }
-
-  // Return value
-  *varError = 0;
-  return myVar->varValue;
-}
-
-//
-// Function: varValSet
-//
-// Set the value of a named variable using its id.
-//
-// In case a scanner/parser error occurs during the expression evaluation
-// process we won't even get in here. However, we still need to check the
-// end result value for anomalies, in this case NaN and infinite. If
-// something is wrong, do not assign the value to the variable.
-// Further error handling for the expression evaluator will take place in
-// exprEvaluate() that will provide an error code to its caller.
-//
-double varValSet(int varId, double value)
-{
-  // Check end result of expression
-  if (isnan(value) == 0 && isfinite(value) != 0)
-  {
-    int bucketId;
-    int bucketListId;
-    int i = 0;
-    variable_t *myVar;
-
-    // Get reference to variable
-    bucketId = varId & 0xff;
-    bucketListId = (varId >> 8);
-    myVar = varBucket[bucketId].var;
-    for (i = 0; i < bucketListId; i++)
-      myVar = myVar->next;
-
-    // Make variable active (if not already) and assign value
-    myVar->active = GLCD_TRUE;
-    myVar->varValue = value;
-  }
-
-  return value;
 }
 

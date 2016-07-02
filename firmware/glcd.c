@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'glcd.c'
-// Title    : Graphic LCD API functions
+// Title    : Graphic lcd API functions
 //*****************************************************************************
 
 #ifndef EMULIN
@@ -11,30 +11,30 @@
 #else
 #include <stdlib.h>
 #include "emulator/stub.h"
+#include "emulator/mchronutil.h"
 #endif
 #include "glcd.h"
 #include "monomain.h"
 #include "ks0108.h"
-// Include fonts
+
+// Include 5x7 non-proportional and 5x5 proportional fonts
 #include "font5x7.h"
 #include "font5x5p.h"
 
 // External data
 extern volatile uint8_t mcBgColor, mcFgColor;
 
-// To optimize LCD access, all relevant data from a single LCD line can be read
-// in first, then processed and then written back to the LCD. The lcdLine[] array
-// below is the buffer that will be used for this purpose.
-// This method drastically reduces switching between the read and write modes of
-// the LCD and significantly improves the speed of the LCD api: smoother graphics.
-// Yes, it will cost us 128 byte on the stack, but those functions in the glcd
-// library that will use this buffer will be optimized on speed (without a
-// coding burden on every glcd function having to reserve its own LCD line
-// buffer that will be taken from the stack anyway). There is another downside.
-// Since multiple glcd functions use this buffer, the Monochron application using
-// these functions may not implement concurrent/threaded calls to these
-// functions. For the glcd functions that use the LCD buffer this is currently
-// the case.
+// To optimize lcd access, all relevant data from a single lcd line can be read
+// in first, then processed and then written back to the lcd. The lcdLine[]
+// array below is the buffer that will be used for this purpose.
+// This method drastically reduces switching between the read and write modes
+// of the lcd and significantly improves the speed of the lcd api: smoother
+// graphics. And yes, it will cost us 128 byte on the 2K stack. There is
+// another downside. Since multiple glcd functions use this buffer, the
+// Monochron application using these functions may not implement concurrent or
+// threaded calls to these functions. This is however not an issue since
+// Monochron behaves like a monolithic application except for glcdPutStr() that
+// never requires a buffer anyway.
 // Note: Use glcdBufferRead() to read lcd data into the buffer.
 u08 lcdLine[GLCD_XPIXELS];
 
@@ -47,13 +47,14 @@ static u08 pattern3Down[] =
 // The following variables are used for obtaining font information and font
 // bytes. They are used in the following functions:
 // glcdPutStr3(), glcdPutStr3v(), glcdFontByteGet(), glcdFontIdxGet()
-// To reduce function interfaces to the local utility functions glcdFontByteGet()
-// and glcdFontIdxGet() they are made global in this module serving code size and
-// speed optimization purposes. The downside of using this method is that
-// glcdPutStr3() and glcdPutStr3v() are forced to use these variables in their
-// drawing code and that concurrent/threaded calls to either one of them is
-// prohibited. Currently the glcdPutStr3() and glcdPutStr3v() functions show
-// monolithic behavior in Monochron applications, so we should be safe.
+// To reduce large function interfaces to the latter two functions, the
+// interface is implemented as static variables in this module serving code
+// size and speed optimization purposes.
+// The downside of using this method is that glcdPutStr3() and glcdPutStr3v()
+// are forced to use these variables in their drawing code and that concurrent
+// or threaded calls to either one of them is prohibited. Currently the
+// glcdPutStr3() and glcdPutStr3v() functions show monolithic behavior in
+// Monochron applications, so we should be safe.
 static u08 fontId;
 static u08 fontByteIdx;
 static u08 fontWidth;
@@ -65,42 +66,6 @@ static u08 glcdBufferBitUpdate(u08 x, u08 bit, u08 color);
 static u08 glcdFontByteGet(u08 color);
 static u16 glcdFontIdxGet(unsigned char c);
 static u08 glcdCharWidthGet(char c, u08 *idxOffset);
-
-//
-// Function: glcdCircle
-//
-// Draw a circle centered at px[xcenter,ycenter] with radius in px
-//
-/*void glcdCircle(u08 xcenter, u08 ycenter, u08 radius, u08 color)
-{
-  int tswitch, y, x = 0;
-  unsigned char d;
-
-  d = ycenter - xcenter;
-  y = radius;
-  tswitch = 3 - 2 * radius;
-  while (x <= y)
-  {
-    glcdDot(xcenter + x, ycenter + y, color);
-    glcdDot(xcenter + x, ycenter - y, color);
-    glcdDot(xcenter - x, ycenter + y, color);
-    glcdDot(xcenter - x, ycenter - y, color);
-    glcdDot(ycenter + y - d, ycenter + x, color);
-    glcdDot(ycenter + y - d, ycenter - x, color);
-    glcdDot(ycenter - y - d, ycenter + x, color);
-    glcdDot(ycenter - y - d, ycenter - x, color);
-    if (tswitch < 0)
-    {
-      tswitch += (4 * x + 6);
-    }
-    else
-    {
-      tswitch += (4 * (x - y) + 10);
-      y--;
-    }
-    x++;
-  }
-}*/
 
 //
 // Function: glcdCircle2
@@ -174,7 +139,7 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
       {
         if (lineType == CIRCLE_FULL ||
             ((lineType == CIRCLE_HALF_U || lineType == CIRCLE_HALF_E) &&
-             ((x & 0x1) == half)) ||
+             (x & 0x1) == half) ||
             (lineType == CIRCLE_THIRD && third == 0))
         {
           if (((yCenter + y) >> 3) == yLine)
@@ -199,8 +164,8 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
             {
               // Mark bottom-left pixel in buffer
               sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter - xStart - x,
-                  (yCenter + y) & 0x7, color);
+                glcdBufferBitUpdate(xCenter - xStart - x, (yCenter + y) & 0x7,
+                  color);
             }
           }
           if (((yCenter - y) >> 3) == yLine)
@@ -244,8 +209,8 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
             {
               // Mark bottom-right pixel in buffer
               sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter + y - xStart,
-                  (yCenter + x) & 0x7, color);
+                glcdBufferBitUpdate(xCenter + y - xStart, (yCenter + x) & 0x7,
+                  color);
             }
             else
             {
@@ -270,13 +235,15 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
             {
               // Mark bottom-right pixel in buffer
               sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter + y - xStart, (yCenter - x) & 0x7, color);
+                glcdBufferBitUpdate(xCenter + y - xStart, (yCenter - x) & 0x7,
+                  color);
             }
             else
             {
               // Mark bottom-left pixel in buffer
               sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter - xStart - y, (yCenter - x) & 0x7, color);
+                glcdBufferBitUpdate(xCenter - xStart - y, (yCenter - x) & 0x7,
+                  color);
             }
           }
         }
@@ -327,9 +294,10 @@ void glcdDot(u08 x, u08 y, u08 color)
   unsigned char newByte;
   u08 mask = (1 << (y & 0x7));
 
+  // Get lcd byte containing the dot
   glcdSetAddress(x, y >> 3);
-  oldByte = glcdDataRead();	// dummy read
-  oldByte = glcdDataRead();	// read back current value
+  oldByte = glcdDataRead();	// Dummy read
+  oldByte = glcdDataRead();	// Read back current value
 
   // Set/clear dot in new lcd byte
   if (color == ON)
@@ -627,7 +595,7 @@ u08 glcdGetWidthStr(u08 font, char *data)
 //
 // Function: glcdInverseDisplay
 //
-// Optimized function to invert the contents of the LCD display.
+// Optimized function to invert the contents of the lcd display.
 // Can also be achieved via glcdFillRectangle2().
 //
 /*void glcdInverseDisplay(void)
@@ -655,7 +623,6 @@ u08 glcdGetWidthStr(u08 font, char *data)
 //
 void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
 {
-  // For now the best option to implement
   u08 n;
   u08 mode;
   s08 deltaX = x2 - x1;
@@ -928,7 +895,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
     }
     else
     {
-      // We're going to write full LCD bytes
+      // We're going to write full lcd bytes
       lcdPixelsToDo = 8;
     }
 
@@ -1129,7 +1096,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
     }
     else
     {
-      // We're going to write full LCD bytes
+      // We're going to write full lcd bytes
       lcdPixelsToDo = 8;
     }
 
@@ -1275,7 +1242,8 @@ void glcdRectangle(u08 x, u08 y, u08 w, u08 h, u08 color)
   if (w > 2)
   {
     glcdFillRectangle2(x + 1, y, w - 2, 1, ALIGN_AUTO, FILL_FULL, color);
-    glcdFillRectangle2(x + 1, y + h - 1, w - 2, 1, ALIGN_AUTO, FILL_FULL, color);
+    glcdFillRectangle2(x + 1, y + h - 1, w - 2, 1, ALIGN_AUTO, FILL_FULL,
+      color);
   }
   glcdFillRectangle2(x, y, 1, h, ALIGN_AUTO, FILL_FULL, color);
   if (w > 1 || h > 1)
@@ -1295,7 +1263,7 @@ void glcdWriteChar(unsigned char c, u08 color)
   // Write all five font bytes
   for (i = 0; i < 5; i++)
   {
-    fontByte = pgm_read_byte(&Font5x7[((c - 0x20) * 5) + i]);
+    fontByte = pgm_read_byte(&Font5x7[(c - 0x20) * 5 + i]);
     if (color == OFF)
       glcdDataWrite(~fontByte);
     else
@@ -1307,8 +1275,6 @@ void glcdWriteChar(unsigned char c, u08 color)
     glcdDataWrite(0xff);
   else 
     glcdDataWrite(0x00);
-
-  glcdStartLine(0);
 }
 
 //
@@ -1361,17 +1327,23 @@ static void glcdBufferRead(u08 x, u08 yByte, u08 len)
 {
   u08 i;
 
+#ifdef EMULIN
+  // Check for buffer read overflow request
+  if (len > GLCD_XPIXELS)
+    emuCoreDump(__func__, 0, x, yByte, len);
+#endif
+
   // Set cursor on first byte to read
   glcdSetAddress(x, yByte);
 
   for (i = 0; i < len; i++)
   {
-    // Do a dummy read on the first read and when we switch between
-    // controllers. For this refer to the specs on the controllers.
-    if (i == 0 || x + i == GLCD_CONTROLLER_XPIXELS)
+    // Do a dummy read on the first read and the first read after switching
+    // between controllers. For this refer to the controller specs.
+    if (i == 0 || ((x + i) & GLCD_CONTROLLER_XPIXMASK) == 0)
       lcdLine[i] = glcdDataRead();
 
-    // Read the lcd byte and move to next
+    // Read the lcd byte and move to next cursor address
     lcdLine[i] = glcdDataRead();
     glcdNextAddress();
   }

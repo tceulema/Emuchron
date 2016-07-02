@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'lcdglut.c'
-// Title    : LCD glut stub functionality for MONOCHRON Emulator
+// Title    : Lcd glut stub functionality for emuchron emulator
 //*****************************************************************************
 
 #include <stdio.h>
@@ -13,22 +13,27 @@
 #include "lcdglut.h"
 
 // This is ugly:
-// Why can't we include the two GLCD defs below from ks0108conf.h?
+// Why can't we include the GLCD_* defs below from ks0108conf.h and
+// ks0108.h?
 // The reason for this is that headers in glut and avr define identical
 // typedefs like uint32_t, making it impossible to compile glut code in
 // an avr environment.
 // So, we have to build glut completely independent from avr, and
-// because of this we have to duplicate common stuff defines like LCD
+// because of this we have to duplicate common stuff defines like lcd
 // panel pixel sizes in here.
 // This also means that we can 'communicate' with the outside world
 // using only common data types such as int, char, etc and whatever we
 // define locally and expose via our header.
 #define GLCD_XPIXELS		128
 #define GLCD_YPIXELS		64
-#define GLUT_FALSE		0
-#define GLUT_TRUE		1
+#define GLCD_CONTROLLER_XPIXELS	64
+#define GLCD_CONTROLLER_YPIXELS	64
+#define GLCD_NUM_CONTROLLERS \
+  ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
+#define GLCD_FALSE		0
+#define GLCD_TRUE		1
 
-// We use a frame around our LCD display, being 1 pixel wide on each
+// We use a frame around our lcd display, being 1 pixel wide on each
 // side. So, the number of GLUT pixels in our display is a bit larger
 // than the number of GLCD pixels. 
 #define GLUT_XPIXELS		(GLCD_XPIXELS + 2)
@@ -40,61 +45,89 @@
 #define GLUT_PIX_X_SIZE		((float)2 / GLUT_XPIXELS)
 #define GLUT_PIX_Y_SIZE		((float)2 / GLUT_YPIXELS)
 
-// The hor/vert aspect ratio of the glut LCD display (almost 2:1)
+// The hor/vert aspect ratio of the glut lcd display (almost 2:1)
 #define GLUT_ASPECTRATIO	((float)GLUT_XPIXELS / GLUT_YPIXELS)
 
 // The lcd frame brightness
 #define GLUT_FRAME_BRIGHTNESS	0.5
 
-// The glut message queue commands
+// The lcd message queue commands
 #define GLUT_CMD_EXIT		0
 #define GLUT_CMD_BYTEDRAW	1
 #define GLUT_CMD_BACKLIGHT	2
+#define GLUT_CMD_DISPLAY	3
+#define GLUT_CMD_STARTLINE	4
 
-// Definition of a message to process for our glut window
-typedef struct _winGlutMsg_t
+// Definition of an lcd message to process for our glut window
+// Structure is populated depending on the message command:
+// cmd = GLUT_CMD_EXIT		- <no arguments used>
+// cmd = GLUT_CMD_BYTEDRAW	- arg1 = draw byte value, arg2 = x, arg3 = y
+// cmd = GLUT_CMD_BACKLIGHT	- arg1 = backlight value
+// cmd = GLUT_CMD_DISPLAY	- arg1 = controller, arg2 = display value
+// cmd = GLUT_CMD_STARTLINE	- arg1 = controller, arg2 = startline value
+typedef struct _lcdGlutMsg_t
 {
-  unsigned char cmd;		// Message type indicator (draw, backlight, end)
-  unsigned char data;		// Functional data (8 pixel bits, backlight)
-  int x;			// The Monochron x pos where to draw
-  int y;			// The Monochron y byte pos where to draw
-  struct _winGlutMsg_t *next;	// Pointer to next msg in queue
-} winGlutMsg_t;
+  unsigned char cmd;		// Message command (draw, backlight (etc))
+  unsigned char arg1;		// First command argument
+  unsigned char arg2;		// Second command argument
+  unsigned char arg3;		// Third acommand argument
+  struct _lcdGlutMsg_t *next;	// Pointer to next msg in queue
+} lcdGlutMsg_t;
 
-// The glut window thread we create that opens and manages the OpenGL/Glut
-// window and processes messages in the glut message queue 
-static pthread_t winGlutThread;
+// Definition of a structure holding the glut lcd device statistics
+typedef struct _lcdGlutStats_t
+{
+  long long msgSend;		// Msgs sent
+  long long msgRcv;		// Msgs received
+  long long bitCnf;		// Lcd bits leading to glut update
+  long long byteReq;		// Lcd bytes processed
+  long long redraws;		// Glut window redraws
+  long long queueMax;		// Max length of lcd message queue
+  long long queueEvents;	// Clear non-zero length lcd message queue
+  long long ticks;		// Glut thread cycles
+  struct timeval timeStart;	// Timestamp start of glut interface
+} lcdGlutStats_t;
 
-// Start and end of glut message queue
-static winGlutMsg_t *winGlutQueueStart = NULL;
-static winGlutMsg_t *winGlutQueueEnd = NULL;
+// Definition of a structure to hold controller related data
+typedef struct _lcdGlutCtrl_t
+{
+  unsigned char display;	// Indicates if controller display is active
+  unsigned char startLine;	// Indicates the data display line offset
+} lcdGlutCtrl_t;
 
-// Mutex to access the glut message queue and statistics counters
-// WARNING:
-// To prevent deadlock never ever lock winGlutQueueMutex within a
-// winGlutStatsMutex lock
-static pthread_mutex_t winGlutQueueMutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t winGlutStatsMutex = PTHREAD_MUTEX_INITIALIZER;
+// The glut controller windows data
+static lcdGlutCtrl_t lcdGlutCtrl[GLCD_NUM_CONTROLLERS];
 
-// A private copy of the window image to optimize glut window updates 
+// A private copy of the window image from which we draw our glut window 
 static unsigned char lcdGlutImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 
-// Identifiers to signal certain glut tasks
-static int doWinGlutExit = GLUT_FALSE;
-static int doWinGlutFlush = GLUT_TRUE;
+// The glut window thread we create that opens and manages the OpenGL/Glut
+// window and processes messages in the lcd message queue 
+static pthread_t threadGlut;
+static int deviceActive = GLCD_FALSE;
 
-// A copy of the init parameters
-static int winGlutPosX;			// The initial glut x position
-static int winGlutPosY;			// The initial glut y position
-static int winGlutSizeX;		// The initial glut x size
-static int winGlutSizeY;		// The initial glut y size
-static void (*winGlutWinClose)(void);  	// The mchron callback upon glut window close
+// Start and end of lcd message queue
+static lcdGlutMsg_t *queueStart = NULL;
+static lcdGlutMsg_t *queueEnd = NULL;
+
+// Mutex to access the lcd message queue and statistics counters
+// WARNING:
+// To prevent deadlock *never* lock mutexQueue within a mutexStats lock
+static pthread_mutex_t mutexQueue = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t mutexStats = PTHREAD_MUTEX_INITIALIZER;
+
+// Identifiers to signal certain glut tasks
+static int doExit = GLCD_FALSE;
+static int doFlush = GLCD_TRUE;
+
+// The init parameters
+static lcdGlutInitArgs_t lcdGlutInitArgs;
 
 // The (dummy) message we use upon creating the glut thread 
 static char *createMsg = "Monochron (glut)";
 
 // The brightness of the pixels we draw
-static float winGlutBrightness = 1.0L;
+static float winBrightness = 1.0L;
 
 // The number of black vs white pixels.
 // <0 more black than white pixels
@@ -102,59 +135,90 @@ static float winGlutBrightness = 1.0L;
 // >0 more white than black pixels
 static int winPixMajority = -GLCD_XPIXELS * GLCD_YPIXELS / 2;
 
-// Statistics counters on glut and the glut message queue
-static long long lcdGlutMsgSend = 0;   // Nbr of msgs sent
-static long long lcdGlutMsgRcv = 0;    // Nbr of msgs received
-static long long lcdGlutBitReq = 0;    // Nbr of LCD bits processed (from update bytes)
-static long long lcdGlutBitCnf = 0;    // Nbr of LCD bits leading to glut update
-static long long lcdGlutByteReq = 0;   // Nbr of LCD bytes processed
-static long long lcdGlutByteCnf = 0;   // Nbr of LCD bytes leading to glut update
-static int lcdGlutRedraws = 0;	       // Nbr of glut window redraws (by internal glut event)
-static int lcdGlutQueueMax = 0;        // Max length of glut message queue
-static int lcdGlutQueueEvents = 0;     // Nbr of times the glut message queue is processed
-static struct timeval lcdGlutTimeStart;// Timestamp start of glut interface
-static long long lcdGlutTicks = 0;     // Nbr of glut thread cycles
+// Statistics counters on glut and the lcd message queue
+static lcdGlutStats_t lcdGlutStats;
 
 // Local function prototypes
-static void winGlutDelay(int x);
-static void *winGlutMain(void *ptr);
-static void winGlutMsgQueueAdd(int x, int y, unsigned char data,
-  unsigned char cmd);
-static void winGlutMsgQueueProcess(void);
-static void winGlutRender(void);
-static void winGlutKeyboard(unsigned char key, int x, int y);
+static void lcdGlutDelay(int x);
+static void *lcdGlutMain(void *ptr);
+static void lcdGlutMsgQueueAdd(unsigned char cmd, unsigned char arg1,
+  unsigned char arg2, unsigned char arg3);
+static void lcdGlutMsgQueueProcess(void);
+static void lcdGlutRender(void);
+static void lcdGlutKeyboard(unsigned char key, int x, int y);
 
 //
 // Function: lcdGlutBacklightSet
 //
-// Set backlight in LCD display in glut window
+// Set backlight in lcd display in glut window
 //
 void lcdGlutBacklightSet(unsigned char backlight)
 {
   // Add msg to queue to set backlight brightness
-  winGlutMsgQueueAdd(0, 0, backlight, GLUT_CMD_BACKLIGHT);
+  lcdGlutMsgQueueAdd(GLUT_CMD_BACKLIGHT, backlight, 0, 0);
 }
 
 //
-// Function: lcdGlutEnd
+// Function: lcdGlutDataWrite
 //
-// Shut down the LCD display in glut window
+// Draw pixels in lcd display in glut window
 //
-void lcdGlutEnd(void)
+void lcdGlutDataWrite(unsigned char x, unsigned char y, unsigned char data)
 {
+  // Add msg to queue to draw a pixel byte (8 vertical pixels)
+  lcdGlutMsgQueueAdd(GLUT_CMD_BYTEDRAW, data, x, y);
+}
+
+//
+// Function: lcdGlutDelay
+//
+// Delay time in milliseconds
+//
+static void lcdGlutDelay(int x)
+{
+  struct timeval sleepThis;
+
+  sleepThis.tv_sec = 0;
+  sleepThis.tv_usec = x * 1000;
+  select(0, NULL, NULL, NULL, &sleepThis);
+}
+
+//
+// Function: lcdGlutDisplaySet
+//
+// Switch controller display off or on
+//
+void lcdGlutDisplaySet(unsigned char controller, unsigned char display)
+{
+  // Add msg to queue to switch a controller display off or on
+  lcdGlutMsgQueueAdd(GLUT_CMD_DISPLAY, controller, display, 0);
+}
+
+//
+// Function: lcdGlutCleanup
+//
+// Shut down the lcd display in glut window
+//
+void lcdGlutCleanup(void)
+{
+  // Nothing to do if the glut environment is not initialized
+  if (deviceActive == GLCD_FALSE)
+    return;
+
   // Add msg to queue to exit glut thread
-  winGlutMsgQueueAdd(0, 0, 0, GLUT_CMD_EXIT);
+  lcdGlutMsgQueueAdd(GLUT_CMD_EXIT, 0, 0, 0);
 
   // Wait for glut thread to exit
-  pthread_join(winGlutThread, NULL);
+  pthread_join(threadGlut, NULL);
+  deviceActive = GLCD_FALSE;
 }
 
 //
 // Function: lcdGlutFlush
 //
-// Flush the LCD display in glut window (dummy)
+// Flush the lcd display in glut window (dummy)
 //
-void lcdGlutFlush(int force)
+void lcdGlutFlush(void)
 {
   return;
 }
@@ -162,290 +226,258 @@ void lcdGlutFlush(int force)
 //
 // Function: lcdGlutInit
 //
-// Initialize the LCD display in glut window
+// Initialize the lcd display in glut window
 //
-int lcdGlutInit(int lcdGlutPosX, int lcdGlutPosY, int lcdGlutSizeX, int lcdGlutSizeY,
-  void (*lcdGlutWinClose)(void))
+int lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
 {
-  // Copy initial glut window geometry and position
-  winGlutPosX = lcdGlutPosX;
-  winGlutPosY = lcdGlutPosY;
-  winGlutSizeX = lcdGlutSizeX;
-  winGlutSizeY = lcdGlutSizeY;
-  winGlutWinClose = lcdGlutWinClose;
+  // Nothing to do if the glut environment is already initialized
+  if (deviceActive == GLCD_TRUE)
+    return 0;
 
-  // Create the glut thread with winGlutMain() as main event loop
-  (void)pthread_create(&winGlutThread, NULL, winGlutMain, (void *)createMsg);
+  // Copy initial glut window geometry and position
+  memcpy(&lcdGlutInitArgs, lcdGlutInitArgsSet, sizeof(lcdGlutInitArgs_t));
+
+  // Create the glut thread with lcdGlutMain() as main event loop
+  (void)pthread_create(&threadGlut, NULL, lcdGlutMain, (void *)createMsg);
+  deviceActive = GLCD_TRUE;
 
   return 0;
 }
 
 //
-// Function: lcdGlutRestore
-//
-// Restore layout of the LCD display in glut window (dummy)
-//
-void lcdGlutRestore(void)
-{
-  return;
-}
-
-//
-// Function: lcdGlutDataWrite
-//
-// Draw pixels in LCD display in glut window
-//
-void lcdGlutDataWrite(unsigned char x, unsigned char y, unsigned char data)
-{
-  // Add msg to queue to draw a pixel byte (8 vertical pixels)
-  winGlutMsgQueueAdd(x, y, data, GLUT_CMD_BYTEDRAW);
-}
-
-//
-// Function: winGlutDelay
-//
-// Delay time in milliseconds
-//
-static void winGlutDelay(int x)
-{
-  struct timeval sleepThis;
-
-  sleepThis.tv_sec = 0;
-  sleepThis.tv_usec = x * 1000; 
-  select(0, NULL, NULL, NULL, &sleepThis);
-}
-
-//
-// Function: winGlutKeyboard
+// Function: lcdGlutKeyboard
 //
 // Event handler for glut keyboard event.
 // Since a keyboard stroke has no function in our glut window
 // briefly 'blink' the screen to gently indicate that focus should
 // be put on the mchron command line terminal window.
 //
-static void winGlutKeyboard(unsigned char key, int x, int y)
+static void lcdGlutKeyboard(unsigned char key, int x, int y)
 {
   int k,l;
 
   // Invert display in buffer
   for (k = 0; k < GLCD_XPIXELS; k++)
-  {
     for (l = 0; l < GLCD_YPIXELS / 8; l++)
-    {
-      // Invert LCD byte
       lcdGlutImage[k][l] = ~(lcdGlutImage[k][l]);
-    }
-  }
 
   // Redraw buffer and flush it
-  winGlutRender();
+  lcdGlutRender();
   glutSwapBuffers();
 
   // Wait 0.1 sec (this will lower the fps statistic)
-  winGlutDelay(100);
+  lcdGlutDelay(100);
 
   // And invert back to original
   for (k = 0; k < GLCD_XPIXELS; k++)
-  {
     for (l = 0; l < GLCD_YPIXELS / 8; l++)
-    {
-      // Invert LCD byte back to original
       lcdGlutImage[k][l] = ~(lcdGlutImage[k][l]);
-    }
-  }
 
   // Redraw buffer and flush it
-  winGlutRender();
+  lcdGlutRender();
   glutSwapBuffers();
   
   // Prevent useless reflush in main loop
-  doWinGlutFlush = GLUT_FALSE;
+  doFlush = GLCD_FALSE;
 }
 
 //
-// Function: winGlutMain
+// Function: lcdGlutMain
 //
 // Main function for glut thread
 //
-static void *winGlutMain(void *ptr)
+static void *lcdGlutMain(void *ptr)
 {
-  unsigned char x,y;
+  unsigned char i;
   char *myArgv[1];
   int myArgc = 1;
 
   // Init our window image copy to blank screen
-  for (x = 0; x < GLCD_XPIXELS; x++)
+  memset(lcdGlutImage, 0, sizeof(lcdGlutImage));
+
+  // Init our controller related data
+  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
   {
-    for (y = 0; y < GLCD_YPIXELS / 8; y++)
-    {
-      lcdGlutImage[x][y] = 0;
-    }
+    lcdGlutCtrl[i].display = GLCD_FALSE;
+    lcdGlutCtrl[i].startLine = 0;
   }
 
   // Init our glut environment
   myArgv[0] = (char *)ptr;
   glutInit(&myArgc, myArgv);
   glutInitDisplayMode(GLUT_DOUBLE);
-  glutInitWindowSize(winGlutSizeX, winGlutSizeY);
-  glutInitWindowPosition(winGlutPosX, winGlutPosY);
+  glutInitWindowSize(lcdGlutInitArgs.sizeX, lcdGlutInitArgs.sizeY);
+  glutInitWindowPosition(lcdGlutInitArgs.posX, lcdGlutInitArgs.posY);
   glutCreateWindow((char *)ptr);
-  glutDisplayFunc(winGlutRender);
-  glutKeyboardFunc(winGlutKeyboard);
-  glutCloseFunc(winGlutWinClose);
+  glutDisplayFunc(lcdGlutRender);
+  glutKeyboardFunc(lcdGlutKeyboard);
+  glutCloseFunc(lcdGlutInitArgs.winClose);
 
   // Statistics
-  gettimeofday(&lcdGlutTimeStart, NULL);
+  gettimeofday(&lcdGlutStats.timeStart, NULL);
   
   // Main glut process loop until we signal shutdown
-  while (doWinGlutExit == GLUT_FALSE)
+  while (doExit == GLCD_FALSE)
   {
     // Process glut system events.
-    // Note: As winGlutRender() may get called in the glut loop
+    // Note: As lcdGlutRender() may get called in the glut loop
     // event we need to lock our statistics.
-    pthread_mutex_lock(&winGlutStatsMutex);
-    lcdGlutTicks++;
+    pthread_mutex_lock(&mutexStats);
+    lcdGlutStats.ticks++;
     glutMainLoopEvent();
-    pthread_mutex_unlock(&winGlutStatsMutex);
+    pthread_mutex_unlock(&mutexStats);
 
     // Process our application message queue
-    winGlutMsgQueueProcess();
+    lcdGlutMsgQueueProcess();
 
     // Render in case anything has changed
-    if (doWinGlutFlush == GLUT_TRUE)
+    if (doFlush == GLCD_TRUE)
     {
-       winGlutRender();
+       lcdGlutRender();
        glutSwapBuffers();
-       doWinGlutFlush = GLUT_FALSE;
+       doFlush = GLCD_FALSE;
     }
 
     // Go to sleep to achieve low CPU usage combined with a refresh
     // rate at max ~30 fps
-    winGlutDelay(33);
+    lcdGlutDelay(33);
   }
 
   return NULL;
 }
 
 //
-// Function: winGlutMsgQueueAdd
+// Function: lcdGlutMsgQueueAdd
 //
-// Add message to glut message queue
+// Add message to lcd message queue
 //
-static void winGlutMsgQueueAdd(int x, int y, unsigned char data,
-  unsigned char cmd)
+static void lcdGlutMsgQueueAdd(unsigned char cmd, unsigned char arg1,
+  unsigned char arg2, unsigned char arg3)
 {
   void *mallocPtr;
 
   // Get exclusive access to the message queue
-  pthread_mutex_lock(&winGlutQueueMutex);
+  pthread_mutex_lock(&mutexQueue);
 
   // Create new message and add it to the end of the queue
-  mallocPtr = malloc(sizeof(winGlutMsg_t));
-  if (winGlutQueueStart == NULL)
+  mallocPtr = malloc(sizeof(lcdGlutMsg_t));
+  if (queueStart == NULL)
   {
     // Start of new queue
-    winGlutQueueStart = (winGlutMsg_t *)mallocPtr;
-    winGlutQueueEnd = winGlutQueueStart;    
+    queueStart = (lcdGlutMsg_t *)mallocPtr;
+    queueEnd = queueStart;
   }
   else
   {
     // The queue is at least of size one: link last queue member to next
-    winGlutQueueEnd->next = (winGlutMsg_t *)mallocPtr;
-    winGlutQueueEnd = winGlutQueueEnd->next;    
+    queueEnd->next = (lcdGlutMsg_t *)mallocPtr;
+    queueEnd = queueEnd->next;
   }
 
   // Fill in functional content of message
-  winGlutQueueEnd->cmd = cmd;
-  winGlutQueueEnd->data = data;
-  winGlutQueueEnd->x = x;
-  winGlutQueueEnd->y = y;
-  winGlutQueueEnd->next = NULL;
+  queueEnd->cmd = cmd;
+  queueEnd->arg1 = arg1;
+  queueEnd->arg2 = arg2;
+  queueEnd->arg3 = arg3;
+  queueEnd->next = NULL;
 
   // Statistics
-  pthread_mutex_lock(&winGlutStatsMutex);
-  lcdGlutMsgSend++;
-  pthread_mutex_unlock(&winGlutStatsMutex);
+  pthread_mutex_lock(&mutexStats);
+  lcdGlutStats.msgSend++;
+  pthread_mutex_unlock(&mutexStats);
 
   // Release exclusive access to the message queue
-  pthread_mutex_unlock(&winGlutQueueMutex);
+  pthread_mutex_unlock(&mutexQueue);
 }
 
 //
-// Function: winGlutMsgQueueProcess
+// Function: lcdGlutMsgQueueProcess
 //
-// Process all messages in the glut message queue
+// Process all messages in the lcd message queue
 //
-static void winGlutMsgQueueProcess(void)
+static void lcdGlutMsgQueueProcess(void)
 {
   void *freePtr;
-  winGlutMsg_t *glutMsg = winGlutQueueStart;
+  lcdGlutMsg_t *glutMsg = queueStart;
   unsigned char lcdByte;
   unsigned char msgByte;
   unsigned char pixel = 0;
   int queueLength = 0;
 
   // Get exclusive access to the message queue and statistics counters
-  pthread_mutex_lock(&winGlutQueueMutex);
-  pthread_mutex_lock(&winGlutStatsMutex); 
+  pthread_mutex_lock(&mutexQueue);
+  pthread_mutex_lock(&mutexStats);
 
   // Statistics
   if (glutMsg != NULL)
-  {
-    lcdGlutQueueEvents++;
-  }
+    lcdGlutStats.queueEvents++;
 
   // Eat entire queue message by message
   while (glutMsg != NULL)
   {
     // Statistics
     queueLength++;
-    lcdGlutMsgRcv++;
+    lcdGlutStats.msgRcv++;
 
     // Process the glut command
     if (glutMsg->cmd == GLUT_CMD_BYTEDRAW)
     {
-      // Draw monochron pixels in window
-      lcdByte = lcdGlutImage[glutMsg->x][glutMsg->y];
-      msgByte = glutMsg->data;
+      // Draw monochron pixels in window. The controller has decided
+      // that the new data differs from the current lcd data.
+      doFlush = GLCD_TRUE;
+      msgByte = glutMsg->arg1;
+      lcdByte = lcdGlutImage[glutMsg->arg2][glutMsg->arg3];
+
+      // Sync internal window image
+      lcdGlutImage[glutMsg->arg2][glutMsg->arg3] = msgByte;
 
       // Statistics
-      lcdGlutByteReq++;
-
-      // Force redraw when new content differs from current content
-      if (lcdByte != msgByte)
+      lcdGlutStats.byteReq++;
+      for (pixel = 0; pixel < 8; pixel++)
       {
-        // Sync internal window image and force window buffer flush 
-        lcdGlutImage[glutMsg->x][glutMsg->y] = msgByte;
-        doWinGlutFlush = GLUT_TRUE;
-
-        // Statistics
-        lcdGlutByteCnf++;
-        lcdGlutBitReq = lcdGlutBitReq + 8;
-        for (pixel = 0; pixel < 8; pixel++)
+        if ((lcdByte & 0x1) != (msgByte & 0x1))
         {
-          if ((lcdByte & 0x1) != (msgByte & 0x1))
-          {
-            lcdGlutBitCnf++;
-            if ((msgByte & 0x1) == 0x0)
-              winPixMajority--;
-            else
-              winPixMajority++;
-          }
-          lcdByte = lcdByte >> 1;
-          msgByte = msgByte >> 1;
+          lcdGlutStats.bitCnf++;
+          if ((msgByte & 0x1) == 0x0)
+            winPixMajority--;
+          else
+            winPixMajority++;
         }
+        lcdByte = lcdByte >> 1;
+        msgByte = msgByte >> 1;
       }
     }
     else if (glutMsg->cmd == GLUT_CMD_BACKLIGHT)
     {
       // Set background brightness and force redraw
-      winGlutBrightness = (float)1 / 22 * (6 + glutMsg->data);
-      doWinGlutFlush = GLUT_TRUE;
+      if (winBrightness != (float)1 / 22 * (6 + glutMsg->arg1))
+      {
+        winBrightness = (float)1 / 22 * (6 + glutMsg->arg1);
+        doFlush = GLCD_TRUE;
+      }
+    }
+    else if (glutMsg->cmd == GLUT_CMD_DISPLAY)
+    {
+      // Set controller display and force redraw
+      if (lcdGlutCtrl[glutMsg->arg1].display != glutMsg->arg2)
+      {
+        lcdGlutCtrl[glutMsg->arg1].display = glutMsg->arg2;
+        doFlush = GLCD_TRUE;
+      }
+    }
+    else if (glutMsg->cmd == GLUT_CMD_STARTLINE)
+    {
+      // Set controller display line offset and force redraw
+      if (lcdGlutCtrl[glutMsg->arg1].startLine != glutMsg->arg2)
+      {
+        lcdGlutCtrl[glutMsg->arg1].startLine = glutMsg->arg2;
+        doFlush = GLCD_TRUE;
+      }
     }
     else if (glutMsg->cmd == GLUT_CMD_EXIT)
     {
       // Signal to exit glut thread (when queue is processed)
-      doWinGlutExit = GLUT_TRUE;
+      doExit = GLCD_TRUE;
     }
 
     // Go to next queue member and release memory of current one
@@ -455,41 +487,45 @@ static void winGlutMsgQueueProcess(void)
   }
 
   // Message queue is processed so let's cleanup
-  winGlutQueueStart = NULL;
-  winGlutQueueEnd = NULL;
+  queueStart = NULL;
+  queueEnd = NULL;
 
   // Statistics
-  if (queueLength > lcdGlutQueueMax)
-    lcdGlutQueueMax = queueLength;
+  if ((long long)queueLength > lcdGlutStats.queueMax)
+    lcdGlutStats.queueMax = (long long)queueLength;
 
   // Release exclusive access to the statistics counters and message queue
-  pthread_mutex_unlock(&winGlutStatsMutex);
-  pthread_mutex_unlock(&winGlutQueueMutex);
+  pthread_mutex_unlock(&mutexStats);
+  pthread_mutex_unlock(&mutexQueue);
 }
 
 //
-// Function: winGlutRender
+// Function: lcdGlutRender
 //
 // Render a full redraw of glut window in alternating buffer
 //
-static void winGlutRender(void)
+static void lcdGlutRender(void)
 {
-  unsigned char x,y,lcdByte;
+  unsigned char x,y;
+  unsigned char line;
+  unsigned char lcdByte;
   unsigned char pixel, pixValDraw;
   unsigned char byteValIgnore;
+  unsigned char controller;
+  unsigned char on = GLCD_TRUE;
   float posX, posY;
   float viewAspectRatio;
   float brightnessDraw;
 
   // Statistics
-  lcdGlutRedraws++;
+  lcdGlutStats.redraws++;
 
   // Clear window buffer
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 
   // We need to set the projection of our display to maintain the
-  // glut LCD display aspect ratio of (almost) 2:1 
+  // glut lcd display aspect ratio of (almost) 2:1 
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
   
@@ -514,13 +550,24 @@ static void winGlutRender(void)
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
 
-  if (winPixMajority < 0)
+  // Check if at least one of the controllers is switched off
+  for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
+  {
+    if (lcdGlutCtrl[controller].display == GLCD_FALSE)
+    {
+      on = GLCD_FALSE;
+      break;
+    }
+  }
+
+  // Determine whether we draw white on black or black on white
+  if (winPixMajority < 0 || on == GLCD_FALSE)
   {
     // Majority of pixels is black so configure to draw a minority
     // number of white pixels
     pixValDraw = 1;
     byteValIgnore = 0x0;
-    brightnessDraw = winGlutBrightness;
+    brightnessDraw = winBrightness;
   }
   else
   {
@@ -529,7 +576,7 @@ static void winGlutRender(void)
     // Monochron display (using a single draw only!) and then draw
     // the minority number of black pixels.
     glBegin(GL_QUADS);
-      glColor3f(winGlutBrightness, winGlutBrightness, winGlutBrightness);
+      glColor3f(winBrightness, winBrightness, winBrightness);
       glVertex2f(-1 + GLUT_PIX_X_SIZE, -1 + GLUT_PIX_Y_SIZE);
       glVertex2f( 1 - GLUT_PIX_X_SIZE, -1 + GLUT_PIX_Y_SIZE);
       glVertex2f( 1 - GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
@@ -551,28 +598,55 @@ static void winGlutRender(void)
 
   // The Monochron background and window frame are drawn and the
   // parameters for drawing either black or white pixels are set.
-  // Now render the LCD pixels in our beautiful Monochron display
-  // using the display image from our local LCD buffer.
+  // Now render the lcd pixels in our beautiful Monochron display
+  // using the display image from our local lcd buffer.
   // Begin at left of x axis and work our way to the right.
   posX = -1L + GLUT_PIX_X_SIZE;
   for (x = 0; x < GLCD_XPIXELS; x++)
   {
-    // Begin at the top of y axis and work our way down
-    posY = 1L - GLUT_PIX_Y_SIZE;
+    // Set controller belonging to the x column
+    controller = x / GLCD_CONTROLLER_XPIXELS;
+
+    // Begin painting at the y axis using the vertical offset. When we
+    // reach the bottom on the glut window continue at the top for the
+    // remaining pixels
+    line = (GLCD_CONTROLLER_YPIXELS - lcdGlutCtrl[controller].startLine) %
+      GLCD_CONTROLLER_YPIXELS;
+    posY = 1L - GLUT_PIX_Y_SIZE - line * GLUT_PIX_Y_SIZE;
     for (y = 0; y < GLCD_YPIXELS / 8; y++)
     {
-      // Get LCD byte to process
-      lcdByte = lcdGlutImage[x][y];
-
-      if (lcdByte == byteValIgnore)
+      // Get lcd byte to process
+      if (lcdGlutCtrl[controller].display == GLCD_FALSE)
       {
-        // This LCD byte does not contain any pixels to draw.
-        // Shift y position for next 8 pixels.
-        posY = posY - 8 * GLUT_PIX_Y_SIZE;
+        // The controller is switched off
+        lcdByte = 0;
       }
       else
       {
-        // Process each bit in LCD byte
+        // Get data from lcd buffer with startline offset
+        lcdByte = lcdGlutImage[x][y];
+      }
+
+      if (lcdByte == byteValIgnore)
+      {
+        // This lcd byte does not contain any pixels to draw.
+        // Shift y position for next 8 pixels.
+        line = line + 8;
+        if (line >= GLCD_CONTROLLER_YPIXELS)
+        {
+          // Due to startline offset we will continue at a
+          // new offset from the top
+          line = line - GLCD_CONTROLLER_YPIXELS;
+          posY = 1L - GLUT_PIX_Y_SIZE - line * GLUT_PIX_Y_SIZE;
+        }
+        else
+        {
+          posY = posY - 8 * GLUT_PIX_Y_SIZE;
+        }
+      }
+      else
+      {
+        // Process each bit in lcd byte
         for (pixel = 0; pixel < 8; pixel++)
         {
           // Draw a pixel only when it is the draw color
@@ -588,7 +662,17 @@ static void winGlutRender(void)
             glEnd();
           }
           // Shift y position for next pixel
-          posY = posY - GLUT_PIX_Y_SIZE;
+          line++;
+          if (line == GLCD_CONTROLLER_YPIXELS)
+          {
+            // Due to startline offset we will continue at the top
+            line = 0;
+            posY = 1L - GLUT_PIX_Y_SIZE;
+          }
+          else
+          {
+            posY = posY - GLUT_PIX_Y_SIZE;
+          }
           // Shift to next pixel
           lcdByte = (lcdByte >> 1);
         }
@@ -599,31 +683,64 @@ static void winGlutRender(void)
   }
 
   // Force window buffer flush
-  doWinGlutFlush = GLUT_TRUE;
+  doFlush = GLCD_TRUE;
 }
 
 //
-// Function: lcdGlutStatsGet
+// Function: lcdGlutStartLineSet
 //
-// Get interface statistics
+// Set controller display line offset
 //
-void lcdGlutStatsGet(lcdGlutStats_t *lcdGlutStats)
+void lcdGlutStartLineSet(unsigned char controller, unsigned char startLine)
+{
+  // Add msg to queue to set a controller display line offset
+  lcdGlutMsgQueueAdd(GLUT_CMD_STARTLINE, controller, startLine, 0);
+}
+
+//
+// Function: lcdGlutStatsPrint
+//
+// Print interface statistics
+//
+void lcdGlutStatsPrint(void)
 {
   // As this is a multi-threaded interface we need to have exclusive
   // access to the counters
-  pthread_mutex_lock(&winGlutStatsMutex);
-  lcdGlutStats->lcdGlutMsgSend = lcdGlutMsgSend;
-  lcdGlutStats->lcdGlutMsgRcv = lcdGlutMsgRcv;
-  lcdGlutStats->lcdGlutBitReq = lcdGlutBitReq;
-  lcdGlutStats->lcdGlutBitCnf = lcdGlutBitCnf;
-  lcdGlutStats->lcdGlutByteReq = lcdGlutByteReq;
-  lcdGlutStats->lcdGlutByteCnf = lcdGlutByteCnf;
-  lcdGlutStats->lcdGlutRedraws = lcdGlutRedraws;
-  lcdGlutStats->lcdGlutQueueMax = lcdGlutQueueMax;
-  lcdGlutStats->lcdGlutQueueEvents = lcdGlutQueueEvents;
-  lcdGlutStats->lcdGlutTimeStart = lcdGlutTimeStart;
-  lcdGlutStats->lcdGlutTicks = lcdGlutTicks;
-  pthread_mutex_unlock(&winGlutStatsMutex);
+  pthread_mutex_lock(&mutexStats);
+
+  struct timeval tv;
+  double diffDivider;
+    
+  printf("glut   : lcdByteRx=%llu, ", lcdGlutStats.byteReq);
+  if (lcdGlutStats.byteReq == 0)
+    printf("bitEff=-%%\n");
+  else
+    printf("bitEff=%d%%\n",
+      (int)(lcdGlutStats.bitCnf * 100 / (lcdGlutStats.byteReq * 8)));
+  printf("         msgTx=%llu, msgRx=%llu, maxQLen=%llu, ",
+    lcdGlutStats.msgSend, lcdGlutStats.msgRcv, lcdGlutStats.queueMax);
+  if (lcdGlutStats.queueEvents == 0)
+    printf("avgQLen=-\n");
+  else
+    printf("avgQLen=%llu\n",
+      lcdGlutStats.msgSend / lcdGlutStats.queueEvents);
+  printf("         redraws=%llu, cycles=%llu, updates=%llu, ",
+    lcdGlutStats.redraws, lcdGlutStats.ticks, lcdGlutStats.queueEvents);
+  if (lcdGlutStats.ticks == 0)
+  {
+    printf("fps=-\n");
+  }
+  else
+  {
+    // Get time elapsed since interface start time
+    (void) gettimeofday(&tv, NULL);
+    diffDivider = (double)(((tv.tv_sec -
+      lcdGlutStats.timeStart.tv_sec) * 1E6 + 
+      tv.tv_usec - lcdGlutStats.timeStart.tv_usec) / 1E4);
+    printf("fps=%3.1f\n", (double)lcdGlutStats.ticks / diffDivider * 100);
+  }
+
+  pthread_mutex_unlock(&mutexStats);
 }
 
 //
@@ -635,18 +752,9 @@ void lcdGlutStatsReset(void)
 {
   // As this is a multi-threaded interface we need to have exclusive
   // access to the counters
-  pthread_mutex_lock(&winGlutStatsMutex);
-  lcdGlutMsgSend = 0;
-  lcdGlutMsgRcv = 0;
-  lcdGlutBitReq = 0;
-  lcdGlutBitCnf = 0;
-  lcdGlutByteReq = 0;
-  lcdGlutByteCnf = 0;
-  lcdGlutRedraws = 0;
-  lcdGlutQueueMax = 0;
-  lcdGlutQueueEvents = 0;
-  (void) gettimeofday(&lcdGlutTimeStart, NULL);
-  lcdGlutTicks = 0;
-  pthread_mutex_unlock(&winGlutStatsMutex);
+  pthread_mutex_lock(&mutexStats);
+  memset(&lcdGlutStats, 0, sizeof(lcdGlutStats_t));
+  (void) gettimeofday(&lcdGlutStats.timeStart, NULL);
+  pthread_mutex_unlock(&mutexStats);
 }
 

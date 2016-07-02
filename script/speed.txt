@@ -4,7 +4,7 @@
 # Purpose: Test that speed dial markers don't disappear
 #
 
-cs 11
+cs 12
 ts 0 0 0
 rf s=0 s<=50 s=s+10
   ts 0 0 s

@@ -28,7 +28,7 @@
 
 // External data from expression evaluator
 extern double exprValue;
-extern int exprAssign;
+extern unsigned char exprAssign;
 
 // This is me
 extern const char *__progname;
@@ -110,9 +110,9 @@ void cmdArgInit(char **input)
 // For a numeric profile though copy the string expression and push
 // it through the expression evaluator to get a resulting numeric
 // value. When a valid numeric value is obtained copy it into the
-// designated integer array variable.
-// It returns parmater input that is modified to point to the remaining
-// string to be scanned.
+// designated double array variable.
+// Parameter input is modified to point to the remaining string to be
+// scanned.
 //
 int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
 {
@@ -159,7 +159,7 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
       // Validate the character (if a validation rule has been setup)
       if (cmdArg[i].cmdArgDomain->argDomainType != DOM_NULL_INFO)
       {
-        retVal = cmdArgValidateChar(&(cmdArg[i]), c, silent);
+        retVal = cmdArgValidateChar(&cmdArg[i], c, silent);
         if (retVal != CMD_RET_OK)
           return retVal;
       }
@@ -235,7 +235,7 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
       // Validate the number (if a validation rule has been setup)
       if (cmdArg[i].cmdArgDomain->argDomainType != DOM_NULL_INFO)
       {
-        retVal = cmdArgValidateNum(&(cmdArg[i]), exprValue, silent);
+        retVal = cmdArgValidateNum(&cmdArg[i], exprValue, silent);
         if (retVal != CMD_RET_OK)
           return retVal;
       }
@@ -283,14 +283,14 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
       {
         if (cmdArg[i].cmdArgDomain->argDomainType == DOM_WORD_LIST)
         {
-          retVal = cmdArgValidateWord(&(cmdArg[i]), argWord[argWordIdx - 1],
+          retVal = cmdArgValidateWord(&cmdArg[i], argWord[argWordIdx - 1],
             silent);
           if (retVal != CMD_RET_OK)
             return retVal;
         }
         else if (cmdArg[i].cmdArgDomain->argDomainType == DOM_VAR_NAME)
         {
-          retVal = cmdArgValidateVar(&(cmdArg[i]), argWord[argWordIdx - 1],
+          retVal = cmdArgValidateVar(&cmdArg[i], argWord[argWordIdx - 1],
             silent);
           if (retVal != CMD_RET_OK)
             return retVal;
@@ -461,14 +461,15 @@ static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue, int silent)
     return CMD_RET_ERROR;
   }
 
-  // Find either a '*' or a string of [a-zA-Z] characters
+  // Find either a '*' or a string of [a-zA-Z_] characters
   if (strcmp(argValue, "*") != 0)
   {
-    // A variable name is [a-zA-Z]+
+    // A variable name is [a-zA-Z_]+
     while (*varName != '\0')
     {
       if ((*varName >= 'a' && *varName <='z') ||
-          (*varName >= 'A' && *varName <='Z'))
+          (*varName >= 'A' && *varName <='Z') ||
+          *varName == '_')
       {
         varName++;
       }
@@ -560,7 +561,7 @@ static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue, int silent)
 //
 // Function: cmdArgValuePrint
 //
-// Print a number in the desired format
+// Print a number in the desired format and return print length
 //
 int cmdArgValuePrint(double value, int detail)
 {
@@ -670,7 +671,7 @@ int cmdDictCmdPrint(char *cmd)
   for (argCount = 0; argCount < cmdCommand->argCount; argCount++)
   {
     // Get argument
-    cmdArg = &(cmdCommand->cmdArg[argCount]);
+    cmdArg = &cmdCommand->cmdArg[argCount];
 
     if (cmdArg->argType != ARG_END)
     {
@@ -1012,7 +1013,7 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
           // Copy string built up so far into new buffer and add
           // the string that was read just now
           strcpy(mallocPtr, (const char *)buildPtr);
-          strcpy(&(mallocPtr[inputLenTotal]), (const char *)inputCli);
+          strcpy(&mallocPtr[inputLenTotal], (const char *)inputCli);
           inputLenTotal = inputLenTotal + inputLen;
           free(buildPtr);
           buildPtr = mallocPtr;

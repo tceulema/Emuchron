@@ -6,6 +6,9 @@
 # Note: hit 'q' to quit the faking.... 
 #
 
+# Give help message
+hm --- press 'q' to quit --- 
+
 # Erase LCD display
 le
 

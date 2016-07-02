@@ -12,6 +12,9 @@
 # Quit the demo by pressing the 'q' key.
 #
 
+# Give help message
+hm --- press 'q' to quit --- 
+
 # Center coordinates and radius of circle
 vs xCenter=64
 vs yCenter=32

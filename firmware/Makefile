@@ -24,11 +24,6 @@ OPT = s
 # added are the required clock plugins.
 BASE = anim.c buttons.c config.c glcd.c i2c.c ks0108.c monomain.c util.c
 
-# Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
-# There is a similar switch in MakefileEmu that should be in sync with this one.
-# Note: This will cost you ~615 bytes of Monochron program and data space.
-MARIO = -DMARIO
-
 # Below are examples of SRC definitions for Monochron firmware.
 # For the C source files the C dependencies are automatically generated.
 # Based on the selection of source files in SRC, configure the clocks
@@ -42,7 +37,7 @@ SRC = $(BASE) \
 
 # Monochron clocks - II
 #SRC = $(BASE) \
-#  clock/mosquito.c clock/nerd.c clock/pong.c clock/slider.c
+#  clock/example clock/mosquito.c clock/nerd.c clock/pong.c clock/slider.c
 
 # Monochron clocks - III
 #SRC = $(BASE) \
@@ -56,10 +51,10 @@ SRC = $(BASE) \
 # Note: This will build a much too big firmware file but serves as a test
 # to verify whether everything will build cleanly
 #SRC = $(BASE) \
-#  clock/analog.c clock/bigdigit.c clock/digital.c clock/mosquito.c clock/nerd.c \
-#  clock/perftest.c clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c \
-#  clock/slider.c clock/spotfire.c clock/cascade.c clock/speeddial.c \
-#  clock/spiderplot.c clock/trafficlight.c 
+#  clock/analog.c clock/bigdigit.c clock/digital.c clock/example.c \
+#  clock/mosquito.c clock/nerd.c clock/perftest.c clock/pong.c clock/puzzle.c \
+#  clock/qr.c clock/qrencode.c clock/slider.c clock/spotfire.c \
+#  clock/cascade.c clock/speeddial.c clock/spiderplot.c clock/trafficlight.c 
 
 # List Assembler source files here.
 # Make them always end in a capital .S. Files ending in a lowercase .s
@@ -136,9 +131,9 @@ AVRDUDE_FLAGS = -b $(AVRDUDE_BAUD) -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PRO
 # performed after programming the device.
 #AVRDUDE_FLAGS += -V
 
-# Increase verbosity level. Please use this when submitting bug
-# reports about avrdude. See <http://savannah.nongnu.org/projects/avrdude> 
-# to submit bug reports.
+# Increase verbosity level. Please use this when submitting bug reports
+# about avrdude.
+# See <http://savannah.nongnu.org/projects/avrdude> to submit bug reports.
 #AVRDUDE_FLAGS += -v
 
 # ---------------------------------------------------------------------------
@@ -295,7 +290,7 @@ extcoff: $(TARGET).elf
 %.o: %.c
 	@echo
 	@echo $(MSG_COMPILING) $<
-	$(CC) -c $(ALL_CFLAGS) $(MARIO) -DTXMODE=$(TXMODE)   $< -o $@
+	$(CC) -c $(ALL_CFLAGS) -DTXMODE=$(TXMODE) $< -o $@
 
 # Compile: create assembler files from C source files
 %.s: %.c

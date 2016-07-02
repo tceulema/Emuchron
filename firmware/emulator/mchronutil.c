@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'mchronutil.c'
-// Title    : mchron utility routines
+// Title    : Utility routines for emuchron emulator command line tool
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
@@ -8,9 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <math.h>
 #include <signal.h>
-#include <sys/stat.h>
 
 // Monochron defines
 #include "../ks0108.h"
@@ -23,9 +21,9 @@
 
 // Emuchron stubs and utilities
 #include "stub.h"
-#include "lcd.h"
-#include "listvarutil.h"
+#include "listutil.h"
 #include "scanutil.h"
+#include "varutil.h"
 #include "mchronutil.h"
 
 // Monochron defined data
@@ -89,9 +87,12 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
 //
 int emuArgcArgvGet(int argc, char *argv[])
 {
+  FILE *fp;
   int argCount = 1;
+  char *tty = emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty;
 
   // Init references to command line argument positions
+  emuArgcArgv.argBacklight = 0;
   emuArgcArgv.argDebug = 0;
   emuArgcArgv.argGlutGeometry = 0;
   emuArgcArgv.argGlutPosition = 0;
@@ -99,20 +100,36 @@ int emuArgcArgvGet(int argc, char *argv[])
   emuArgcArgv.argLcdType = 0;
 
   // Init the lcd device data
-  emuArgcArgv.lcdDeviceParam.lcdNcurTty[0] = '\0';
-  emuArgcArgv.lcdDeviceParam.useNcurses = GLCD_FALSE;
-  emuArgcArgv.lcdDeviceParam.useGlut = GLCD_TRUE;
-  emuArgcArgv.lcdDeviceParam.lcdGlutPosX = 100;
-  emuArgcArgv.lcdDeviceParam.lcdGlutPosY = 100;
-  emuArgcArgv.lcdDeviceParam.lcdGlutSizeX = 520;
-  emuArgcArgv.lcdDeviceParam.lcdGlutSizeY = 264;
-  emuArgcArgv.lcdDeviceParam.winClose = emuWinClose;
+  emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_FALSE;
+  emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_TRUE;
+  emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty[0] = '\0';
+  emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.useBacklight = GLCD_FALSE;
+  emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.winClose = emuWinClose;
+  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posX = 100;
+  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posY = 100;
+  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeX = 520;
+  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeY = 264;
+  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.winClose = emuWinClose;
 
   // Do archaic command line processing to obtain the lcd output device(s),
   // lcd output configs and debug logfile 
   while (argCount < argc)
   {
-    if (strncmp(argv[argCount], "-d", 4) == 0)
+    if (strncmp(argv[argCount], "-b", 2) == 0)
+    {
+      // Ncurses backlight support
+      if (argv[argCount][2] == ' ' || argv[argCount][2] == '\0')
+      {
+        emuArgcArgv.argBacklight = argCount;
+        argCount = argCount + 1;
+      }
+      else
+      {
+        emuArgcArgv.argBacklight = -1;
+        break;
+      }
+    }
+    else if (strncmp(argv[argCount], "-d", 4) == 0)
     {
       // Debug output file name
       emuArgcArgv.argDebug = argCount + 1;
@@ -151,12 +168,13 @@ int emuArgcArgvGet(int argc, char *argv[])
   }
 
   // Check result of command line processing
-  if (emuArgcArgv.argLcdType >= argc || emuArgcArgv.argDebug >= argc ||
-      emuArgcArgv.argGlutGeometry >= argc || emuArgcArgv.argTty >= argc ||
-      emuArgcArgv.argGlutPosition >= argc)
+  if (emuArgcArgv.argBacklight == -1 || emuArgcArgv.argLcdType >= argc ||
+      emuArgcArgv.argDebug >= argc || emuArgcArgv.argGlutGeometry >= argc ||
+      emuArgcArgv.argTty >= argc || emuArgcArgv.argGlutPosition >= argc)
   {
     printf("Use: %s [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]\n", __progname);
-    printf("            [-d <logfile>] [-h]\n");
+    printf("            [-d <logfile>] [-b] [-h]\n");
+    printf("  -b            - Backlight support in ncurses terminal\n");
     printf("  -d <logfile>  - Debug logfile name\n");
     printf("  -g <geometry> - Geometry (x,y) of glut window\n");
     printf("                  Default: \"520x264\"\n");
@@ -177,23 +195,27 @@ int emuArgcArgvGet(int argc, char *argv[])
     return CMD_RET_ERROR;
   }
 
+  // Validate support for backlight in ncurses window
+  if (emuArgcArgv.argBacklight > 0)
+    emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.useBacklight = GLCD_TRUE;
+
   // Validate lcd stub output device
   if (emuArgcArgv.argLcdType > 0)
   {
     if (strcmp(argv[emuArgcArgv.argLcdType], "glut") == 0)
     {
-      emuArgcArgv.lcdDeviceParam.useGlut = GLCD_TRUE;
-      emuArgcArgv.lcdDeviceParam.useNcurses = GLCD_FALSE;
+      emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_TRUE;
+      emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_FALSE;
     }
     else if (strcmp(argv[emuArgcArgv.argLcdType], "ncurses") == 0)
     {
-      emuArgcArgv.lcdDeviceParam.useGlut = GLCD_FALSE;
-      emuArgcArgv.lcdDeviceParam.useNcurses = GLCD_TRUE;
+      emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_FALSE;
+      emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_TRUE;
     }
     else if (strcmp(argv[emuArgcArgv.argLcdType], "all") == 0)
     {
-      emuArgcArgv.lcdDeviceParam.useGlut = GLCD_TRUE;
-      emuArgcArgv.lcdDeviceParam.useNcurses = GLCD_TRUE;
+      emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_TRUE;
+      emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_TRUE;
     }
     else
     {
@@ -230,8 +252,8 @@ int emuArgcArgvGet(int argc, char *argv[])
       free(input);
       return CMD_RET_ERROR;
     }
-    emuArgcArgv.lcdDeviceParam.lcdGlutSizeX = atoi(input);
-    emuArgcArgv.lcdDeviceParam.lcdGlutSizeY = atoi(separator + 1);
+    emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeX = atoi(input);
+    emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeY = atoi(separator + 1);
     free(input);
   }
 
@@ -262,8 +284,8 @@ int emuArgcArgvGet(int argc, char *argv[])
       free(input);
       return CMD_RET_ERROR;
     }
-    emuArgcArgv.lcdDeviceParam.lcdGlutPosX = atoi(input);
-    emuArgcArgv.lcdDeviceParam.lcdGlutPosY = atoi(separator + 1);
+    emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posX = atoi(input);
+    emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posY = atoi(separator + 1);
     free(input);
   }
 
@@ -271,25 +293,14 @@ int emuArgcArgvGet(int argc, char *argv[])
   if (emuArgcArgv.argTty != 0)
   {
     // Got it from the command line
-    struct stat buffer;   
-
-    // Copy to our runtime and verify if the tty is actually in use
-    strcpy(emuArgcArgv.lcdDeviceParam.lcdNcurTty, argv[emuArgcArgv.argTty]);
-    if (stat(emuArgcArgv.lcdDeviceParam.lcdNcurTty, &buffer) != 0)
-    {
-      printf("%s: -t: tty \"%s\" is not in use\n", __progname,
-        emuArgcArgv.lcdDeviceParam.lcdNcurTty);
-      return CMD_RET_ERROR;
-    }
+    strcpy(tty, argv[emuArgcArgv.argTty]);
   }
-  else if (emuArgcArgv.lcdDeviceParam.useNcurses == 1)
+  else if (emuArgcArgv.ctrlDeviceArgs.useNcurses == 1)
   {
     // Get the tty device if not specified on the command line
-    FILE *fp;
     char *home;
     char *fullPath;
     int ttyLen = 0;
-    struct stat buffer;   
 
     // Get the full path to $HOME/.mchron
     home = getenv("HOME");
@@ -307,40 +318,28 @@ int emuArgcArgvGet(int argc, char *argv[])
     free(fullPath);
     if (fp == NULL)
     {
-      printf("%s: Cannot open file \"%s%s\".\n", __progname, "$HOME", NCURSES_TTYFILE);
+      printf("%s: Cannot open file \"%s%s\".\n", __progname, "$HOME",
+        NCURSES_TTYFILE);
       printf("Start a new Monochron ncurses terminal or use switch '-t <tty>' to set\n");
-      printf("ncurses lcd output device\n");
+      printf("mchron ncurses terminal tty\n");
       return CMD_RET_ERROR;
     }
 
     // Read output device in first line. It has a fixed max length.
-    fgets(emuArgcArgv.lcdDeviceParam.lcdNcurTty, NCURSES_TTYLEN, fp);
+    fgets(tty, NCURSES_TTYLEN, fp);
 
     // Kill all \r or \n in the tty string as ncurses doesn't like this.
     // Assume that \r and \n are trailing characters in the string.
-    for (ttyLen = strlen(emuArgcArgv.lcdDeviceParam.lcdNcurTty); ttyLen > 0; ttyLen--)
+    for (ttyLen = strlen(tty); ttyLen > 0; ttyLen--)
     {
-      if (emuArgcArgv.lcdDeviceParam.lcdNcurTty[ttyLen - 1] == '\n' ||
-          emuArgcArgv.lcdDeviceParam.lcdNcurTty[ttyLen - 1] == '\r')
-      {
-        emuArgcArgv.lcdDeviceParam.lcdNcurTty[ttyLen - 1] = '\0';
-      }
+      if (tty[ttyLen - 1] == '\n' || tty[ttyLen - 1] == '\r')
+        tty[ttyLen - 1] = '\0';
     }
 
     // Clean up our stuff
     fclose(fp);
-    
-    // Verify if the tty is actually in use
-    if (stat(emuArgcArgv.lcdDeviceParam.lcdNcurTty, &buffer) != 0)
-    {
-      printf("%s: $HOME%s: tty \"%s\" is not in use\n",
-        __progname, NCURSES_TTYFILE, emuArgcArgv.lcdDeviceParam.lcdNcurTty);
-      printf("Start a new Monochron ncurses terminal or use switch '-t <tty>' to set\n");
-      printf("ncurses lcd output device\n");
-      return CMD_RET_ERROR;
-    }
   }
-  
+
   // All seems to be ok
   return CMD_RET_OK;
 }
@@ -403,14 +402,14 @@ void emuClockUpdate(void)
   else
   {
     // For a clock by default a single clock cycle is needed
-    // to update its layout.
+    // to update its layout
     animClockDraw(DRAW_CYCLE);
     mcClockTimeEvent = GLCD_FALSE;
     DEBUGP("Clear time event");
   }
 
   // Update clock layout
-  lcdDeviceFlush(0);
+  ctrlLcdFlush();
   time_event = GLCD_FALSE;
 }
 
@@ -431,9 +430,9 @@ u08 emuColorGet(char colorId)
 //
 // Function: emuCoreDump
 //
-// There's something terribly wrong in the lcd interface. It is usually
+// There's something terribly wrong in the graphics interface. It is usually
 // caused by bad functional clock code or a bad mchron command line request
-// that tries to do stuff outside the boundaries of the lcd display.
+// that tries to do stuff outside the boundaries of a buffer or lcd display.
 // Provide some feedback and generate a coredump file (when enabled).
 // Note: A graceful environment shutdown is taken care of by the SIGABRT
 // signal handler, invoked by abort().
@@ -444,7 +443,7 @@ void emuCoreDump(const char *location, u08 controller, u08 x, u08 y, u08 data)
 {
   // Provide feedback
   // Note: y = vertical lcd byte location (0..7)
-  printf("\n*** invalid lcd api request in %s()\n", location);
+  printf("\n*** invalid graphics api request in %s()\n", location);
   printf("api info (controller:x:y:data) = (%d:%d:%d:%d)\n",
     (int)controller, (int)x, (int)y, (int)data);
   printf("*** registered variables\n");
@@ -463,11 +462,11 @@ void emuCoreDump(const char *location, u08 controller, u08 x, u08 y, u08 data)
   // is killed by the application that is being aborted. Note that at this
   // point glut is still running in its own thread and will have its layout
   // constantly refreshed. This allows a glut screendump to be made if needed.
-  if (emuArgcArgv.lcdDeviceParam.useNcurses == GLCD_TRUE)
+  if (emuArgcArgv.ctrlDeviceArgs.useNcurses == GLCD_TRUE)
   {
     // Flush the ncurses device so we get its contents as-is at the time of
     // the forced coredump
-    lcdDeviceFlush(1);
+    ctrlLcdFlush();
   }
   else // emuArgcArgv.lcdDeviceParam.useGlut == GLCD_TRUE
   {
@@ -487,7 +486,7 @@ void emuCoreDump(const char *location, u08 controller, u08 x, u08 y, u08 data)
 //
 // Function: emuDigitsCheck
 //
-// Verifies whether a string is non-empty and contains only digit characters.
+// Verifies whether a string is non-empty and contains only digit characters
 //
 static int emuDigitsCheck(char *input)
 {
@@ -536,7 +535,7 @@ int emuLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
   {
     // Dump newline in the log only when we run at root command level
     if (listExecDepth == 0)
-       DEBUGP("");
+      DEBUGP("");
     return retVal;
   }
 
@@ -583,7 +582,7 @@ int emuLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
       return retVal;
 
     // Execute the command handler for the command
-    retVal = (*(cmdCommand->cmdHandler))(cmdLine);
+    retVal = (*cmdCommand->cmdHandler)(cmdLine);
   }
   else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR ||
            cmdCommand->cmdPcCtrlType == PC_IF_THEN)
@@ -688,7 +687,7 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
       // Execute the associated program counter control block handler
       // from the command dictionary.
       cmdPcCtrlType = cmdProgCounter->cmdCommand->cmdPcCtrlType;
-      retVal = (*(cmdProgCounter->cmdCommand->cbHandler))(&cmdProgCounter);
+      retVal = (*cmdProgCounter->cmdCommand->cbHandler)(&cmdProgCounter);
     }
 
     // Verify if a command interrupt was requested
@@ -706,7 +705,7 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
     if (retVal == CMD_RET_ERROR || retVal == CMD_RET_INTERRUPT)
     {
       // Error/interrupt occured in current level
-      printf("--- stack trace ---\n");
+      printf(CMD_STACK_TRACE);
       // Report current stack level and cascade to upper level
       printf("%d:%s:%d:%s\n", fileExecDepth, source, cmdProgCounter->lineNum,
         cmdProgCounter->input);
@@ -758,9 +757,9 @@ void emuLogfileOpen(char fileName[])
 {
   if (!DEBUGGING)
   {
-    printf("\nWARNING: -d <file> ignored as master debugging is Off.\n");
+    printf("WARNING: -d <file> ignored as master debugging is Off.\n");
     printf("Assign value 1 to \"#define DEBUGGING\" in monomain.h [firmware] and rebuild\n");
-    printf("mchron.\n");
+    printf("mchron.\n\n");
   }
   else
   {
@@ -810,8 +809,8 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
   //printf ("Signo     -  %d\n",siginfo->si_signo);
   //printf ("SigCode   -  %d\n",siginfo->si_code);
 
-  // For signals we should interpret to make the application quit, switch
-  // back to keyboard line mode and kill audio before we actually exit
+  // For signals that should make the application quit, switch back to
+  // keyboard line mode and kill audio before we actually exit
   if (sig == SIGINT)
   {
     // Keyboard: "^C"

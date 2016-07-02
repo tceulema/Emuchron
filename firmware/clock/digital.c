@@ -3,6 +3,7 @@
 // Title    : Animation code for MONOCHRON digital clock
 //*****************************************************************************
 
+#include <math.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
 #endif
@@ -15,6 +16,10 @@
 #include "../anim.h"
 #include "digital.h"
 
+// Uncomment if you want to apply a 'glitch' mode to the clock.
+// Refer to digiPeriodSet() for setting glitch delay and duration.
+//#define DIGI_GLITCH
+
 // Specifics for digital clock
 #define DIGI_ALARM_X_START	2
 #define DIGI_ALARM_Y_START	57
@@ -25,16 +30,27 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcU8Util1;
-extern volatile uint8_t mcUpdAlarmSwitch;
-extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
+#ifdef DIGI_GLITCH
+extern volatile uint8_t mcCycleCounter;
+// mcU8Util1 = glitch sleep duration (sec)
+// mcU8Util2 = glitch duration (sec)
+// mcU8Util3 = glitch controller 0 display off duration (sec)
+// mcU8Util4 = glitch controller 1 display off duration (sec)
+extern volatile uint8_t mcU8Util1, mcU8Util2, mcU8Util3, mcU8Util4;
+#endif
 
 extern unsigned char *months[12];
 extern unsigned char *days[7];
+
+#ifdef DIGI_GLITCH
+// Random value for determining the occurrence and duration of glitch
+static u16 digiRandBase = M_PI * M_PI * 1000;
+static const float digiRandSeed = 3.9147258617;
+static u16 digiRandVal = 0xA5C3;
+#endif
 
 // The following globals control the layout of the digital clock
 static u08 digiSecShow;
@@ -43,21 +59,42 @@ static u08 digiTimeXStart, digiTimeYStart;
 static u08 digiDateYStart;
 
 // Local function prototypes
-static void digitalAlarmAreaUpdate(void);
 static void digitalInit(u08 mode);
 static void digitalTimeValDraw(u08 val, u08 factor);
+#ifdef DIGI_GLITCH
+static void digiPeriodSet(void);
+static void digiRandGet(void);
+#endif
 
 //
 // Function: digitalCycle
 //
-// Update the LCD display of a very simple digital clock
+// Update the lcd display of a very simple digital clock
 //
 void digitalCycle(void)
 {
   char clockInfo[9];
 
   // Update alarm info in clock
-  digitalAlarmAreaUpdate();
+  animAlarmAreaUpdate(DIGI_ALARM_X_START, DIGI_ALARM_Y_START,
+    ALARM_AREA_ALM_ONLY);
+
+#ifdef DIGI_GLITCH
+  u08 i;
+  u08 payload;
+
+  // Do a clock glitch when needed and only on every two clock cycles
+  if (mcU8Util1 == 0 && mcU8Util2 > 0 && (mcCycleCounter & 0x1) == 0)
+  {
+    // Set new controller startline
+    for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+    {
+      digiRandGet();
+      payload = ((digiRandVal >> 5) & 0x3f);
+      glcdControlWrite(i, GLCD_START_LINE | payload);
+    }
+  }
+#endif
 
   // Only if a time event or init is flagged we need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
@@ -67,7 +104,7 @@ void digitalCycle(void)
 
   // Verify changes in date
   if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
-       mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
+      mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
   {
     glcdPutStr2(DIGI_DATE_X_START, digiDateYStart, FONT_5X7N,
       (char *)days[dotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)], mcFgColor);
@@ -78,7 +115,7 @@ void digitalCycle(void)
     clockInfo[3] = ' ';
     clockInfo[4] = '2';
     clockInfo[5] = '0';
-    animValToStr(mcClockNewDY, &(clockInfo[6]));
+    animValToStr(mcClockNewDY, &clockInfo[6]);
     glcdPutStr2(DIGI_DATE_X_START + 48, digiDateYStart, FONT_5X7N, clockInfo,
       mcFgColor);
   }
@@ -91,16 +128,78 @@ void digitalCycle(void)
   if (digiSecShow == GLCD_TRUE &&
       (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE))
     digitalTimeValDraw(mcClockNewTS, 2);
+
+#ifdef DIGI_GLITCH
+  // Verify glitch parameters
+  if (mcU8Util1 > 0)
+  {
+    // Counting down for next glitch cycle
+    mcU8Util1--;
+  }
+  else
+  {
+    // Counting down when glitching
+    mcU8Util2--;
+    if (mcU8Util2 == 0)
+    {
+      // Reset to normal and define new glitch cycle
+      glcdResetScreen();
+      digiPeriodSet();
+    }
+    else
+    {
+      // See if controller 0 needs to be turned off with 3% chance per check
+      if (mcU8Util3 == 0)
+      {
+        digiRandGet();
+        payload = (digiRandVal >> 6) % 100;
+        if (payload < 3)
+        {
+          // Three seconds of left blank screen
+          glcdControlWrite(0, GLCD_ON_CTRL | 0);
+          mcU8Util3 = 3;
+        }
+      }
+      else
+      {
+        mcU8Util3--;
+        // Switch display back on
+        if (mcU8Util3 == 0)
+          glcdControlWrite(0, GLCD_ON_CTRL | GLCD_ON_DISPLAY);
+      }
+    
+      // See if controller 1 needs to be turned off with 3% chance per check
+      if (mcU8Util4 == 0)
+      {
+        digiRandGet();
+        payload = (digiRandVal >> 6) % 100;
+        if (payload < 3)
+        {
+          // Three seconds of right blank screen
+          glcdControlWrite(1, GLCD_ON_CTRL | 0);
+          mcU8Util4 = 3;
+        }
+      }
+      else
+      {
+        mcU8Util4--;
+        // Switch display back on
+        if (mcU8Util4 == 0)
+          glcdControlWrite(1, GLCD_ON_CTRL | GLCD_ON_DISPLAY);
+      }
+    }
+  }
+#endif
 }
 
 //
 // Function: digitalHmInit
 //
-// Initialize the LCD display of a very simple digital clock with H+M
+// Initialize the lcd display of a very simple digital clock with H+M
 //
 void digitalHmInit(u08 mode)
 {
-  // Setup the variables for the digital clock
+  // Setup the variables for the digital clock in HH:MM format
   digiSecShow = GLCD_FALSE;
   digiTimeXStart = 4;
   digiTimeYStart = 2;
@@ -115,11 +214,11 @@ void digitalHmInit(u08 mode)
 //
 // Function: digitalHmsInit
 //
-// Initialize the LCD display of a very simple digital clock with H+M+S
+// Initialize the lcd display of a very simple digital clock with H+M+S
 //
 void digitalHmsInit(u08 mode)
 {
-  // Setup the variables for the digital clock
+  // Setup the variables for the digital clock in HH:MM:SS format
   digiSecShow = GLCD_TRUE;
   digiTimeXStart = 16;
   digiTimeYStart = 12;
@@ -134,7 +233,7 @@ void digitalHmsInit(u08 mode)
 //
 // Function: digitalInit
 //
-// Initialize the LCD display of a very simple digital clock
+// Initialize the lcd display of a very simple digital clock
 //
 static void digitalInit(u08 mode)
 {
@@ -161,70 +260,15 @@ static void digitalInit(u08 mode)
       digiTimeYStart, FONT_5X7N, ":", digiTimeXScale, digiTimeYScale,
       mcFgColor);
   
+  // Force the alarm info area to init itself
   if (mode == DRAW_INIT_FULL)
-  {
-    // Force the alarm info area to init itself
     mcAlarmSwitch = ALARM_SWITCH_NONE;
-    mcU8Util1 = GLCD_FALSE;
-  }
-}
 
-//
-// Function: digitalAlarmAreaUpdate
-//
-// Draw update in digital clock alarm area
-//
-static void digitalAlarmAreaUpdate(void)
-{
-  u08 inverseAlarmArea = GLCD_FALSE;
-  u08 newAlmDisplayState = GLCD_FALSE;
-  char msg[6];
-
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
-  {
-    if (mcAlarmSwitch == ALARM_SWITCH_ON)
-    {
-      // Show alarm time
-      animValToStr(mcAlarmH, msg);
-      msg[2] = ':';
-      animValToStr(mcAlarmM, &(msg[3]));
-      glcdPutStr2(DIGI_ALARM_X_START, DIGI_ALARM_Y_START, FONT_5X5P, msg, mcFgColor);
-    }
-    else
-    {
-      // Clear area (remove alarm time)
-      glcdFillRectangle(DIGI_ALARM_X_START - 1, DIGI_ALARM_Y_START - 1, 19, 7,
-        mcBgColor);
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-    glcdFillRectangle2(DIGI_ALARM_X_START - 1, DIGI_ALARM_Y_START - 1, 19, 7,
-      ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+#ifdef DIGI_GLITCH
+  // Reset lcd display and init the first glitch cycle
+  glcdResetScreen();
+  digiPeriodSet();
+#endif
 }
 
 //
@@ -240,3 +284,46 @@ static void digitalTimeValDraw(u08 val, u08 factor)
   glcdPutStr3(digiTimeXStart + factor * 19 * digiTimeXScale, digiTimeYStart,
     FONT_5X7N, clockInfo, digiTimeXScale, digiTimeYScale, mcFgColor);
 }
+
+//
+// Function: digiPeriodSet
+//
+// Set the glitch sleep and glitch duration
+//
+#ifdef DIGI_GLITCH
+static void digiPeriodSet(void)
+{
+  // Get random number
+  digiRandGet();
+
+  // Uncomment one the following glitch sleep periods:
+  // Set glitch sleep period between a range 100-227 seconds
+  mcU8Util1 = 100 + ((digiRandVal >> 4) & 0x7f);
+  // Set glitch sleep period between a range 25-40 seconds
+  //mcU8Util1 = 25 + ((digiRandVal >> 4) & 0x0f);
+
+  // Uncomment one the following glitch duration periods:
+  // Set glitch duration between a range 5-12 seconds
+  mcU8Util2 = 5 + ((digiRandVal >> 7) & 0x07) + 1;
+  // Set glitch duration between a range 10-13 seconds
+  //mcU8Util2 = 10 + ((digiRandVal >> 7) & 0x03) + 1;
+
+  // Reset display off timers
+  mcU8Util3 = 0;
+  mcU8Util4 = 0;
+}
+#endif
+
+//
+// Function: digiRandGet
+//
+// Generate a random number of most likely abysmal quality
+//
+#ifdef DIGI_GLITCH
+static void digiRandGet(void)
+{
+  digiRandBase = (int)(digiRandSeed * (digiRandVal + mcClockNewTM) * 213);
+  digiRandVal = mcCycleCounter * digiRandSeed + digiRandBase;
+}
+#endif
+

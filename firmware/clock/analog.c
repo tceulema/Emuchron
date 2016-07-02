@@ -16,33 +16,34 @@
 #include "../anim.h"
 #include "analog.h"
 
-// Specifics for analog clock
-#define ANA_X_START		64
-#define ANA_Y_START		31
-#define ANA_RADIUS		30
-#define ANA_DOT_RADIUS		(ANA_RADIUS - 1.9L)
-#define ANA_SEC_RADIUS_LINE	(ANA_RADIUS - 4.9L)
-#define ANA_SEC_RADIUS_ARROW	(ANA_RADIUS - 2.3L)
-#define ANA_MIN_RADIUS		(ANA_RADIUS - 2.9L)
-#define ANA_HOUR_RADIUS		(ANA_RADIUS - 9.9L)
-#define ANA_SEC_LEG_RADIUS	(ANA_RADIUS - 7.0L)
-#define ANA_MIN_LEG_RADIUS	8
-#define ANA_HOUR_LEG_RADIUS	5
-#define ANA_SEC_STEPS		60L
-#define ANA_MIN_STEPS		60L
-#define ANA_HOUR_STEPS		12L
+// Specifics for analog clock main dial
+#define ANA_X_START			64
+#define ANA_Y_START			31
+#define ANA_RADIUS			30
+#define ANA_DOT_RADIUS			(ANA_RADIUS - 1.9L)
+#define ANA_SEC_RADIUS_LINE		(ANA_RADIUS - 4.9L)
+#define ANA_SEC_RADIUS_ARROW		(ANA_RADIUS - 2.3L)
+#define ANA_MIN_RADIUS			(ANA_RADIUS - 2.9L)
+#define ANA_HOUR_RADIUS			(ANA_RADIUS - 9.9L)
+#define ANA_SEC_LEG_RADIUS		(ANA_RADIUS - 7.0L)
+#define ANA_MIN_LEG_RADIUS		8
+#define ANA_HOUR_LEG_RADIUS		5
+#define ANA_SEC_STEPS			60L
+#define ANA_MIN_STEPS			60L
+#define ANA_HOUR_STEPS			12L
 #define ANA_SEC_LEG_RADIAL_OFFSET	(0.10L)
 #define ANA_MIN_LEG_RADIAL_OFFSET	(2L * M_PI / 2.50L)
 #define ANA_HOUR_LEG_RADIAL_OFFSET	(2L * M_PI / 2.50L)
 
-#define ANA_ALARM_X_START	9
-#define ANA_ALARM_Y_START	54
-#define ANA_ALARM_RADIUS	7
-#define ANA_ALARM_MIN_RADIUS	(ANA_ALARM_RADIUS)
-#define ANA_ALARM_HOUR_RADIUS	(ANA_ALARM_RADIUS - 2)
-#define ANA_DATE_X_START	2
-#define ANA_DATE_Y_START	57
-#define ANA_DATE_X_SIZE		23
+// Specifics for alarm and date element areas
+#define ANA_ALARM_X_START		118
+#define ANA_ALARM_Y_START		54
+#define ANA_ALARM_RADIUS		7
+#define ANA_ALARM_MIN_RADIUS		(ANA_ALARM_RADIUS)
+#define ANA_ALARM_HOUR_RADIUS		(ANA_ALARM_RADIUS - 2)
+#define ANA_DATE_X_START		2
+#define ANA_DATE_Y_START		57
+#define ANA_DATE_X_SIZE			23
 
 // Determine the second indicator shape.
 // 0 = Needle
@@ -66,14 +67,16 @@ extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcU8Util1;
 extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern unsigned char *months[12];
 
-// Clock cycle counter since last time event/init for smooth second indicator move
+// Holds the current normal/inverted state of the alarm area
+extern volatile uint8_t mcU8Util1;
+// Clock cycle counter since last time event/init that is used for smooth
+// motion behavior of second indicator
 extern volatile uint8_t mcU8Util2;
 // Indicator whether to show the second needle/arrow
 extern volatile uint8_t mcU8Util3;
@@ -133,37 +136,69 @@ void analogCycle(void)
   u08 minElementChanged = GLCD_FALSE;
   u08 hourElementChanged = GLCD_FALSE;
 
+  // Verify changes in date
+  if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
+      mcClockInit == GLCD_TRUE)
+  {
+    u08 pxDone;
+    char msg[4];
+
+    // Show new date and clean up potential remnants
+    pxDone = glcdPutStr2(ANA_DATE_X_START, ANA_DATE_Y_START, FONT_5X5P,
+      (char *)months[mcClockNewDM - 1], mcFgColor) + ANA_DATE_X_START;
+    msg[0] = ' ';
+    animValToStr(mcClockNewDD, &msg[1]);
+    pxDone = pxDone +
+      glcdPutStr2(pxDone, ANA_DATE_Y_START, FONT_5X5P, msg, mcFgColor) -
+      ANA_DATE_X_START;
+    if (pxDone <= ANA_DATE_X_SIZE)
+      glcdFillRectangle(ANA_DATE_X_START + pxDone, ANA_DATE_Y_START,
+        ANA_DATE_X_SIZE - pxDone + 1, FILL_BLANK, mcBgColor);
+  }
+
   // Calculate (potential) changes in seconds needle
   if (mcU8Util3 == GLCD_TRUE)
   {
     if (ANA_SEC_MOVE == 0)
+    {
       // Move at time event (once per second or init)
       radElement = (2L * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS;
+    }
     else
+    {
       // Move when leg position changes
       radElement = (2L * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS +
         (2L * M_PI / ANA_SEC_STEPS / (1000L / ANIMTICK_MS + 0.5)) * mcU8Util2;
+    }
 
     if (ANA_SEC_TYPE == 0)
+    {
       // Needle indicator
       secElementChanged = analogElementCalc(posSec, posSecNew, radElement,
         0L, ANA_SEC_RADIUS_LINE, 0, 2);
+    }
     else
+    {
       // Floating arrow indicator
       secElementChanged = analogElementCalc(posSec, posSecNew, radElement,
         ANA_SEC_LEG_RADIAL_OFFSET, ANA_SEC_RADIUS_ARROW, ANA_SEC_LEG_RADIUS, 6);
+    }
   }
 
   if (mcClockTimeEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
   {
     // Calculate (potential) changes in minute arrow
     if (ANA_MIN_MOVE == 0)
+    {
       // Move once per minute
       radElement = (2L * M_PI / ANA_MIN_STEPS) * (float)mcClockNewTM;
+    }
     else
+    {
       // Move when tip position changes
       radElement = (2L * M_PI / ANA_MIN_STEPS) * (float)mcClockNewTM  +
         (2L * M_PI / ANA_SEC_STEPS / ANA_MIN_STEPS) * (float)mcClockNewTS;
+    }
     minElementChanged = analogElementCalc(posMin, posMinNew, radElement,
       ANA_MIN_LEG_RADIAL_OFFSET, ANA_MIN_RADIUS, ANA_MIN_LEG_RADIUS, 2);
 
@@ -288,10 +323,6 @@ static void analogAlarmAreaUpdate(void)
       dxH = (s08)(sin(radH) * ANA_ALARM_HOUR_RADIUS);
       dyH = (s08)(-cos(radH) * ANA_ALARM_HOUR_RADIUS);
 
-      // Clear date area
-      glcdFillRectangle(ANA_DATE_X_START, ANA_DATE_Y_START, ANA_DATE_X_SIZE,
-        5, mcBgColor);
-
       // Show the alarm time
       glcdCircle2(ANA_ALARM_X_START, ANA_ALARM_Y_START, ANA_ALARM_RADIUS,
         CIRCLE_FULL, mcFgColor);
@@ -302,26 +333,11 @@ static void analogAlarmAreaUpdate(void)
     }
     else
     {
-      // Show date
-      u08 pxDone = 0;
-      char msg[4];
-
       // Clear alarm area
       glcdFillRectangle(ANA_ALARM_X_START - ANA_ALARM_RADIUS - 1,
         ANA_ALARM_Y_START - ANA_ALARM_RADIUS - 1, ANA_ALARM_RADIUS * 2 + 3,
         ANA_ALARM_RADIUS * 2 + 3, mcBgColor);
       mcU8Util1 = GLCD_FALSE;
-
-      // Show the date
-      pxDone = glcdPutStr2(ANA_DATE_X_START, ANA_DATE_Y_START, FONT_5X5P,
-        (char *)months[mcClockNewDM - 1], mcFgColor) + ANA_DATE_X_START;
-      msg[0] = ' ';
-      animValToStr(mcClockNewDD, &(msg[1]));
-      pxDone = pxDone + glcdPutStr2(pxDone, ANA_DATE_Y_START, FONT_5X5P, msg, mcFgColor) -
-        ANA_DATE_X_START;
-      if (pxDone <= ANA_DATE_X_SIZE)
-        glcdFillRectangle(ANA_DATE_X_START + pxDone, ANA_DATE_Y_START,
-          ANA_DATE_X_SIZE - pxDone + 1, FILL_BLANK, mcBgColor);
     }
   }
 
@@ -409,14 +425,12 @@ static void analogElementSync(s08 position[], s08 positionNew[])
 
   // For the seconds needle we don't want to copy leg info 
   if (position[2] == ANA_X_START && position[3] == ANA_Y_START)
-    posLimit = 2; 
+    posLimit = 2;
   else
     posLimit = 6;
 
   for (i = 0; i < posLimit; i++)
-  {
     position[i] = positionNew[i];
-  }
 }
 
 //

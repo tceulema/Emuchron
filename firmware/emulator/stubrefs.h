@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'stubrefs.h'
-// Title    : Stub external references for MONOCHRON Emulator
+// Title    : Stub external references for emuchron emulator
 //*****************************************************************************
 
 #ifndef STUBREFS_H

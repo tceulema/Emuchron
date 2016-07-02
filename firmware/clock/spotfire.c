@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'spotfire.c'
-// Title    : Generic drawing code for MONOCHRON Spotfire clocks
+// Title    : Generic drawing code for MONOCHRON spotfire clocks
 //*****************************************************************************
 
 #include <stdlib.h>
@@ -35,14 +35,13 @@
 #define FP_RS_WIDTH	18
 #define FP_RS_HEIGHT	1
 
-// Specifics for visualization header alarm/date info
-#define VIZ_AD_X_START	50
-#define VIZ_AD_Y_START	9
-#define VIZ_AD_WIDTH	24
-
 // Specifics for the menu bar layout
 #define MBAR_TXT_LEFT	0
 #define MBAR_TXT_CENTER	1
+
+// Position of the visualization header alarm/date area
+#define AD_X_START	51
+#define AD_Y_START	9
 
 // Structure defining the several layouts for a Spotfire menu bar
 typedef struct
@@ -59,13 +58,9 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
+extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcU8Util1;
-extern volatile uint8_t mcUpdAlarmSwitch;
-extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcBgColor, mcFgColor;
-extern unsigned char *months[12];
 
 // Common text labels
 extern char animHour[];
@@ -94,80 +89,6 @@ static u08 menuBarId;
 // Local function prototypes
 static void spotMenuBarUpdate(void);
 static void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal);
-
-//
-// Function: spotAlarmAreaUpdate
-//
-// Draw update in a Spotfire clock alarm area
-//
-void spotAlarmAreaUpdate(void)
-{
-  u08 inverseAlarmArea = GLCD_FALSE;
-  u08 newAlmDisplayState = GLCD_FALSE;
-  u08 pxDone = 0;
-  char msg[7];
-
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-    
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
-  {
-    msg[0] = ' ';
-    if (mcAlarmSwitch == ALARM_SWITCH_ON)
-    {
-      // Show alarm time in visualization header
-      animValToStr(mcAlarmH, &(msg[1]));
-      msg[3] = ':';
-      animValToStr(mcAlarmM, &(msg[4]));
-      pxDone = glcdPutStr2(VIZ_AD_X_START, VIZ_AD_Y_START, FONT_5X5P, msg, mcFgColor);
-    }
-    else
-    {
-      // Prior to showing the date clear border of inverse alarm area (if needed)
-      if (mcU8Util1 == GLCD_TRUE)
-      {
-        glcdRectangle(VIZ_AD_X_START + 1, VIZ_AD_Y_START - 1, 19, 7, mcBgColor);
-        mcU8Util1 = GLCD_FALSE;
-      }
-
-      // Draw date
-      pxDone = glcdPutStr2(VIZ_AD_X_START, VIZ_AD_Y_START, FONT_5X5P,
-        (char *)months[mcClockNewDM - 1], mcFgColor) + VIZ_AD_X_START;
-      animValToStr(mcClockNewDD, &(msg[1]));
-      pxDone = pxDone + glcdPutStr2(pxDone, VIZ_AD_Y_START, FONT_5X5P, msg, mcFgColor) -
-        VIZ_AD_X_START;
-    }
-
-    // Clean up any trailing remnants of previous text
-    if (pxDone < VIZ_AD_WIDTH)
-      glcdFillRectangle(VIZ_AD_X_START + pxDone, VIZ_AD_Y_START,
-        VIZ_AD_WIDTH - pxDone, 5, mcBgColor);
-  }
-
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
-
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
-    glcdFillRectangle2(VIZ_AD_X_START + 1, VIZ_AD_Y_START - 1, 19, 7,
-      ALIGN_AUTO, FILL_INVERSE, mcBgColor);
-}
 
 //
 // Function: spotAxisInit
@@ -241,27 +162,27 @@ void spotBarUpdate(u08 x, u08 y, u08 maxVal, u08 maxHeight, u08 width,
       // then fill it with blank
       glcdRectangle(x, y - newBarHeight, width, newBarHeight + 1, mcFgColor);
       if (newBarHeight > 1)
-        glcdFillRectangle2(x + 1, y - newBarHeight + 1, width - 2, newBarHeight - 1,
-          ALIGN_TOP, fillType, mcFgColor);
+        glcdFillRectangle2(x + 1, y - newBarHeight + 1, width - 2,
+          newBarHeight - 1, ALIGN_TOP, fillType, mcFgColor);
     }
     else
     {
-      glcdFillRectangle2(x, y - newBarHeight, width, newBarHeight + 1, ALIGN_BOTTOM,
-        fillType, mcFgColor);
+      glcdFillRectangle2(x, y - newBarHeight, width, newBarHeight + 1,
+        ALIGN_BOTTOM, fillType, mcFgColor);
     }
   }
 
   // Add the bar value (depending on bar value font size)
   animValToStr(newVal, barValue);
-  glcdPutStr2(x + valXOffset, y - newBarHeight + valYOffset, FONT_5X7N, barValue,
-    mcFgColor);
+  glcdPutStr2(x + valXOffset, y - newBarHeight + valYOffset, FONT_5X7N,
+    barValue, mcFgColor);
 
   // Clear the first line between the bar and the bar value
   glcdFillRectangle(x, y - newBarHeight - 1, width, 1, mcBgColor);
 
   // Clear the space left and right of the bar value
-  glcdFillRectangle(x, y - newBarHeight + valYOffset, valXOffset, -valYOffset - 1,
-    mcBgColor);
+  glcdFillRectangle(x, y - newBarHeight + valYOffset, valXOffset,
+    -valYOffset - 1, mcBgColor);
   glcdFillRectangle(x + width - valXOffset + 1, y - newBarHeight + valYOffset,
     valXOffset - 1, -valYOffset - 1, mcBgColor);
 
@@ -293,8 +214,8 @@ void spotCommonInit(char *label, u08 mode)
 
     // Visualization title bar
     pxDone = glcdPutStr2(2, 9, FONT_5X5P, label, mcFgColor);
-    if (pxDone + 2 < VIZ_AD_X_START)
-      glcdFillRectangle(pxDone + 2, 9, VIZ_AD_X_START - pxDone - 2, 5, mcBgColor);
+    if (pxDone + 2 < AD_X_START)
+      glcdFillRectangle(pxDone + 2, 9, AD_X_START - pxDone - 2, 5, mcBgColor);
   }
   else
   {
@@ -331,39 +252,48 @@ void spotCommonInit(char *label, u08 mode)
       glcdPutStr2(FP_X_START, FP_Y_START + i * FP_Y_OFFSET_SIZE, FONT_5X5P,
         sliderLabel, mcFgColor);
       glcdRectangle(FP_X_START + FP_RF_X_OFFSET,
-        FP_Y_START + i * FP_Y_OFFSET_SIZE + FP_RF_Y_OFFSET,
-        FP_RF_WIDTH, FP_RF_HEIGHT, mcFgColor);
+        FP_Y_START + i * FP_Y_OFFSET_SIZE + FP_RF_Y_OFFSET, FP_RF_WIDTH,
+        FP_RF_HEIGHT, mcFgColor);
       glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET,
-        FP_Y_START + i * FP_Y_OFFSET_SIZE + FP_RS_Y_OFFSET,
-        FP_RS_WIDTH, FP_RS_HEIGHT, mcFgColor);
+        FP_Y_START + i * FP_Y_OFFSET_SIZE + FP_RS_Y_OFFSET, FP_RS_WIDTH,
+        FP_RS_HEIGHT, mcFgColor);
     }
 
     // Force the alarm info area to init itself in the Title bar
     mcAlarmSwitch = ALARM_SWITCH_NONE;
-    mcU8Util1 = GLCD_FALSE;
   }
 }
 
 //
 // Function: spotCommonUpdate
 //
-// Update common parts used by all Spotfire clocks
+// Update common parts used by all Spotfire clocks.
+// Returns GLCD_TRUE when Spotfire clocks need to update itself.
 //
-void spotCommonUpdate(void)
+u08 spotCommonUpdate(void)
 {
+  // Update alarm/date info in clock
+  animAlarmAreaUpdate(AD_X_START, AD_Y_START, ALARM_AREA_ALM_DATE);
+
+  // Only if a time event or init is flagged we need to update the clock
+  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+    return GLCD_FALSE;
+
   // Verify changes in day and month for the menu bar
   spotMenuBarUpdate();
 
   // Update the filter panel range sliders
   if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-    spotRangeSliderUpdate(FP_Y_START + 2 * FP_Y_OFFSET_SIZE, FP_SEC_MAX, mcClockOldTS,
-      mcClockNewTS);
+    spotRangeSliderUpdate(FP_Y_START + 2 * FP_Y_OFFSET_SIZE, FP_SEC_MAX,
+      mcClockOldTS, mcClockNewTS);
   if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-    spotRangeSliderUpdate(FP_Y_START + FP_Y_OFFSET_SIZE, FP_MIN_MAX, mcClockOldTM,
-      mcClockNewTM);
+    spotRangeSliderUpdate(FP_Y_START + FP_Y_OFFSET_SIZE, FP_MIN_MAX,
+      mcClockOldTM, mcClockNewTM);
   if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
     spotRangeSliderUpdate(FP_Y_START, FP_HOUR_MAX, mcClockOldTH,
       mcClockNewTH);
+
+  return GLCD_TRUE;
 }
 
 //
@@ -373,7 +303,8 @@ void spotCommonUpdate(void)
 //
 static void spotMenuBarUpdate(void)
 {
-  // Only get a new menu bar when the date has changed or when we're initializing
+  // Only get a new menu bar when the date has changed or when we're
+  // initializing
   if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
       mcClockInit == GLCD_TRUE)
   {
@@ -384,11 +315,8 @@ static void spotMenuBarUpdate(void)
     // Find the new menu bar
     while (i < sizeof(menuBarDriver) / sizeof(menuBarDriver_t))
     {
-      if (mcClockNewDD == mbDriver->day &&
-          mcClockNewDM == mbDriver->month)
-      {
+      if (mcClockNewDD == mbDriver->day && mcClockNewDM == mbDriver->month)
         break;
-      }
       i++;
       mbDriver++;
     }

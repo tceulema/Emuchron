@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'listvarutil.h'
-// Title    : Defines for command lists and variable support functionality
+// Title    : Defines for command list functionality
 //*****************************************************************************
 
 #ifndef LISTVARUTIL_H
@@ -15,15 +15,4 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
 int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   cmdInput_t *cmdInput, int fileExecDepth);
 char *cmdPcCtrlArgCreate(char *argExpr);
-
-// mchron variable support functions
-int varClear(char *argName, char *var);
-void varInit(void);
-int varPrint(char *argName, char *var);
-void varReset(void);
-
-// Functions for referencing and manipulating variables
-int varIdGet(char *var);
-double varValGet(int varId, int *varError);
-double varValSet(int varId, double value);
 #endif

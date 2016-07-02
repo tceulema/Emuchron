@@ -1,0 +1,82 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test the controller stub by combining changes in the
+#          controller startline and display registers.
+#
+
+# Clear display and show a static clock for 4 seconds
+le
+lds 1 1
+cs 4
+rf wait=0 wait<16 wait=wait+1
+  tf
+  w 250
+rn
+
+# Now let the fun begin... :-)
+
+# display off countdown counters for controllers
+vs countera=0
+vs counterb=0
+
+# random seed
+vs rb=pi^2*100000
+vs rs=5.317496278
+
+rf null true null
+  rf rn=0 rn<40 rn=rn+1
+    # Startline for controller 0 in range 0..63
+    vs rb=(rb*rs)%100000
+    vs ra=(rb+rn*75)%100000
+    vs ctrla=ra%64
+
+    # Startline for controller 1 in range 0..63
+    vs rb=(rb*rs)%100000
+    vs ra=(rb+rn*75)%100000
+    vs ctrlb=ra%64
+
+    # Set startline for both controllers
+    lss ctrla ctrlb
+    w 75
+    tf
+
+    # Display for controller 0 with a 3% chance it will
+    # be turned off for the next 5 script loop cycles
+    iif countera>0
+      vs countera=countera-1
+      vs ctrla=false
+    iel
+      vs rb=(rb*rs)%100000
+      vs ra=(rb+rn*75)%100000
+      iif ra<3000
+        vs ctrla=false
+        vs countera=5
+      iel
+        vs ctrla=true
+      ien
+    ien
+
+    # Display for controller 1 with a 3% chance it will
+    # be turned off for the next 5 script loop cycles
+    iif counterb>0
+      vs counterb=counterb-1
+      vs ctrlb=false
+    iel
+      vs rb=(rb*rs)%100000
+      vs ra=(rb+rn*75)%100000
+      iif ra<3000
+        vs ctrlb=false
+        vs counterb=5
+      iel
+        vs ctrlb=true
+      ien
+    ien
+
+    # Set display for both controllers
+    lds ctrla ctrlb
+    w 75
+    tf
+  rn
+rn
+

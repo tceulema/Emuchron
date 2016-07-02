@@ -4,15 +4,16 @@
 # Purpose: Put all clocks through the emulator
 #
 
-# Set max clock value and clear screen
-vs mc=18
-le
+# Set max clock value and performance test clock id
+vs maxClock=19
+vs perfTest=19
 
 # Run all clocks
-rf cl=1 cl<=mc cl=cl+1
-  # Skip the glcd performance clock
-  iif cl!=18
-    cs cl
+rf clock=1 clock<=maxClock clock=clock+1
+  # Skip the glcd performance test clock
+  iif clock!=perfTest
+    vp clock
+    cs clock
     cf n
   ien
 rn

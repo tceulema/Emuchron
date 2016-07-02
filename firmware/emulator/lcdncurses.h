@@ -1,29 +1,35 @@
 //*****************************************************************************
 // Filename : 'lcdncurses.h'
-// Title    : LCD ncurses definitions for MONOCHRON Emulator
+// Title    : Lcd ncurses definitions for emuchron emulator
 //*****************************************************************************
 
 #ifndef LCDNCURSES_H
 #define LCDNCURSES_H
 
-// Definition of a structure to hold ncurses LCD device statistics
-typedef struct _lcdNcurStats_t
-{
-  long long lcdNcurBitReq;    // Nbr of LCD bits processed (from bytes with ncur update)
-  long long lcdNcurBitCnf;    // Nbr of LCD bits leading to ncurses update
-  long long lcdNcurByteReq;   // Nbr of LCD bytes processed
-  long long lcdNcurByteCnf;   // Nbr of LCD bytes leading to ncurses update
-} lcdNcurStats_t;
+// Max length ncurses tty and the file in $HOME holding the default tty
+#define NCURSES_TTYLEN		100
+#define NCURSES_TTYFILE		"/.mchron"
 
-// LCD device control methods
-void lcdNcurEnd(void);
-void lcdNcurFlush(int force);
-int lcdNcurInit(char *lcdNcurTty, void (*lcdNcurWinClose)(void));
-void lcdNcurRestore(void);
-void lcdNcurStatsGet(lcdNcurStats_t *lcdNcurStats);
+// Definition of a structure holding the ncurses lcd init parameters
+typedef struct _lcdNcurInitArgs_t
+{
+  char tty[NCURSES_TTYLEN + 1];	// ncurses tty
+  int useBacklight;		// Process backlight change requests
+  void (*winClose)(void);	// mchron callback upon ncurses window close
+} lcdNcurInitArgs_t;
+
+// Lcd device control methods
+void lcdNcurCleanup(void);
+void lcdNcurFlush(void);
+int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgs);
+
+// Lcd device statistics methods
+void lcdNcurStatsPrint(void);
 void lcdNcurStatsReset(void);
 
-// LCD device content methods
+// Lcd device content methods
 void lcdNcurBacklightSet(unsigned char backlight);
 void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data);
+void lcdNcurDisplaySet(unsigned char controller, unsigned char display);
+void lcdNcurStartLineSet(unsigned char controller, unsigned char startline);
 #endif

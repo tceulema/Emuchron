@@ -1,0 +1,29 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test the controller stub by inverting the lcd using
+#          only controller commands
+#
+
+# Repeat for both controllers
+rf ctrl=0 ctrl<2 ctrl=ctrl+1
+  # A controller has 64 x columns...
+  rf x=0 x<64 x=x+1
+    # ... and 8 vertical y bytes of 8 pixels each
+    rf y=0 y<8 y=y+1
+      # Set cursor in controller lcd and read its contents.
+      # In a sequence of reads in a controller the first byte
+      # must be read twice. Upon the second read the byte is
+      # properly read and the controller x cursor is incremented.
+      # Weird? Yes, but that's how the controller hardware works.
+      lcs ctrl x y
+      lr ctrl myLcdByte
+      lr ctrl myLcdByte
+
+      # Set the cursor back to where we came from and write the
+      # inverted byte back to the lcd
+      lcs ctrl x y
+      lw ctrl ~myLcdByte&0xff
+    rn
+  rn
+rn

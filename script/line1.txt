@@ -4,7 +4,7 @@
 # Purpose: Test glcdLine()
 #
 
-# Erase LCD display
+# Erase lcd display
 le
 
 # Paint mirrored horizontal lines

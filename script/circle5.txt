@@ -40,10 +40,10 @@ rf true x<=y true
       iif firstDraw==true
         vs drawSize=2*drawSize
       ien
-      he 1
+      hm draw type 1
       prf f xCenter-x yCenter-y drawSize+1 y*2 2 0
       iif x!=0
-        he 2
+        hm draw type 2
         prf f xCenter+y yCenter-x 1 x*2 2 0
       ien
     ien
@@ -51,14 +51,14 @@ rf true x<=y true
 
   iif x!=0
     iif tswitch>=0&&firstDraw==false
-      he 3
+      hm draw type 3
       prf f xCenter+x-drawSize yCenter-y drawSize+1 y*2 2 0
     ien
     iif tswitch>=0
       iif x!=y
         vs drawSize=0
       ien
-      he 4
+      hm draw type 4
       prf f xCenter-y yCenter-x drawSize+1 x*2 2 0
     ien
   ien

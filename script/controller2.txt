@@ -1,0 +1,24 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test the controller stub by combining changes in backlight
+#          brightness and the controller startline register.
+#          Works best in the glut lcd device.
+#
+
+# Give help message
+hm --- press 'q' to quit --- 
+
+cs 11
+lbs 16
+rf repeat=0 true repeat=(repeat==4?0:repeat+1)
+  rf line=1 line<=64 line=line+1
+    iif repeat==1
+      lss 64-line line%64
+      lbs line>=32?(line-32)/32*16:(32-line)/32*16
+    ien
+    tf
+    w 50
+  rn
+rn
+
