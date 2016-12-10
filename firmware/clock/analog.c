@@ -71,7 +71,6 @@ extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
-extern unsigned char *months[12];
 
 // Holds the current normal/inverted state of the alarm area
 extern volatile uint8_t mcU8Util1;
@@ -80,6 +79,8 @@ extern volatile uint8_t mcU8Util1;
 extern volatile uint8_t mcU8Util2;
 // Indicator whether to show the second needle/arrow
 extern volatile uint8_t mcU8Util3;
+
+extern char *animMonths[12];
 
 // Local function prototypes
 static void analogAlarmAreaUpdate(void);
@@ -145,7 +146,7 @@ void analogCycle(void)
 
     // Show new date and clean up potential remnants
     pxDone = glcdPutStr2(ANA_DATE_X_START, ANA_DATE_Y_START, FONT_5X5P,
-      (char *)months[mcClockNewDM - 1], mcFgColor) + ANA_DATE_X_START;
+      (char *)animMonths[mcClockNewDM - 1], mcFgColor) + ANA_DATE_X_START;
     msg[0] = ' ';
     animValToStr(mcClockNewDD, &msg[1]);
     pxDone = pxDone +
@@ -168,7 +169,8 @@ void analogCycle(void)
     {
       // Move when leg position changes
       radElement = (2L * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS +
-        (2L * M_PI / ANA_SEC_STEPS / (1000L / ANIMTICK_MS + 0.5)) * mcU8Util2;
+        (2L * M_PI / ANA_SEC_STEPS / (1000L / ANIM_TICK_CYCLE_MS + 0.5)) *
+        mcU8Util2;
     }
 
     if (ANA_SEC_TYPE == 0)
@@ -447,7 +449,6 @@ static void analogInit(u08 mode)
   if (mode == DRAW_INIT_FULL)
   {
     // Draw static clock layout
-    glcdClearScreen(mcBgColor);
     glcdCircle2(ANA_X_START, ANA_Y_START, ANA_RADIUS, CIRCLE_FULL, mcFgColor);
     glcdDot(ANA_X_START, ANA_Y_START, mcFgColor);
     
@@ -490,8 +491,7 @@ static void analogInit(u08 mode)
       posSec[3] = ANA_Y_START;
     }
 
-    // Force the alarm info area to init itself
-    mcAlarmSwitch = ALARM_SWITCH_NONE;
+    // Init alarm blink state
     mcU8Util1 = GLCD_FALSE;
   }
   else if (mcU8Util3 == GLCD_FALSE)

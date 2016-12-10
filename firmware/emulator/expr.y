@@ -18,10 +18,13 @@ static int varError;
 static double myDummy;
 
 // Prototypes of expr.yy.c local functions. They are either copied from
-// within this module or are bison generated parser functions.
+// within this module or are bison generated parser functions. They are
+// added to satisfy gcc.
 static double exprCompare(double valLeft, double valRight, int cond);
 static struct yy_buffer_state *yy_scan_string(const char[]);
 static void yy_delete_buffer(struct yy_buffer_state *b);
+static int yyerror(char *s);
+static int yylex(void);
 
 // The comparison logic conditions in exprCompare()
 #define COND_LT		0	// <
@@ -211,7 +214,7 @@ Expression:
 
 %%
 // Generic parser error handling
-int yyerror(char *s)
+static int yyerror(char *s)
 {
   //printf("%d %s\n", varError, s);
   return 0;

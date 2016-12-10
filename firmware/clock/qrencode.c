@@ -66,7 +66,7 @@
 // Setup fixed QR environment: redundancy 1 (L), level 2 (25x25)
 unsigned char strinbuf[100];
 unsigned char qrframe[600];
-unsigned char rlens[26];
+static unsigned char rlens[26];
 
 static const unsigned char framebase[] PROGMEM =
 {

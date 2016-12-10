@@ -8,8 +8,6 @@
 
 #include "global.h"
 
-#define halt(x)		while (1)
-
 // Debugging macros.
 // Note that DEBUGGING is the master switch for generating debug output.
 // 0 = Off, 1 = On
@@ -22,40 +20,21 @@
 // you mounted your 100ohm resistor in R2.
 #define BACKLIGHT_ADJUST 1
 
-// Define loop timer for animation and keypress handling. Note that
-// redrawing takes some time too so you don't want this too small or
-// your clock will 'hiccup' and appear jittery.
-#define ANIMTICK_MS	75
+// Define application clock cycle msec timer value for animation and keypress
+// handling. Note that redrawing takes some time too so you don't want this
+// too small or your clock will 'hiccup' and appear jittery.
+#define ANIM_TICK_CYCLE_MS	75
 
-// Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
-// Note: This will cost you ~615 bytes of Monochron program and data space.
-#define MARIO
+// Lcd backlight brightness related constants
+#define OCR2B_BITSHIFT	0
+#define OCR2B_PLUS	1
+#define OCR2A_VALUE	16
 
-// Two-tone alarm beep
-#define ALARM_FREQ_1	4000
-#define ALARM_FREQ_2	3750
-#define ALARMTICK_MS	325
-
-// Set timeouts for snooze and alarm (in seconds)
-#ifndef EMULIN
-#define MAXSNOOZE	600
-#define MAXALARM	1800
-#else
-// In our emulator we don't want to wait that long
-#define MAXSNOOZE	25
-#define MAXALARM	65
-#endif
-
-// The Monochron buttons
-#define BTTN_MENU	0x01
-#define BTTN_SET	0x02
-#define BTTN_PLUS	0x04
-
-// Pin definitions
+// Pin definitions for alarm switch and piezo speaker
 // Note: there's more in ks0108.h [firmware] for the display
-#define ALARM_DDR	DDRB
-#define ALARM_PIN	PINB
 #define ALARM_PORT	PORTB
+#define ALARM_PIN	PINB
+#define ALARM_DDR	DDRB
 #define ALARM		6
 
 #define PIEZO_PORT	PORTC
@@ -76,56 +55,76 @@
 //#define TIME_12H	0
 #define TIME_24H	1
 
-// Constants for calculating the Timer2 interrupt return rate.
-// Make the i2ctime readout at a certain number of times a 
-// second and a few other values about once a second.
-// The default readout rate was ~5.7Hz that has been increased
-// to ~8.5Hz. This was done to detect changes in seconds faster,
-// leading to a more smooth 'seconds tick' animation in clocks.
-// Uncomment to implement i2ctime readout @ ~5.7Hz
-//#define TIMER2_RETURN_1	80
-//#define TIMER2_RETURN_2	6
-// Uncomment to implement i2ctime readout @ ~8.5Hz
-#define TIMER2_RETURN_1	53
-#define TIMER2_RETURN_2	9
-
-// DO NOT set EE_INITIALIZED to 0xFF / 255, as that is the state the
-// eeprom will be in when totally erased.
-// Warning: Keep defines EE_ALARM_HOUR2..EE_ALARM_MIN4 together in
-// a single range block and in sequential order.
+// Every time a final change is made to a value in one of the config pages,
+// except for date/time, the end result is written back to eeprom. Each eeprom
+// location in an atmega328p lasts for ~100k reset/write cycles. This should be
+// enough for our Monochron application for many years. However, by relocating
+// the eeprom addresses using address offset EE_OFFSET for the configurable
+// Monochron items we can create a new batch of 100k reset/write cycles. An
+// atmega328p has 1KB of eeprom, so we have plenty of relocation space.
+// To check the integrity of the eeprom we look for a specific initialization
+// value EE_INITIALIZED at address EE_INIT. When not found, Monochron will
+// reset the eeprom with default values from eepInit[] [monomain.c].
+// Warning: Do not set EE_INITIALIZED to 0xff/255, as that is the state the
+//          eeprom will be in when totally erased.
+#define EE_SIZE		1024
+#define EE_OFFSET	0
 #define EE_INITIALIZED	0xC3
-#define EE_INIT		0
-#define EE_ALARM_HOUR	1
-#define EE_ALARM_MIN	2
-#define EE_BRIGHT	3
-#define EE_VOLUME	4
-#define EE_REGION	5
-#define EE_TIME_FORMAT	6
-#define EE_SNOOZE	7
-#define EE_BGCOLOR	8
-#define EE_ALARM_HOUR2	9
-#define EE_ALARM_MIN2	10
-#define EE_ALARM_HOUR3	11
-#define EE_ALARM_MIN3	12
-#define EE_ALARM_HOUR4	13
-#define EE_ALARM_MIN4	14
-#define EE_ALARM_SELECT 15
-// Set EE_MAX to the highest value in use above
-#define EE_MAX		15
 
-// Function prototypes
-void alarmStateSet(void);
-void alarmTimeGet(uint8_t alarmId, volatile uint8_t *hour,
+// The configuration items below are stored in eeprom. An atmega328p has 1KB
+// of eeprom available.
+// Instructions for adding a new entry/entries:
+// 1 - Add new define(s) at bottom of the list.
+// 2 - Add default value(s) in eepDefault[] in monomain.c [firmware].
+// Warning: Keep defines EE_ALARM_HOUR2..EE_ALARM_MIN4 together in a single
+//          range block and in sequential order.
+#define EE_INIT		(EE_OFFSET + 0)
+#define EE_ALARM_HOUR	(EE_OFFSET + 1)
+#define EE_ALARM_MIN	(EE_OFFSET + 2)
+#define EE_BRIGHT	(EE_OFFSET + 3)
+#define EE_VOLUME	(EE_OFFSET + 4)
+#define EE_REGION	(EE_OFFSET + 5)
+#define EE_TIME_FORMAT	(EE_OFFSET + 6)
+#define EE_SNOOZE	(EE_OFFSET + 7)
+#define EE_BGCOLOR	(EE_OFFSET + 8)
+#define EE_ALARM_HOUR2	(EE_OFFSET + 9)
+#define EE_ALARM_MIN2	(EE_OFFSET + 10)
+#define EE_ALARM_HOUR3	(EE_OFFSET + 11)
+#define EE_ALARM_MIN3	(EE_OFFSET + 12)
+#define EE_ALARM_HOUR4	(EE_OFFSET + 13)
+#define EE_ALARM_MIN4	(EE_OFFSET + 14)
+#define EE_ALARM_SELECT (EE_OFFSET + 15)
+
+// Structure that defines the date and time
+typedef struct _rtcDateTime_t
+{
+  uint8_t timeSec;
+  uint8_t timeMin;
+  uint8_t timeHour;
+  uint8_t dateDay;
+  uint8_t dateMon;
+  uint8_t dateYear;
+} rtcDateTime_t;
+
+// Function prototypes for managing alarms
+void almStateSet(void);
+void almTimeGet(uint8_t alarmId, volatile uint8_t *hour,
   volatile uint8_t *min);
-void alarmTimeSet(uint8_t alarmId, volatile uint8_t hour,
+void almTimeSet(uint8_t alarmId, volatile uint8_t hour,
   volatile uint8_t min);
+
+// Function prototypes for the real time clock
+uint8_t rtcDotw(uint8_t mon, uint8_t day, uint8_t year);
+uint8_t rtcLeapYear(uint16_t year);
+void rtcMchronTimeInit(void);
+void rtcTimeInit(void);
+uint8_t rtcTimeRead(void);
+void rtcTimeWrite(uint8_t sec, uint8_t min, uint8_t hour, uint8_t day,
+  uint8_t mon, uint8_t year);
+
+// Miscellaneous
+void eepInit(void);
 void beep(uint16_t freq, uint8_t duration);
-uint8_t dotw(uint8_t mon, uint8_t day, uint8_t yr);
-uint8_t i2bcd(uint8_t x);
-void init_eeprom(void);
-uint8_t leapyear(uint16_t y);
-void mchronTimeInit(void);
-uint8_t readi2ctime(void);
-void writei2ctime(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
-  uint8_t mon, uint8_t yr);
+uint8_t bcdEncode(uint8_t x);
+
 #endif

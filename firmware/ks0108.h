@@ -21,11 +21,11 @@
 #define GLCD_TRUE	1
 
 // Lcd color values
-#define OFF	0
-#define ON	1
+#define GLCD_OFF	0
+#define GLCD_ON		1
 
 // HD61202/KS0108 command set:
-// Note that GLCD_SET_PAGE and GLCD_SET_Y_ADDR are uttely confusing
+// Note that GLCD_SET_PAGE and GLCD_SET_Y_ADDR are utterly confusing
 // when used in Monochron.
 // GLCD_SET_PAGE   - This is actually the vertical y-byte address (0..7)
 // GLCD_SET_Y_ADDR - This is actually the horizontal x address (0..63)
@@ -53,9 +53,9 @@ void glcdDataWrite(u08 data);
 void glcdInit(u08 color);
 
 // Functional oriented functions
-void glcdResetScreen(void);
 void glcdClearScreen(u08 color);
+void glcdResetScreen(void);
 void glcdNextAddress(void);
-void glcdSetAddress(u08 x, u08 yLine);
+void glcdSetAddress(u08 xAddr, u08 yAddr);
 //void glcdStartLine(u08 startLine);
 #endif

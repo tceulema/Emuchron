@@ -446,7 +446,7 @@ static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue, int silent)
 // Validate a variable name. When used in an expression, variable names are
 // validated in the expression evaluator. However, for the var print and var
 // reset commands we take the variable name as a word input and we must
-// validate whether it consists of a '*' or a string containing only [a-zA-Z]
+// validate whether it consists of a '*' or a string containing only [a-zA-Z_]
 // characters.
 // Note that when the scan profile for a variable name (as defined in expr.l
 // [firmware/emulator]) is modified, this function must be changed as well.
@@ -841,6 +841,10 @@ int cmdDictCmdPrintAll(void)
 //
 void cmdInputCleanup(cmdInput_t *cmdInput)
 {
+  // Only cleanup when initialized
+  if (cmdInput->initialized == GLCD_FALSE)
+    return;
+
   // Add last read to history cache when applicable
   if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
   {
@@ -872,6 +876,9 @@ void cmdInputCleanup(cmdInput_t *cmdInput)
     rl_deprep_terminal();
     rl_reset_terminal(NULL);
   }
+
+  // Cleanup complete
+  cmdInput->initialized = GLCD_FALSE;
 }
 
 //
@@ -929,6 +936,9 @@ void cmdInputInit(cmdInput_t *cmdInput)
     // Initialize readline ahead of first read
     rl_initialize();
   }
+
+  // Init done
+  cmdInput->initialized = GLCD_TRUE;
 }
 
 //
@@ -977,9 +987,8 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
   }
   else
   {
-    // Use our own input mechanism to read an input line. It is
-    // mainly used for file input and commandline input with an
-    // ncurses device.
+    // Use our own input mechanism to read an input line from a
+    // text file. Command line input uses the readline library.
     char inputCli[CMD_BUILD_LEN];
     int done = GLCD_FALSE;
     char *inputPtr = NULL;

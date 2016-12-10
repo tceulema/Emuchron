@@ -68,10 +68,10 @@
 #define SCORE_MODE_ALARM	3
 
 // Time in app cycles (representing ~3 secs) for non-time info to be displayed
-#define SCORE_TIMEOUT		(u08)(1000L / ANIMTICK_MS * 3 + 0.5)
+#define SCORE_TIMEOUT		(u08)(1000L / ANIM_TICK_CYCLE_MS * 3 + 0.5)
 
 // Time in app cycles (representing ~2 sec) to wait before starting a new game
-#define PLAY_COUNTDOWN		(u08)(1000L / ANIMTICK_MS * 2 + 0.5)
+#define PLAY_COUNTDOWN		(u08)(1000L / ANIM_TICK_CYCLE_MS * 2 + 0.5)
 
 // Uncomment this if you want to keep the ball always in the vertical centre
 // of the display. Give it a try and you'll see what I mean...
@@ -230,7 +230,6 @@ void pongCycle(void)
 //
 void pongInit(u08 mode)
 {
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
   mcU8Util1 = GLCD_FALSE;
   initanim();
   initdisplay();
@@ -341,9 +340,6 @@ static void initdisplay(void)
   
   if ((mcCycleCounter & 0x0F) >= 8)
     newAlmDisplayState = GLCD_TRUE;
-
-  // Clear display
-  glcdClearScreen(mcBgColor);
 
   // Draw top and bottom line
   glcdFillRectangle(0, 0, GLCD_XPIXELS, 2, mcFgColor);

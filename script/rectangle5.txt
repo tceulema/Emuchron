@@ -16,6 +16,7 @@ pr f 3 6 122 57
 
 # Indefinitely keep animating filled rectangles of
 # mixed length and width
+wts
 rf pattern=5 true pattern=(pattern==0?5:pattern-1)
   vs dx=1
   rf x=0 x<14 x=x+1
@@ -26,6 +27,6 @@ rf pattern=5 true pattern=(pattern==0?5:pattern-1)
     rn
     vs dx=x+dx+1
   rn
-  w 100
+  wte 100
 rn
 

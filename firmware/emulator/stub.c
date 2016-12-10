@@ -5,9 +5,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 #include <termios.h>
-#include <time.h>
 #include <unistd.h>
 #include <sys/select.h>
 #include <sys/time.h>
@@ -15,37 +15,62 @@
 #include "stub.h"
 #include "mchronutil.h"
 #include "scanutil.h"
-#include "../ks0108.h"
 #include "../monomain.h"
+#include "../buttons.h"
+#include "../ks0108.h"
 #include "../glcd.h"
 #include "../config.h"
-#ifdef MARIO
-#include "../mario.h"
-#endif
+#include "../alarm.h"
+
+// Linux ALSA performance gets progressively worse with every Debian release.
+// As of Debian 8, when used as a VM, short audio pulses are being clipped
+// while also generating an alsa buffer under-run runtime error. As emuchron
+// is developed and tested only in VM's it is unknown whether this behavior
+// also applies to native Debian installations.
+// In any case, it turns out that when prefixing a short audio pulse with a
+// larger pulse with no audio (0 Hz), the buffer under-run is avoided, and the
+// subsequent small audio pulse is no longer clipped. In case a series of
+// pulses is to be played, such as an alarm that is repeated multiple times,
+// the prefix pulse is required only once as the first tone in the sequence of
+// tones.
+// Hence the following (kludgy) method to mitigate the alsa buffer under-run
+// runtime error using the #define below.
+//
+// ALSA_PREFIX_PULSE_MS: Set the blank audio pulse cutoff (msec).
+// Value 0 means: Do not generate a prefix blank pulse.
+// Only in case a pulse that is to be played is equal or smaller than this
+// value, a blank pulse will be prefixed with this particular length plus a
+// fixed 25 msec (ALSA_PREFIX_ADD_MS).
+// Note that depending on the system on which emuchron runs this pulse length
+// may be larger or smaller or not needed at all. Play (pun intended) with
+// both values until you find something that makes you feel comfortable.
+// On my machines the values as set below seems to hit a sweet spot.
+// Also note that for now only Debian 8 seems to require a blank prefix pulse.
+// Use mchron command 'b' (beep) to test this.
+#define ALSA_PREFIX_PULSE_MS	95
+#define ALSA_PREFIX_ADD_MS	(ALSA_PREFIX_PULSE_MS + 25)
 
 // Monochron global data
-extern volatile uint8_t time_s, time_m, time_h;
-extern volatile uint8_t date_m, date_d, date_y;
+extern volatile uint8_t almAlarming;
+extern uint16_t almTickerSnooze;
+extern int16_t almTickerAlarm;
+extern volatile rtcDateTime_t rtcDateTime;
 extern volatile uint8_t mcAlarming;
-extern volatile uint8_t alarming;
-extern uint16_t snoozeTimer;
-extern int16_t alarmTimer;
 
 #ifdef MARIO
 // Mario chiptune alarm data
 extern const unsigned char __attribute__ ((progmem)) MarioTones[];
 extern const unsigned char __attribute__ ((progmem)) MarioBeats[];
 extern const unsigned char __attribute__ ((progmem)) MarioMaster[];
-extern uint16_t marioMasterLen;
+extern const int marioMasterLen;
 #endif
 
 // Stubbed button data
-volatile uint8_t last_buttonstate = 0;
-volatile uint8_t just_pressed = 0;
-volatile uint8_t pressed = 0;
-volatile uint8_t hold_release_req = 0;
-volatile uint8_t hold_release_conf = 0;
-volatile uint8_t buttonholdcounter = 0;
+volatile uint8_t btnPressed = BTN_NONE;
+volatile uint8_t btnHold = BTN_NONE;
+volatile uint8_t btnTickerHold = 0;
+volatile uint8_t btnHoldRelReq = GLCD_FALSE;
+volatile uint8_t btnHoldRelCfm = GLCD_FALSE;
 
 // Stubbed hardware related stuff
 uint16_t MCUSR = 0;
@@ -70,17 +95,17 @@ uint16_t PINB = 0;
 uint16_t PIND = 0;
 
 // Debug output file
-FILE *debugFile = NULL;
+FILE *stubDebugStream = NULL;
 
 // Keypress hold data
 static uint8_t hold = GLCD_FALSE;
-static uint8_t lastchar = '\0';
+static uint8_t lastChar = '\0';
 
-// Stubbed eeprom data
-static uint8_t eeprom[EE_MAX+1];
+// Stubbed eeprom data. An atmega328p has 1KB of eeprom.
+static uint8_t stubEeprom[EE_SIZE];
 
 // Stubbed alarm play pid
-static pid_t playPid = -1;
+static pid_t alarmPid = -1;
 
 // Local brightness to detect changes
 static u08 stubBacklight = 16;
@@ -94,71 +119,73 @@ static int eventInit = GLCD_TRUE;
 
 // Date/time and timer statistics data
 static double timeDelta = 0L;
-static struct timeval timestampNext;
+static struct timeval tvCycleTimer;
 static int inTimeCount = 0;
 static int outTimeCount = 0;
 static int singleCycleCount = 0;
-static double waitTotal = 0L;
-static int minSleep = ANIMTICK_MS + 1;
+static long long waitTotal = 0;
+static int minSleep = ANIM_TICK_CYCLE_MS + 1;
 
 // Terminal settings for stdin keypress mode data
-static struct termios oldt, newt;
+static struct termios termOld, termNew;
 static int kbMode = KB_MODE_LINE;
 
 // Local function prototypes
 static int kbHit(void);
+static void alarmPidStart(void);
+static void alarmPidStop(void);
 
 //
-// Function: alarmClear
+// Function: alarmSoundReset
 //
 // Stub to reset the internal alarm settings. It is needed to prevent the
-// alarm to restart when the clock feed or Monochron commands were quit with
-// audible alarm and are resumed with the same or different settings.
+// alarm to restart when the clock feed or Monochron command is quit while
+// alarming and is later restarted with the same or different settings.
 //
-void alarmClear(void)
+void alarmSoundReset(void)
 {
   mcAlarming = GLCD_FALSE;
-  alarming = GLCD_FALSE;
-  snoozeTimer = 0;
-  alarmTimer = -1;
+  almAlarming = GLCD_FALSE;
+  almTickerSnooze = 0;
+  almTickerAlarm = -1;
 }
 
 //
-// Function: alarmSoundKill
+// Function: alarmSoundStop
 //
 // Stub to stop playing the alarm and reset the alarm triggers.
 // Audible alarm may resume later upon request.
 //
-void alarmSoundKill(void)
+void alarmSoundStop(void)
 {
-  alarmSoundStop();
+  alarmPidStop();
   mcAlarming = GLCD_FALSE;
-  snoozeTimer = 0;
+  almTickerSnooze = 0;
 }
 
 //
-// Function: alarmSoundStart
+// Function: alarmPidStart
 //
 // Stub to start playing a continuous audio alarm
 //
-void alarmSoundStart(void)
+static void alarmPidStart(void)
 {
   // Don't do anything if we're already playing
-  if (playPid >= 0)
+  if (alarmPid >= 0)
     return;
 
   // Fork this process to play the alarm sound
-  playPid = fork();
+  alarmPid = fork();
 
   // Were we successfull in forking
-  if (playPid < 0)
+  if (alarmPid < 0)
   {
     // Failure to fork
     DEBUGP("*** Cannot fork alarm play process");
-    playPid = -2;
+    alarmPid = -2;
     return;
   }
-  else if (playPid == 0)
+  else if (alarmPid == 0)
   {
     // We forked successfully!
 #ifdef MARIO
@@ -174,8 +201,10 @@ void alarmSoundStart(void)
 
     // Get the total number of Mario tones to play and based on that
     // declare an array that fits all required shell commands to play it
-    for (i = 0; i <= (marioMasterLen - 2); i = i + 2)
+    for (i = 0; i <= marioMasterLen - 2; i = i + 2)
       totalLength = totalLength + MarioMaster[i + 1];
+    if (ALSA_PREFIX_PULSE_MS > 0)
+      totalLength++;
     char *params[totalLength * 2 + 7];
 
     // Begin of the execvp parameters
@@ -184,6 +213,16 @@ void alarmSoundStart(void)
 
     // Generate the Mario chiptune tones for execvp
     paramsIdx = 2;
+
+    // Prefix blank pulse when needed to mitigate alsa buffer under-run
+    if (ALSA_PREFIX_PULSE_MS > 0)
+    {
+      mallocPtr = malloc(80);
+      sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin 0",
+        (float)(ALSA_PREFIX_ADD_MS) / 1000);
+      params[paramsIdx] = mallocPtr;
+      paramsIdx++;
+    }
 
     // Mario alarm
     for (i = 0; i < marioMasterLen; i = i + 2)
@@ -197,8 +236,8 @@ void alarmSoundStart(void)
 
         // The tone using a beat byte
         sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin %d",
-          (float)(MarioBeats[j] * MAR_TEMPO / MAR_BEATFACTOR) / 1000,
-          MarioTones[j] * MAR_TONEFACTOR);
+          (float)(MarioBeats[j] * MAR_TEMPO / MAR_BEAT_FACTOR) / 1000,
+          MarioTones[j] * MAR_TONE_FACTOR);
         params[paramsIdx] = mallocPtr;
         paramsIdx++;
 
@@ -254,32 +293,32 @@ void alarmSoundStart(void)
     // Log info on alarm audio process
     if (DEBUGGING)
     {
-      char msg[35];
-      sprintf(msg, "Playing alarm audio via PID %d", playPid);
+      char msg[45];
+      sprintf(msg, "Playing alarm audio via PID %d", alarmPid);
       DEBUGP(msg);
     }
   }
 }
 
 //
-// Function: alarmSoundStop
+// Function: alarmPidStop
 //
 // Stub to stop playing the alarm. It may be restarted by functional
 // code.
 //
-void alarmSoundStop(void)
+static void alarmPidStop(void)
 {
   // Only stop when a process was started to play the alarm
-  if (playPid >= 0)
+  if (alarmPid >= 0)
   {
     // Kill it...
     char msg[45];
-    sprintf(msg, "Stopping alarm audio via PID %d", playPid);
+    sprintf(msg, "Stopping alarm audio via PID %d", alarmPid);
     DEBUGP(msg);
-    sprintf(msg, "kill -s 9 %d", playPid);
+    sprintf(msg, "kill -s 9 %d", alarmPid);
     system(msg);
   }
-  playPid = -1;
+  alarmPid = -1;
 }
 
 //
@@ -334,17 +373,17 @@ void alarmSwitchToggle(uint8_t show)
   // Toggle alarm switch
   if (ALARM_PIN & _BV(ALARM))
   {
-    if (show == GLCD_TRUE)
-      printf("alarm  : on\n");
     pinMask = ~(0x1 << ALARM);
     ALARM_PIN = ALARM_PIN & pinMask;
+    if (show == GLCD_TRUE)
+      alarmSwitchShow();
   }
   else
   {
-    if (show == GLCD_TRUE)
-      printf("alarm  : off\n");
     pinMask = 0x1 << ALARM;
     ALARM_PIN = ALARM_PIN | pinMask;
+    if (show == GLCD_TRUE)
+      alarmSwitchShow();
   }
 }
 
@@ -427,144 +466,20 @@ void kbModeSet(int dir)
   if (dir == KB_MODE_SCAN && kbMode != KB_MODE_SCAN)
   {
     // Setup keyboard scan (signal keypress)
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    tcgetattr(STDIN_FILENO, &termOld);
+    termNew = termOld;
+    termNew.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &termNew);
     kbMode = KB_MODE_SCAN;
   }
   else if (dir == KB_MODE_LINE && kbMode != KB_MODE_LINE)
   {
     // Setup line scan (signal cr/lf)
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    tcsetattr(STDIN_FILENO, TCSANOW, &termOld);
     kbMode = KB_MODE_LINE;
   }
 }
 
-//
-// Function: kbWaitDelay
-//
-// Wait amount of time (in msec) while allowing a 'q' keypress interrupt
-//
-char kbWaitDelay(int delay)
-{
-  char ch = '\0';
-  struct timeval tvWait;
-  struct timeval tvNow;
-  struct timeval tvThen;
-  suseconds_t timeDiff;
-  int myKbMode = KB_MODE_LINE;
-
-  // Set offset for wait period
-  (void)gettimeofday(&tvNow, NULL);
-  (void)gettimeofday(&tvThen, NULL);
-
-  // Set end timestamp based current time plus delay
-  tvThen.tv_usec = tvThen.tv_usec + delay * 1000;
-  if (tvThen.tv_usec >= 1E6)
-  {
-    tvThen.tv_usec = tvThen.tv_usec - 1E6;
-    tvThen.tv_sec++;
-  }
-
-  // Get the total time to wait
-  timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 + 
-    tvThen.tv_usec - tvNow.tv_usec;
-
-  // Switch to keyboard scan mode if needed
-  myKbMode = kbModeGet();
-  if (myKbMode == KB_MODE_LINE)
-    kbModeSet(KB_MODE_SCAN);
-
-  // Wait till end of delay or a 'q' keypress and ignore
-  // a remaiing wait time that is less than 0.5 msec
-  while (ch != 'q' && timeDiff > 500)
-  {
-    // Split time to delay up in parts of max 250msec
-    tvWait.tv_sec = 0;
-    if (timeDiff >= 250000)
-      tvWait.tv_usec = 250000;
-    else
-      tvWait.tv_usec = timeDiff;
-
-    // Wait
-    select(0, NULL, NULL, NULL, &tvWait);
-
-    // Did anything happen on the keyboard
-    while (kbHit())
-    {
-      ch = getchar();
-      if (ch == 'q' || ch == 'Q')
-      {
-        ch = 'q';
-        break;
-      }
-      stubDelay(2);
-    }
-
-    // Based on last wait and keypress delays get time left to wait
-    (void)gettimeofday(&tvNow, NULL);
-    timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 + 
-      tvThen.tv_usec - tvNow.tv_usec;
-  }
-
-  // Return to line mode if needed
-  if (myKbMode == KB_MODE_LINE)
-    kbModeSet(KB_MODE_LINE);
-
-  // Clear return character for consistent interface
-  if (ch != 'q')
-    ch = '\0';
-
-  return ch;
-}
-
-//
-// Function: kbWaitKeypress
-//
-// Wait for keyboard keypress
-//
-char kbWaitKeypress(int allowQuit)
-{
-  char ch = '\0';
-  int myKbMode = KB_MODE_LINE;
-  struct timeval t;
-
-  // Switch to keyboard scan mode if needed
-  myKbMode = kbModeGet();
-  if (myKbMode == KB_MODE_LINE)
-    kbModeSet(KB_MODE_SCAN);
-
-  // Clear input buffer
-  while (kbHit())
-    ch = getchar();
-
-  // Wait for single keypress
-  if (allowQuit == GLCD_FALSE)
-    printf("<wait: press key to continue> ");
-  else
-    printf("<wait: q = quit, other key will continue> ");
-  fflush(stdout);
-  while (!kbHit())
-  {
-    // Wait 150 msec
-    t.tv_sec = 0;
-    t.tv_usec = 150 * 1000;
-    select(0, NULL, NULL, NULL, &t);
-  }
-  ch = getchar();
-  if (ch >= 'A' && ch <= 'Z')
-    ch = ch - 'A' + 'a';
-
-  // Return to line mode if needed
-  if (myKbMode == KB_MODE_LINE)
-    kbModeSet(KB_MODE_LINE);
-
-  printf("\n");
-
-  return ch;
-}
- 
 //
 // Function: stubBeep
 //
@@ -572,11 +487,28 @@ char kbWaitKeypress(int allowQuit)
 //
 void stubBeep(uint16_t hz, uint16_t msec)
 {
-  char shellCmd[100];
+  char shellCmd[150];
 
-  sprintf(shellCmd,
-    "/usr/bin/play -q -n -t alsa synth %f sin %d > /dev/null 2>&1",
-    ((float)(msec)) / 1000L, hz);
+  if (ALSA_PREFIX_PULSE_MS > msec)
+  {
+    // This is a short beep that requires alsa buffer under-run mitigation.
+    // Add the blank pulse in front of the actual pulse to be played.
+    char temp[75];
+    sprintf(shellCmd,
+      "/usr/bin/play -q \"|/usr/bin/sox -n -p synth %f sin 0\" ",
+      (float)(ALSA_PREFIX_ADD_MS) / 1000);
+    sprintf(temp,
+      "\"|/usr/bin/sox -n -p synth %f sin %d\" -t alsa > /dev/null 2>&1",
+      (float)(msec) / 1000L, hz);
+    strcat(shellCmd, temp);
+  }
+  else
+  {
+    // Just play the requested beep
+    sprintf(shellCmd,
+      "/usr/bin/play -q -n -t alsa synth %f sin %d > /dev/null 2>&1",
+      (float)(msec) / 1000L, hz);
+  }    
   system(shellCmd);
 }
 
@@ -604,35 +536,37 @@ void stubDelay(int x)
 }
 
 //
-// Function: stubEepromReset
+// Function: stubEepReset
 //
 // Stub for eeprom initialization
 //
-void stubEepromReset(void)
+void stubEepReset(void)
 {
-  stubEeprom_write_byte((uint8_t *)EE_INIT, 0);
+  memset(stubEeprom, 0xff, EE_SIZE);
 }
 
 //
-// Function: stubEeprom_read_byte
+// Function: stubEepRead
 //
 // Stub for eeprom data read
 //
-uint8_t stubEeprom_read_byte(uint8_t *eprombyte)
+uint8_t stubEepRead(uint8_t *eprombyte)
 {
-  size_t idx = (size_t)eprombyte;
-  return eeprom[idx];
+  if ((size_t)eprombyte >= EE_SIZE)
+    emuCoreDump(ORIGIN_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
+  return stubEeprom[(size_t)eprombyte];
 }
 
 //
-// Function: stubEeprom_write_byte
+// Function: stubEepWrite
 //
 // Stub for eeprom data write
 //
-void stubEeprom_write_byte(uint8_t *eprombyte, uint8_t value)
+void stubEepWrite(uint8_t *eprombyte, uint8_t value)
 {
-  size_t idx = (size_t)eprombyte;
-  eeprom[idx] = value;
+  if ((size_t)eprombyte >= EE_SIZE)
+    emuCoreDump(ORIGIN_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
+  stubEeprom[(size_t)eprombyte] = value;
 }
 
 //
@@ -644,66 +578,35 @@ void stubEeprom_write_byte(uint8_t *eprombyte, uint8_t value)
 //
 char stubEventGet(void)
 {
-  struct timeval tv;
-  struct timeval sleepThis;
-  suseconds_t timeDiff;
   char c = '\0';
   uint8_t keypress = GLCD_FALSE;
+  suseconds_t remaining;
 
   // Flush the lcd device
   ctrlLcdFlush();
 
-  // Get timediff with previous call
-  (void) gettimeofday(&tv, NULL);
+  // Sleep the remainder of the current cycle
   if (eventInit == GLCD_TRUE)
   {
-    // The first entry may not invoke a sleep
-    timeDiff = 0;
+    // The first entry may not invoke a sleep but instead marks the
+    // timer timestamp for the next cycle
+    waitTimerStart(&tvCycleTimer);
+    eventInit = GLCD_FALSE;
   }
   else
   {
-    // Get timediff between last and current cycle
-    timeDiff = (timestampNext.tv_sec - tv.tv_sec) * 1E6 + 
-    timestampNext.tv_usec - tv.tv_usec;
-  }
-
-  // Check if we need to sleep
-  if (timeDiff > 0)
-  {
-    // Less than 75msec was passed: sleep the rest upto 75 msec
-    inTimeCount++;
-    waitTotal = waitTotal + timeDiff;
-    if (minSleep > (int)(timeDiff / 1000))
-      minSleep = (int)(timeDiff / 1000);
-    sleepThis.tv_sec = 0;
-    sleepThis.tv_usec = timeDiff;
-    select(0, NULL, NULL, NULL, &sleepThis);
-
-    // Set next timestamp based on previous one
-    timestampNext.tv_usec = timestampNext.tv_usec + STUB_CYCLE;
-    if (timestampNext.tv_usec >= 1E6)
+    // Wait remaining time for cycle while detecting timer expiry
+    waitTimerExpiry(&tvCycleTimer, ANIM_TICK_CYCLE_MS, GLCD_FALSE, &remaining);
+    if (remaining >= 0)
     {
-      timestampNext.tv_usec = timestampNext.tv_usec - 1E6;
-      timestampNext.tv_sec++;
+      inTimeCount++;
+      waitTotal = waitTotal + remaining;
+      if (minSleep > (int)(remaining / 1000))
+        minSleep = (int)(remaining / 1000);
     }
-  }
-  else
-  {
-    // More than 75msec was passed or first entry: do not sleep
-    if (eventInit == GLCD_FALSE && eventCycleState == CYCLE_NOWAIT)
+    else if (eventCycleState == CYCLE_NOWAIT)
+    {
       outTimeCount++;
-
-    // Set next timestamp based on current time.
-    // So, don't bother to attempt to get back in line.
-    timestampNext.tv_usec = tv.tv_usec + STUB_CYCLE;
-    if (timestampNext.tv_usec >= 1E6)
-    {
-      timestampNext.tv_usec = timestampNext.tv_usec - 1E6;
-      timestampNext.tv_sec = tv.tv_sec + 1;
-    }
-    else
-    {
-      timestampNext.tv_sec = tv.tv_sec;
     }
   }
 
@@ -731,7 +634,7 @@ char stubEventGet(void)
     // wrecking emulator behavior, and also give a cycle mode helpmessage
     if (eventCycleState == CYCLE_REQ_WAIT)
     {
-      alarmSoundStop();
+      alarmPidStop();
       printf("<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
       fflush(stdout);
       // Continue in single cycle mode
@@ -745,7 +648,6 @@ char stubEventGet(void)
     {
       // Print and glcd/controller performance statistics
       printf("\n");
-      //stubStatsPrint();
       ctrlStatsPrint(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
       printf("<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
       fflush(stdout);
@@ -774,7 +676,7 @@ char stubEventGet(void)
       printf("\n");
 
       // Resume alarm audio (when needed)
-      playPid = -1;
+      alarmPid = -1;
     }
     else if (eventCycleState == CYCLE_WAIT && waitChar == 'p')
     {
@@ -799,21 +701,21 @@ char stubEventGet(void)
   monoTimer();
 
   // Do we need to do anything with the alarm sound
-  if (playPid == -1 && alarming == GLCD_TRUE && snoozeTimer == 0 &&
+  if (alarmPid == -1 && almAlarming == GLCD_TRUE && almTickerSnooze == 0 &&
       (eventCycleState == CYCLE_REQ_NOWAIT || eventCycleState == CYCLE_NOWAIT))
   {
     // Start playing the alarm sound
-    alarmSoundStart();
+    alarmPidStart();
   }
-  else if (playPid >= 0 && (alarming == GLCD_FALSE || snoozeTimer > 0 ||
+  else if (alarmPid >= 0 && (almAlarming == GLCD_FALSE || almTickerSnooze > 0 ||
       eventCycleState == CYCLE_WAIT))
   {
     // Stop playing the alarm sound
-    alarmSoundStop();
+    alarmPidStop();
   }
 
   // Check if keyboard was hit
-  pressed = 0;
+  btnHold = BTN_NONE;
   while (kbHit())
   {
     // Get keyboard character and make uppercase char a lowercase char
@@ -823,13 +725,13 @@ char stubEventGet(void)
       c = c - 'A' + 'a';
 
     // Detect button hold start/end
-    if (c == lastchar)
+    if (c == lastChar)
     {
       hold = GLCD_TRUE;
     }
     else
     {
-      lastchar = c;
+      lastChar = c;
       hold = GLCD_FALSE;
     }
 
@@ -855,8 +757,7 @@ char stubEventGet(void)
     else if (c == 'm')
     {
       // Menu button
-      just_pressed = just_pressed | BTTN_MENU;
-      pressed = pressed | BTTN_MENU;
+      btnPressed = BTN_MENU;
     }
     else if (c == 'p')
     {
@@ -875,21 +776,20 @@ char stubEventGet(void)
     else if (c == 's')
     {
       // Set button
-      just_pressed = just_pressed | BTTN_SET;
-      pressed = pressed | BTTN_SET;
+      btnPressed = BTN_SET;
     }
     else if (c == 't')
     {
       // Print time/date/alarm
-      emuTimePrint();
+      emuTimePrint(ALM_MONOCHRON);
     }
     else if (c == '+')
     {
       // + button
       if (hold == GLCD_FALSE)
-        just_pressed = just_pressed | BTTN_PLUS;
+        btnPressed = BTN_PLUS;
       else
-        pressed = pressed | BTTN_PLUS;
+        btnHold = BTN_PLUS;
     }
     else if (c == '\n')
     {
@@ -899,19 +799,16 @@ char stubEventGet(void)
   }
 
   // Detect button hold end and confirm when requested
-  if (keypress == GLCD_FALSE || pressed == 0)
+  if (keypress == GLCD_FALSE || btnHold == BTN_NONE)
   {
-    lastchar = 0;
+    lastChar = '\0';
     hold = GLCD_FALSE;
-    if (hold_release_req == 1)
+    if (btnHoldRelReq == GLCD_TRUE)
     {
-      hold_release_conf = 1;
-      hold_release_req = 0;
+      btnHoldRelCfm = GLCD_TRUE;
+      btnHoldRelReq = GLCD_FALSE;
     }
   }
-
-  // Signal first entry completion
-  eventInit = GLCD_FALSE;
 
   return c;
 }
@@ -925,7 +822,7 @@ void stubEventInit(int startMode, void (*stubHelpHandler)(void))
 {
   eventInit = GLCD_TRUE;
   eventCycleState = startMode;
-  just_pressed = 0;
+  btnPressed = BTN_NONE;
   stubHelp = stubHelpHandler;
   stubHelp();
 }
@@ -938,7 +835,7 @@ void stubEventInit(int startMode, void (*stubHelpHandler)(void))
 void stubHelpClockFeed(void)
 {
   printf("emuchron clock emulator:\n");
-  printf("  c = execute single application cycle\n");
+  printf("  c = execute single application clock cycle\n");
   printf("  h = provide emulator help\n");
   printf("  p = print performance statistics\n");
   printf("  q = quit\n");
@@ -958,7 +855,7 @@ void stubHelpClockFeed(void)
 void stubHelpMonochron(void)
 {
   printf("emuchron monochron emulator:\n");
-  printf("  c = execute single application cycle\n");
+  printf("  c = execute single application clock cycle\n");
   printf("  h = provide emulator help\n");
   printf("  p = print performance statistics\n");
   printf("  q = quit (valid only when clock is displayed)\n");
@@ -985,16 +882,16 @@ u08 stubI2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
     struct tm *tm;
     time_t timeClock;
   
-    (void) gettimeofday(&tv, NULL);
+    gettimeofday(&tv, NULL);
     timeClock = tv.tv_sec + timeDelta;
     tm = localtime(&timeClock);
 
-    data[0] = i2bcd(tm->tm_sec);
-    data[1] = i2bcd(tm->tm_min);
-    data[2] = i2bcd(tm->tm_hour);
-    data[4] = i2bcd(tm->tm_mday);
-    data[5] = i2bcd(tm->tm_mon + 1);
-    data[6] = i2bcd(tm->tm_year % 100);
+    data[0] = bcdEncode(tm->tm_sec);
+    data[1] = bcdEncode(tm->tm_min);
+    data[2] = bcdEncode(tm->tm_hour);
+    data[4] = bcdEncode(tm->tm_mday);
+    data[5] = bcdEncode(tm->tm_mon + 1);
+    data[6] = bcdEncode(tm->tm_year % 100);
     return 0;
   }
   else
@@ -1043,17 +940,17 @@ u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
 }
 
 //
-// Function: stubPutstring
+// Function: stubPutString
 //
 // Stub for debug string. Output is redirected to output file as specified
 // on the mchron command line. If no output file is specified, debug info
 // is discarded.
 // Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
-void stubPutstring(char *x, char *format)
+void stubPutString(char *x, char *format)
 {
-  if (debugFile != NULL)
-    fprintf(debugFile, format, x);
+  if (stubDebugStream != NULL)
+    fprintf(stubDebugStream, format, x);
   return;
 }
 
@@ -1065,7 +962,7 @@ void stubPutstring(char *x, char *format)
 void stubStatsPrint(void)
 {
   printf("stub   : cycle=%d msec, inTime=%d, outTime=%d, singleCycle=%d\n",
-    STUB_CYCLE / 1000, inTimeCount, outTimeCount, singleCycleCount);
+    ANIM_TICK_CYCLE_MS, inTimeCount, outTimeCount, singleCycleCount);
 
   if (inTimeCount == 0)
     printf("         avgSleep=- msec, ");
@@ -1073,7 +970,7 @@ void stubStatsPrint(void)
     printf("         avgSleep=%d msec, ",
       (int)(waitTotal / (double)inTimeCount / 1000));
 
-  if (minSleep == ANIMTICK_MS + 1)
+  if (minSleep == ANIM_TICK_CYCLE_MS + 1)
     printf("minSleep=- msec\n");
   else
     printf("minSleep=%d msec\n",minSleep);
@@ -1090,8 +987,8 @@ void stubStatsReset(void)
   inTimeCount = 0;
   outTimeCount = 0;
   singleCycleCount = 0;
-  waitTotal = 0.0L;
-  minSleep = ANIMTICK_MS + 1;
+  waitTotal = 0;
+  minSleep = ANIM_TICK_CYCLE_MS + 1;
 }
 
 //
@@ -1121,8 +1018,8 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   time_t timeClock;
 
   // Init system time and get monochron time
-  readi2ctime();
-  (void) gettimeofday(&tvNow, NULL);
+  rtcTimeRead();
+  gettimeofday(&tvNow, NULL);
   tmNow = localtime(&tvNow.tv_sec);
 
   // Copy current time
@@ -1133,9 +1030,9 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   if (sec == 70)
   {
     // Keep current time offset
-    tmNewCopy.tm_sec = time_s;
-    tmNewCopy.tm_min = time_m;
-    tmNewCopy.tm_hour = time_h;
+    tmNewCopy.tm_sec = rtcDateTime.timeSec;
+    tmNewCopy.tm_min = rtcDateTime.timeMin;
+    tmNewCopy.tm_hour = rtcDateTime.timeHour;
   }
   else if (sec != 80)
   {
@@ -1150,9 +1047,9 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   if (date == 70)
   {
     // Keep current date offset
-    tmNewCopy.tm_mday = date_d;
-    tmNewCopy.tm_mon = date_m - 1;
-    tmNewCopy.tm_year = date_y + 100;
+    tmNewCopy.tm_mday = rtcDateTime.dateDay;
+    tmNewCopy.tm_mon = rtcDateTime.dateMon - 1;
+    tmNewCopy.tm_year = rtcDateTime.dateYear + 100;
   }
   else if (date != 80)
   {
@@ -1196,7 +1093,7 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
 
   // Get delta between earlier retrieved current and new time and apply it
   // on a fresh current timestamp
-  (void) gettimeofday(&tvNew, NULL);
+  gettimeofday(&tvNew, NULL);
   timeClock = tvNew.tv_sec + timeDeltaNew;
   tmNew = localtime(&timeClock);
 
@@ -1216,46 +1113,244 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   timeDelta = timeDeltaNew;
 
   // Sync mchron clock time based on new delta
-  readi2ctime();
+  rtcTimeRead();
 
   return GLCD_TRUE;
 }
 
 //
-// Function: stubUart_putchar
+// Function: stubUartPutChar
 //
 // Stub for debug char. Output is redirected to output file as specified on
 // the mchron command line. If no output file is specified, debug info is
 // discarded.
 // Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
-void stubUart_putchar(char x)
+void stubUartPutChar(char x)
 {
-  if (debugFile != NULL)
-    fprintf(debugFile, "%c", x);
+  if (stubDebugStream != NULL)
+    fprintf(stubDebugStream, "%c", x);
   return;
 }
 
 //
-// Function: stubUart_putdec
+// Function: stubUartPutDec
 //
 // Stub for debug decimal. Output is redirected to output file as specified on
 // the mchron command line. If no output file is specified, debug info is
 // discarded.
 // Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
-void stubUart_putdec(int x, char *format)
+void stubUartPutDec(int x, char *format)
 {
-  if (debugFile != NULL)
-    fprintf(debugFile, format, x);
+  if (stubDebugStream != NULL)
+    fprintf(stubDebugStream, format, x);
   return;
 }
+
+//
+// Function: waitDelay
+//
+// Wait amount of time (in msec) while allowing a 'q' keypress interrupt
+//
+char waitDelay(int delay)
+{
+  char ch = '\0';
+  struct timeval tvWait;
+  struct timeval tvNow;
+  struct timeval tvThen;
+  suseconds_t timeDiff;
+  int myKbMode = KB_MODE_LINE;
+
+  // Set offset for wait period
+  gettimeofday(&tvNow, NULL);
+  gettimeofday(&tvThen, NULL);
+
+  // Set end timestamp based current time plus delay
+  tvThen.tv_usec = tvThen.tv_usec + delay * 1000;
+
+  // Get the total time to wait
+  timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 + 
+    tvThen.tv_usec - tvNow.tv_usec;
+
+  // Switch to keyboard scan mode if needed
+  myKbMode = kbModeGet();
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_SCAN);
+
+  // Wait till end of delay or a 'q' keypress and ignore
+  // a remaining wait time that is less than 0.5 msec
+  while (ch != 'q' && timeDiff > 500)
+  {
+    // Split time to delay up in parts of max 250msec
+    tvWait.tv_sec = 0;
+    if (timeDiff >= 250000)
+      tvWait.tv_usec = 250000;
+    else
+      tvWait.tv_usec = timeDiff;
+
+    // Wait
+    select(0, NULL, NULL, NULL, &tvWait);
+
+    // Did anything happen on the keyboard
+    while (kbHit())
+    {
+      ch = getchar();
+      if (ch == 'q' || ch == 'Q')
+      {
+        ch = 'q';
+        break;
+      }
+      stubDelay(2);
+    }
+
+    // Based on last wait and keypress delays get time left to wait
+    gettimeofday(&tvNow, NULL);
+    timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 + 
+      tvThen.tv_usec - tvNow.tv_usec;
+  }
+
+  // Return to line mode if needed
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_LINE);
+
+  // Clear return character for consistent interface
+  if (ch != 'q')
+    ch = '\0';
+
+  return ch;
+}
+
+//
+// Function: waitKeypress
+//
+// Wait for keyboard keypress
+//
+char waitKeypress(int allowQuit)
+{
+  char ch = '\0';
+  int myKbMode = KB_MODE_LINE;
+  struct timeval t;
+
+  // Switch to keyboard scan mode if needed
+  myKbMode = kbModeGet();
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_SCAN);
+
+  // Clear input buffer
+  while (kbHit())
+    ch = getchar();
+
+  // Wait for single keypress
+  if (allowQuit == GLCD_FALSE)
+    printf("<wait: press key to continue> ");
+  else
+    printf("<wait: q = quit, other key will continue> ");
+  fflush(stdout);
+  while (!kbHit())
+  {
+    // Wait 150 msec
+    t.tv_sec = 0;
+    t.tv_usec = 150 * 1000;
+    select(0, NULL, NULL, NULL, &t);
+  }
+  ch = getchar();
+  if (ch >= 'A' && ch <= 'Z')
+    ch = ch - 'A' + 'a';
+
+  // Return to line mode if needed
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_LINE);
+
+  printf("\n");
+
+  return ch;
+}
+
+//
+// Function: waitTimerExpiry
+//
+// Wait amount of time (in msec) after a timer (re)start while optionally
+// allowing a 'q' keypress interrupt. Restart the timer when timer has already
+// expired upon entering this function or has expired after the remaining timer
+// period. When pressing the 'q' key the timer will not be restarted.
+// Return parameter remaining will indicate the remaining timer time in
+// usec upon entering this function, or -1 in case the timer had already
+// expired.
+//
+char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
+  suseconds_t *remaining)
+{
+  char ch = '\0';
+  struct timeval tvNow;
+  struct timeval tvSleep;
+  suseconds_t timeDiff;
+
+  // Get the total time to wait based on timer expiry
+  gettimeofday(&tvNow, NULL);
+  timeDiff = (tvTimer->tv_sec - tvNow.tv_sec) * 1E6 + 
+    tvTimer->tv_usec - tvNow.tv_usec + expiry * 1000;
+
+  // See if timer has already expired
+  if (timeDiff < 0)
+  {
+    // Get next timer offset using current time as reference, so do
+    // not even attempt to compensate
+    *remaining = -1;
+    *tvTimer = tvNow;
+  }
+  else
+  {
+    // Wait the remaining time of the timer, defaulting to at least 1 msec
+    *remaining = timeDiff;
+    if (allowQuit == GLCD_TRUE)
+    {
+      if ((int)(*remaining / 1000) == 0)
+        ch = waitDelay(1);
+      else
+        ch = waitDelay((int)(timeDiff / 1000 + (float)0.5));
+    }
+    else
+    {
+      tvSleep.tv_sec = 0;
+      tvSleep.tv_usec = timeDiff;
+      select(0, NULL, NULL, NULL, &tvSleep);
+    }
+
+    // Get next timer offset by adding expiry to current timer offset
+    if (ch != 'q')
+    {
+      // Add expiry to current timer offset 
+      tvTimer->tv_sec = tvTimer->tv_sec + expiry / 1000;
+      tvTimer->tv_usec = tvTimer->tv_usec + (expiry % 1000) * 1000;
+      if (tvTimer->tv_usec > 1E6)
+      {
+        tvTimer->tv_sec++;
+        tvTimer->tv_usec = tvTimer->tv_usec - 1E6;
+      }
+    }
+  }
+
+  return ch;
+}
+
+//
+// Function: waitTimerStart
+//
+// (Re)set wait timer to current time
+//
+void waitTimerStart(struct timeval *tvTimer)
+{
+  // Set timer to current timestamp
+  gettimeofday(tvTimer, NULL);
+}
+
 
 //
 // Several empty stubs for unlinked hardware related functions
 //
 void i2cInit(void) { return; }
-void buttonsInit(void) { return; }
+void btnInit(void) { return; }
 void uart_init(uint16_t x) { return; }
 void wdt_disable(void) { return; }
 void wdt_enable(uint16_t x) { return; }

@@ -4,11 +4,11 @@
 # Purpose: Hearing aid test
 #
 
-vs du=100
-rf fr=150 fr<=7500 fr=fr+125
-  b fr du
+vs duration=150
+rf freq=150 freq<=7500 freq=freq+125
+  b freq duration
 rn
-rf fr=7500 fr>=150 fr=fr-125
-  b fr du
+rf null freq>=150 freq=freq-125
+  b freq duration
 rn
 

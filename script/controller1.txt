@@ -9,9 +9,10 @@
 le
 lds 1 1
 cs 4
+wts
 rf wait=0 wait<16 wait=wait+1
   tf
-  w 250
+  wte 250
 rn
 
 # Now let the fun begin... :-)
@@ -23,6 +24,9 @@ vs counterb=0
 # random seed
 vs rb=pi^2*100000
 vs rs=5.317496278
+
+# timer based display refresh
+wts
 
 rf null true null
   rf rn=0 rn<40 rn=rn+1
@@ -38,7 +42,7 @@ rf null true null
 
     # Set startline for both controllers
     lss ctrla ctrlb
-    w 75
+    wte 75
     tf
 
     # Display for controller 0 with a 3% chance it will
@@ -75,7 +79,7 @@ rf null true null
 
     # Set display for both controllers
     lds ctrla ctrlb
-    w 75
+    wte 75
     tf
   rn
 rn

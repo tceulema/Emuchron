@@ -16,6 +16,7 @@
 # e s ../script/time-hm.txt
 #
 
+wts
 # Repeat m(inute) between 0..59
 rf m=0 m<60 m=m+1
   # Repeat s(econd) between 0..59 step 5
@@ -24,7 +25,7 @@ rf m=0 m<60 m=m+1
     # This will update the selected clock
     ts 12 m x
     # Wait 'w'*0.001 seconds
-    w w
+    wte w
   # Next x second
   rn
 # Next m(inute)

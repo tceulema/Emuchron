@@ -9,8 +9,9 @@
 #ifndef MARIOTUNE_H
 #define MARIOTUNE_H
 
-#include "mario.h"
+#include "alarm.h"
 
+#ifdef MARIO
 //
 // The Arduino firmware stores the 295 notes as a char array and maps each note
 // to a tone via a linear search algorithm in two other arrays. This is considered
@@ -138,4 +139,4 @@ const int marioBeatsLen = sizeof(MarioBeats);
 const int marioMasterLen = sizeof(MarioMaster);
 #endif
 #endif
-
+#endif

@@ -4,7 +4,7 @@
 # Purpose: Test whether lots of nested repeat-for loops works.
 #          Consider this a performance test for the interpreter/CPU.
 #          Run this test a few times to average out the result duration.
-#          On a decent Intel machine this script takes 10-15 secs to run.
+#          On a decent Intel machine this script takes about 10 secs to run.
 #
 # Result : x = 2^20 = 1048576
 #

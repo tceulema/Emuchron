@@ -42,7 +42,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcMchronClock;
@@ -250,12 +249,7 @@ void bigDigInit(u08 mode)
   mcU8Util2 = mcClockPool[mcMchronClock].clockId;
 
   // Draw static clock layout
-  if (mode == DRAW_INIT_FULL)
-  {
-    // Full init so we start from scratch
-    glcdClearScreen(mcBgColor);
-  }
-  else if (mcU8Util2 == CHRON_BIGDIG_ONE)
+  if (mode == DRAW_INIT_PARTIAL && mcU8Util2 == CHRON_BIGDIG_ONE)
   {
     // Clear the most left part of the two digit area. The rest is
     // overwritten by the single digit clock
@@ -285,10 +279,6 @@ void bigDigInit(u08 mode)
 
   // Invert the current selected item
   bigDigItemInvert();
-
-  // Force the alarm info area to init itself
-  if (mode == DRAW_INIT_FULL)
-    mcAlarmSwitch = ALARM_SWITCH_NONE;
 }
 
 //

@@ -68,7 +68,7 @@ extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
-extern unsigned char *months[12];
+extern char *animMonths[12];
 
 // Common text labels
 extern char animHour[];
@@ -130,7 +130,7 @@ void mosquitoCycle(void)
 
     // Show new date and clean up potential remnants
     pxDone = glcdPutStr2(MOS_DATE_X_START, MOS_AD_Y_START, FONT_5X5P,
-      (char *)months[mcClockNewDM - 1], mcFgColor) + MOS_DATE_X_START;
+      (char *)animMonths[mcClockNewDM - 1], mcFgColor) + MOS_DATE_X_START;
     msg[0] = ' ';
     animValToStr(mcClockNewDD, &msg[1]);
     pxDone = pxDone +
@@ -192,7 +192,6 @@ void mosquitoInit(u08 mode)
   DEBUGP("Init Mosquito");
 
   // Draw static clock layout
-  glcdClearScreen(mcBgColor);
   glcdFillRectangle(0, MOS_AD_BAR_Y_START, GLCD_XPIXELS, 1, mcFgColor);
 
   // Init the several time graphic elements

@@ -33,16 +33,13 @@
 #include "clock/spiderplot.h"
 #include "clock/trafficlight.h"
 
-// The months of the year in 3 character text
-extern unsigned char *months[12];
-
 // The following monomain.c global variables are used to transfer the
 // hardware state to a stable functional Monochron clock state.
 // They are not to be used in individual Monochron clocks as their
 // contents are considered unstable.
-extern volatile uint8_t new_ts, new_tm, new_th;
-extern volatile uint8_t new_dd, new_dm, new_dy;
-extern volatile uint8_t alarmOn, alarming;
+extern volatile uint8_t almSwitchOn, almAlarming;
+extern volatile rtcDateTime_t rtcDateTimeNext;
+extern volatile uint8_t rtcTimeEvent;
 
 // The following mcXYZ global variables are for use in any Monochron clock.
 // In a Monochron clock its contents are considered stable.
@@ -72,11 +69,6 @@ volatile uint8_t mcAlarming = GLCD_FALSE;
 // The alarm time
 volatile uint8_t mcAlarmH, mcAlarmM;
 
-// Runtime pointer to active clockdriver array and the
-// index in the array pointing to the active clock
-clockDriver_t *mcClockPool;
-volatile uint8_t mcMchronClock = 0;
-
 // Clock cycle ticker
 volatile uint8_t mcCycleCounter = 0;
 
@@ -86,8 +78,8 @@ volatile uint8_t mcClockInit = GLCD_FALSE;
 // The foreground and background colors of the b/w lcd display.
 // Their values must be mutual exclusive.
 // Upon changing the display mode the values are swapped.
-// OFF = 0 = black color (=0x0 bit value in lcd memory)
-// ON  = 1 = white color (=0x1 bit value in lcd memory)
+// GLCD_OFF = 0 = black color (=0x0 bit value in lcd memory)
+// GLCD_ON  = 1 = white color (=0x1 bit value in lcd memory)
 volatile uint8_t mcFgColor;
 volatile uint8_t mcBgColor;
 
@@ -102,12 +94,25 @@ volatile uint16_t mcU16Util3;
 volatile uint16_t mcU16Util4;
 
 // Common labels for time/date elements
-char animHour[] = "Hour";
-char animMin[] = "Min";
-char animSec[] = "Sec";
-char animDay[] = "Day";
-char animMonth[] = "Mon";
-char animYear[] = "Year";
+const char animHour[] = "Hour";
+const char animMin[] = "Min";
+const char animSec[] = "Sec";
+const char animDay[] = "Day";
+const char animMonth[] = "Mon";
+const char animYear[] = "Year";
+
+// Common labels for the months in a year
+const char *animMonths[12] =
+{
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+};
+
+// Common labels for the days in a week
+const char *animDays[7] =
+{
+  "Sun ", "Mon ", "Tue ", "Wed ", "Thu ", "Fri ", "Sat "
+};
 
 // The monochron array defines the clocks and their round-robin sequence
 // as supported in the application.
@@ -135,6 +140,11 @@ clockDriver_t monochron[] =
   //,{CHRON_QR_HMS,      DRAW_INIT_PARTIAL, qrInit,             qrCycle,             0}
   //,{CHRON_EXAMPLE,     DRAW_INIT_FULL,    exampleInit,        exampleCycle,        0}
 };
+
+// Runtime pointer to active clockdriver array and the index in the array
+// pointing to the active clock
+clockDriver_t *mcClockPool = monochron;
+volatile uint8_t mcMchronClock = 0;
 
 // The alarm blink state
 static u08 almDisplayState;
@@ -182,8 +192,8 @@ void animAlarmAreaUpdate(u08 x, u08 y, u08 type)
       if (type == ALARM_AREA_ALM_DATE)
       {
         msg[0] = ' ';
-        pxDone = glcdPutStr2(x, y, FONT_5X5P, (char *)months[mcClockNewDM - 1],
-          mcFgColor);
+        pxDone = glcdPutStr2(x, y, FONT_5X5P,
+          (char *)animMonths[mcClockNewDM - 1], mcFgColor);
         animValToStr(mcClockNewDD, &msg[1]);
         pxDone = pxDone + glcdPutStr2(pxDone + x, y, FONT_5X5P, msg,
           mcFgColor);
@@ -233,7 +243,7 @@ static void animAlarmSwitchCheck(void)
   // Reset pending functional alarm switch change
   mcUpdAlarmSwitch = GLCD_FALSE;
 
-  if (alarmOn == GLCD_TRUE)
+  if (almSwitchOn == GLCD_TRUE)
   {
     if (mcAlarmSwitch != ALARM_SWITCH_ON)
     {
@@ -267,19 +277,15 @@ static void animAlarmSwitchCheck(void)
 //
 u08 animClockButton(u08 pressedButton)
 {
-  u08 retVal = GLCD_FALSE;
   clockDriver_t *clockDriver = &mcClockPool[mcMchronClock];
 
   if (clockDriver->button != 0)
   {
-    // Sync alarming state for clock
-    mcAlarming = alarming;
-    
     // Execute the configured button function
     (*clockDriver->button)(pressedButton);
-    retVal = GLCD_TRUE;
+    return GLCD_TRUE;
   }
-  return retVal;
+  return GLCD_FALSE;
 }
 
 //
@@ -291,25 +297,21 @@ void animClockDraw(u08 mode)
 {
   clockDriver_t *clockDriver = &mcClockPool[mcMchronClock];
 
-  // Sync alarming state for clock
-  mcAlarming = alarming;
+  // Sync alarming state and time event for clock
+  mcAlarming = almAlarming;
+  mcClockTimeEvent = rtcTimeEvent;
 
   // If there's a time event, sync Monochron time with RTC
   if (mcClockTimeEvent == GLCD_TRUE)
   {
     DEBUGP("Update by time event");
-    mcClockNewTS = new_ts;
-    mcClockNewTM = new_tm;
-    mcClockNewTH = new_th; 
-    mcClockNewDD = new_dd;
-    mcClockNewDM = new_dm;
-    mcClockNewDY = new_dy;
+    mcClockNewTS = rtcDateTimeNext.timeSec;
+    mcClockNewTM = rtcDateTimeNext.timeMin;
+    mcClockNewTH = rtcDateTimeNext.timeHour;
+    mcClockNewDD = rtcDateTimeNext.dateDay;
+    mcClockNewDM = rtcDateTimeNext.dateMon;
+    mcClockNewDY = rtcDateTimeNext.dateYear;
   }
-
-  // When a clock needs a full init, set the old date/time to something
-  // harmless that can be used to undraw stuff: use current time
-  if (mode == DRAW_INIT_FULL)
-    animDateTimeCopy();
 
   // Have the clock initialize or update itself
   if (clockDriver->clockId != CHRON_NONE)
@@ -327,14 +329,31 @@ void animClockDraw(u08 mode)
     }
     else // DRAW_INIT_FULL or DRAW_INIT_PARTIAL
     {
-      // Do a (partial) clock initialization
+      if (mode == DRAW_INIT_FULL)
+      {
+        // Full init: force alarm area to update, clear the screen and set old
+        // date/time to something harmless to undraw stuff, being the current
+        // time
+        mcAlarmSwitch = ALARM_SWITCH_NONE;
+        glcdClearScreen(mcBgColor);
+        animDateTimeCopy();
+      }
+      // Init the clock
       mcClockInit = GLCD_TRUE;
       (*clockDriver->init)(mode);
     }
   }
   else
   {
-    DEBUGP("Unknown clock in animClockDraw()");
+    DEBUGP("Bad clock in animClockDraw()");
+  }
+
+  // Clear a time event only when set
+  if (mcClockTimeEvent == GLCD_TRUE)
+  {
+    DEBUGP("Clear time event");
+    mcClockTimeEvent = GLCD_FALSE;
+    rtcTimeEvent = GLCD_FALSE;
   }
 }
 
@@ -373,7 +392,7 @@ static void animDateTimeCopy(void)
 //
 // Function: animValToStr
 //
-// Translate a h/m/s value into a two-digit character string.
+// Translate a value into a two-digit character string.
 //
 void animValToStr(u08 value, char valString[])
 {

@@ -20,7 +20,7 @@
 // To make sure that we build our ncurses lcd stub using the proper defs we
 // must build our ncurses interface independent from the avr environment.
 // And because of this we have to duplicate common glcd defines like lcd panel
-// pixel sizes in here.
+// pixel sizes and colors in here.
 // This also means that we can 'communicate' with the outside world using only
 // common data types such as int, char, etc and whatever we define locally and
 // expose via our header.
@@ -32,6 +32,8 @@
   ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
 #define GLCD_FALSE		0
 #define GLCD_TRUE		1
+#define GLCD_OFF		0
+#define GLCD_ON			1
 
 // Fixed ncurses xterm geometry requirements
 #define NCURSES_X_PIXELS 	258
@@ -53,7 +55,7 @@ typedef struct _lcdNcurCtrl_t
   WINDOW *winCtrl;		// The controller ncurses window
   unsigned char display;	// Indicates if controller display is active
   unsigned char startLine;	// Controller data display line offset
-  unsigned char reverse;	// Indicates the normal/reverse state
+  unsigned char color;		// Indicates the current draw color
   unsigned char flush;		// Indicates the flush state
 } lcdNcurCtrl_t;
 
@@ -72,12 +74,15 @@ static FILE *ttyFile = NULL;
 static SCREEN *ttyScreen;
 static WINDOW *winBorder;
 
+// Backlight support (init=yes) and brightness (init=full brightness)
+static unsigned char lcdUseBacklight = GLCD_TRUE;
+static unsigned char lcdBacklight = 16;
+
 // An Emuchron ncurses lcd pixel
 static char lcdNcurPixel[] = "  ";
 
 // Statistics counters on ncurses
 static lcdNcurStats_t lcdNcurStats;
-static unsigned char lcdBacklight = 16;
 
 // Timestamps used to verify existence of ncurses tty
 static struct timeval tvNow;
@@ -88,21 +93,70 @@ static void lcdNcurDrawModeSet(unsigned char controller, unsigned char color);
 static void lcdNcurRedraw(unsigned char controller, int startY, int rows);
 
 //
+// Function: lcdNcurBacklight
+//
+// Enable/disable ncurses backlight support
+//
+void lcdNcurBacklight(unsigned char support)
+{
+  int pairNew;
+  int refresh = GLCD_FALSE;
+  int i;
+
+  // No need to update when brightness support is unchanged
+  if (lcdUseBacklight == support)
+    return;
+
+  // Sync brightness support
+  lcdUseBacklight = support;
+
+  // Depending on support value repaint all controller windows
+  if (support == GLCD_FALSE && lcdBacklight != 16)
+  {
+    // When unsupported fall back to full brightness
+    pairNew = 1 + 16;
+    refresh = GLCD_TRUE;
+  }
+  else if (support == GLCD_TRUE && lcdBacklight != 16)
+  {
+    // When supported use the current backlight
+    pairNew = 1 + lcdBacklight;
+    refresh = GLCD_TRUE;
+  }
+
+  // Repaint all controller windows if needed
+  if (refresh == GLCD_TRUE)
+  {
+    for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+    {
+      wattron(lcdNcurCtrl[i].winCtrl, COLOR_PAIR(pairNew));
+      lcdNcurRedraw(i, 0, GLCD_YPIXELS);
+    }
+  }
+}
+
+//
 // Function: lcdNcurBacklightSet
 //
-// Set backlight in lcd display in ncurses window (dummy)
+// Set backlight in lcd display in ncurses window
 //
 void lcdNcurBacklightSet(unsigned char backlight)
 {
   int pairNew = 1 + backlight;
   int i;
 
-  // No need to update when brightness is unsupported or remains unchanged
-  if (lcdNcurInitArgs.useBacklight == GLCD_FALSE || lcdBacklight == backlight)
+  // No need to update when brightness remains unchanged
+  if (lcdBacklight == backlight)
     return;
- 
-  // Assign new paint color and repaint all controller windows
+
+  // Sync brightness
   lcdBacklight = backlight;
+
+  // See if update controller windows is required
+  if (lcdUseBacklight == GLCD_FALSE)
+    return;
+
+  // Repaint all controller windows with new brightness
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
   {
     wattron(lcdNcurCtrl[i].winCtrl, COLOR_PAIR(pairNew));
@@ -189,8 +243,8 @@ void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data)
       // Only draw when the controller display is on
       if (lcdNcurCtrl[controller].display == GLCD_TRUE)
       {
-        // Switch between normal/reverse mode and draw pixel
-        lcdNcurDrawModeSet(controller, data & 0x1);
+        // Switch between draw color and draw pixel
+        lcdNcurDrawModeSet(controller, data & GLCD_ON);
         mvwprintw(lcdNcurCtrl[controller].winCtrl, posY, posX,
           lcdNcurPixel);
       }
@@ -235,25 +289,25 @@ void lcdNcurDisplaySet(unsigned char controller, unsigned char display)
 //
 // Set the ncurses draw color
 //
-static void lcdNcurDrawModeSet(unsigned char controller, unsigned char inverse)
+static void lcdNcurDrawModeSet(unsigned char controller, unsigned char color)
 {
-  // Switch between normal and reverse state when needed
-  if (inverse == 1)
+  // Switch between draw colors when needed
+  if (color == GLCD_ON)
   {
-    if (lcdNcurCtrl[controller].reverse == GLCD_FALSE)
+    if (lcdNcurCtrl[controller].color == GLCD_OFF)
     {
-      // Switch to reverse state
+      // Draw white pixels
       wattron(lcdNcurCtrl[controller].winCtrl, A_REVERSE);
-      lcdNcurCtrl[controller].reverse = GLCD_TRUE;
+      lcdNcurCtrl[controller].color = GLCD_ON;
     }
   }
   else
   {
-    if (lcdNcurCtrl[controller].reverse == GLCD_TRUE)
+    if (lcdNcurCtrl[controller].color == GLCD_ON)
     {
-      // Switch to normal state
+      // Draw black pixels
       wattroff(lcdNcurCtrl[controller].winCtrl, A_REVERSE);
-      lcdNcurCtrl[controller].reverse = GLCD_FALSE;
+      lcdNcurCtrl[controller].color = GLCD_OFF;
     }
   }
 }
@@ -271,11 +325,11 @@ void lcdNcurFlush(void)
 
   // Check the ncurses tty if the previous check was in a
   // preceding second 
-  (void)gettimeofday(&tvNow, NULL);
+  gettimeofday(&tvNow, NULL);
   if (tvNow.tv_sec > tvThen.tv_sec)
   {
     // Sync check time and check ncurses tty
-    memcpy(&tvThen, &tvNow, sizeof(size_t));
+    tvThen = tvNow;
     if (stat(lcdNcurInitArgs.tty, &buffer) != 0)
     {
       // The ncurses tty is gone so we'll force mchron to exit
@@ -319,7 +373,7 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
     return 0;
 
   // Copy ncursus init parameters
-  memcpy(&lcdNcurInitArgs, lcdNcurInitArgsSet, sizeof(lcdNcurInitArgs_t));
+  lcdNcurInitArgs = *lcdNcurInitArgsSet;
 
   // Check if the ncurses tty is actually in use
   if (stat(lcdNcurInitArgs.tty, &statTty) != 0)
@@ -348,21 +402,12 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   // Init our window lcd image copy to blank
   memset(lcdNcurImage, 0, sizeof(lcdNcurImage));
 
-  if (lcdNcurInitArgs.useBacklight == GLCD_TRUE)
-  {
-    // Make ncurses believe we're dealing with a 256 color terminal
-    setenv("TERM", "xterm-256color", 1);
-    // Open destination tty, assign to ncurses screen and allow using colors
-    ttyFile = fopen(lcdNcurInitArgs.tty, "r+");
-    ttyScreen = newterm("xterm-256color", ttyFile, ttyFile);
-    start_color();
-  }
-  else
-  {
-    // Open destination tty and assign it to an ncurses screen
-    ttyFile = fopen(lcdNcurInitArgs.tty, "r+");
-    ttyScreen = newterm("xterm", ttyFile, ttyFile);
-  }
+  // Make ncurses believe we're dealing with a 256 color terminal
+  setenv("TERM", "xterm-256color", 1);
+  // Open destination tty, assign to ncurses screen and allow using colors
+  ttyFile = fopen(lcdNcurInitArgs.tty, "r+");
+  ttyScreen = newterm("xterm-256color", ttyFile, ttyFile);
+  start_color();
 
   // Try to set the size of the xterm tty. We do this because for some
   // reason gdb makes ncurses use the size of the mchron terminal window
@@ -384,39 +429,39 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
       GLCD_CONTROLLER_XPIXELS * 2, 1, 1 + i * GLCD_CONTROLLER_XPIXELS * 2);
     lcdNcurCtrl[i].display = GLCD_FALSE;
     lcdNcurCtrl[i].startLine = 0;
-    lcdNcurCtrl[i].reverse = GLCD_FALSE;
+    lcdNcurCtrl[i].color = GLCD_OFF;
     lcdNcurCtrl[i].flush = GLCD_FALSE;
   }
 
-  // Setup backlight grey tone colors when requested
-  if (lcdNcurInitArgs.useBacklight == GLCD_TRUE)
+  // Setup backlight grey-tone schemes. By default we'll use the full color
+  // scheme. When ncurses backlight is requested from the command line we
+  // allow switching between the grey-tones.
+
+  // Define black color
+  init_color(COLOR_BLACK, 0, 0, 0);
+
+  // Define the 17 backlight grey-tone schemes from dim to full brightness.
+  // It will result in ncurses color pairs 1..17, mapped to brightness 0..16.
+  for (i = 1; i <= 17; i++)
   {
-    // Define black color
-    init_color(COLOR_BLACK, 0, 0, 0);
-
-    // Define the 17 backlight grey-tone schemes from dim to full brightness.
-    // It will result in ncurses color pairs 0..17.
-    for (i = 1; i <= 17; i++)
-    {
-      backlight = (int)(1000 * (6 + (float)(i - 1)) / 22);
-      init_color(i + 127, backlight, backlight, backlight);
-      init_pair(i, i + 127, COLOR_BLACK);
-    }
-
-    // Init full brightness color to controller windows
-    wattron(lcdNcurCtrl[0].winCtrl, COLOR_PAIR(17));
-    wattron(lcdNcurCtrl[1].winCtrl, COLOR_PAIR(17));
-
-    // Assign medium brightness in the outer border window
-    wattron(winBorder, COLOR_PAIR(7));
+    backlight = (int)(1000 * (6 + (float)(i - 1)) / 22);
+    init_color(i + 127, backlight, backlight, backlight);
+    init_pair(i, i + 127, COLOR_BLACK);
   }
+
+  // Init full brightness color to controller windows
+  wattron(lcdNcurCtrl[0].winCtrl, COLOR_PAIR(17));
+  wattron(lcdNcurCtrl[1].winCtrl, COLOR_PAIR(17));
+
+  // Assign medium brightness in the outer border window
+  wattron(winBorder, COLOR_PAIR(7));
 
   // Draw and show a box in the outer border window
   box(winBorder, 0 , 0);
   wrefresh(winBorder);
 
   // Set time reference for checking ncurses tty
-  (void)gettimeofday(&tvThen, NULL);
+  gettimeofday(&tvThen, NULL);
 
   // We're initialized
   deviceActive = GLCD_TRUE;
@@ -442,7 +487,7 @@ static void lcdNcurRedraw(unsigned char controller, int startY, int rows)
   // at line 0 for a number of rows, or start at a non-0 line and draw
   // all up to the end of the window. We only need to draw the white
   // (or grey-tone) pixels.
-  lcdNcurDrawModeSet(controller, 1);
+  lcdNcurDrawModeSet(controller, GLCD_ON);
   for (x = 0; x < GLCD_CONTROLLER_XPIXELS; x++)
   {
     rowsToDo = rows;
@@ -462,7 +507,7 @@ static void lcdNcurRedraw(unsigned char controller, int startY, int rows)
           bitsToDo--)
       {
         // Only draw when needed
-        if ((lcdByte & 0x1) == 0x1)
+        if ((lcdByte & 0x1) == GLCD_ON)
           mvwprintw(lcdNcurCtrl[controller].winCtrl, posY, x * 2,
             lcdNcurPixel);
 

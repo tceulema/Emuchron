@@ -23,8 +23,8 @@ vs stepB=58
 pc f xCenter yCenter radius+2 0
 
 # Run continuously. Quit by pressing 'q' key.
+wts
 rf null true null
-
   rf draw=0 draw<stepA*stepB/2 draw=draw+1
     # Get start and end point of line
     vs xA=sin(2*pi/stepA*(draw%stepA))*radius+xCenter
@@ -34,9 +34,8 @@ rf null true null
 
     # Paint the line and remove it again
     pl f xA yA xB yB
-    w 15
+    wte 15
     pl b xA yA xB yB
   rn
-
 rn
 

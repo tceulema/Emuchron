@@ -45,7 +45,7 @@ apt-get install minicom
 
 # For non-annoying debugging experience in Debian 8 (Jessie) we require a
 # specific glibc source file named syscall-template.S
-# For more info refer to section 3.7.4 of the Emuchron pdf manual.
+# For more info refer to section 3.7.3 of the Emuchron pdf manual.
 myDebianVersion=`lsb_release -c`
 if [[ $myDebianVersion == *"jessie"* ]];
 then
@@ -62,10 +62,10 @@ then
     cd -
   fi
   echo "Installing/replacing glibc source symbolic links"
-  rm -f /build/glibc-Ir_s5K /build/glibc-I9DIZl /build/glibc-3Vu5mt /build/glibc-uPj9cH
-  ln -s /build/glibc /build/glibc-Ir_s5K
-  ln -s /build/glibc /build/glibc-I9DIZl
-  ln -s /build/glibc /build/glibc-3Vu5mt
-  ln -s /build/glibc /build/glibc-uPj9cH
+  for i in Ir_s5K I9DIZl 3Vu5mt uPj9cH daoqzt
+  do
+    rm -f /build/glibc-$i
+    ln -s /build/glibc /build/glibc-$i
+  done
 fi
 

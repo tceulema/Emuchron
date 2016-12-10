@@ -16,6 +16,7 @@
 # e s ../script/time-hm.txt
 #
 
+wts
 # Repeat h(our) between 0..23
 rf h=0 h<24 h=h+1
   # Repeat m(inute) between 0..59 with step 's'
@@ -24,7 +25,7 @@ rf h=0 h<24 h=h+1
     # This will update the layout of the selected clock
     ts h m 30
     # Wait 'w'*0.001 second
-    w w
+    wte w
   # Next m(inute)
   rn
 # Next h(our)

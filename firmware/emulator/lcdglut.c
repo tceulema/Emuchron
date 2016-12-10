@@ -20,7 +20,7 @@
 // an avr environment.
 // So, we have to build glut completely independent from avr, and
 // because of this we have to duplicate common stuff defines like lcd
-// panel pixel sizes in here.
+// panel pixel sizes and colors in here.
 // This also means that we can 'communicate' with the outside world
 // using only common data types such as int, char, etc and whatever we
 // define locally and expose via our header.
@@ -32,6 +32,8 @@
   ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
 #define GLCD_FALSE		0
 #define GLCD_TRUE		1
+#define GLCD_OFF		0
+#define GLCD_ON			1
 
 // We use a frame around our lcd display, being 1 pixel wide on each
 // side. So, the number of GLUT pixels in our display is a bit larger
@@ -58,7 +60,7 @@
 #define GLUT_CMD_DISPLAY	3
 #define GLUT_CMD_STARTLINE	4
 
-// Definition of an lcd message to process for our glut window
+// Definition of an lcd message to process for our glut window.
 // Structure is populated depending on the message command:
 // cmd = GLUT_CMD_EXIT		- <no arguments used>
 // cmd = GLUT_CMD_BYTEDRAW	- arg1 = draw byte value, arg2 = x, arg3 = y
@@ -159,6 +161,25 @@ void lcdGlutBacklightSet(unsigned char backlight)
 }
 
 //
+// Function: lcdGlutCleanup
+//
+// Shut down the lcd display in glut window
+//
+void lcdGlutCleanup(void)
+{
+  // Nothing to do if the glut environment is not initialized
+  if (deviceActive == GLCD_FALSE)
+    return;
+
+  // Add msg to queue to exit glut thread
+  lcdGlutMsgQueueAdd(GLUT_CMD_EXIT, 0, 0, 0);
+
+  // Wait for glut thread to exit
+  pthread_join(threadGlut, NULL);
+  deviceActive = GLCD_FALSE;
+}
+
+//
 // Function: lcdGlutDataWrite
 //
 // Draw pixels in lcd display in glut window
@@ -195,25 +216,6 @@ void lcdGlutDisplaySet(unsigned char controller, unsigned char display)
 }
 
 //
-// Function: lcdGlutCleanup
-//
-// Shut down the lcd display in glut window
-//
-void lcdGlutCleanup(void)
-{
-  // Nothing to do if the glut environment is not initialized
-  if (deviceActive == GLCD_FALSE)
-    return;
-
-  // Add msg to queue to exit glut thread
-  lcdGlutMsgQueueAdd(GLUT_CMD_EXIT, 0, 0, 0);
-
-  // Wait for glut thread to exit
-  pthread_join(threadGlut, NULL);
-  deviceActive = GLCD_FALSE;
-}
-
-//
 // Function: lcdGlutFlush
 //
 // Flush the lcd display in glut window (dummy)
@@ -235,7 +237,7 @@ int lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
     return 0;
 
   // Copy initial glut window geometry and position
-  memcpy(&lcdGlutInitArgs, lcdGlutInitArgsSet, sizeof(lcdGlutInitArgs_t));
+  lcdGlutInitArgs = *lcdGlutInitArgsSet;
 
   // Create the glut thread with lcdGlutMain() as main event loop
   (void)pthread_create(&threadGlut, NULL, lcdGlutMain, (void *)createMsg);
@@ -343,6 +345,12 @@ static void *lcdGlutMain(void *ptr)
     lcdGlutDelay(33);
   }
 
+  // We are about to exit the glut thread. Disable the close callback as it
+  // may get triggered upon exit. Why disable? In combination with an ncurses
+  // device and the readline library it may cause a race condition in readline
+  // library cleanup, potentially leading to an mchron coredump.
+  glutCloseFunc(NULL);
+
   return NULL;
 }
 
@@ -438,10 +446,10 @@ static void lcdGlutMsgQueueProcess(void)
         if ((lcdByte & 0x1) != (msgByte & 0x1))
         {
           lcdGlutStats.bitCnf++;
-          if ((msgByte & 0x1) == 0x0)
-            winPixMajority--;
-          else
+          if ((msgByte & 0x1) == GLCD_ON)
             winPixMajority++;
+          else
+            winPixMajority--;
         }
         lcdByte = lcdByte >> 1;
         msgByte = msgByte >> 1;
@@ -565,7 +573,7 @@ static void lcdGlutRender(void)
   {
     // Majority of pixels is black so configure to draw a minority
     // number of white pixels
-    pixValDraw = 1;
+    pixValDraw = GLCD_ON;
     byteValIgnore = 0x0;
     brightnessDraw = winBrightness;
   }
@@ -582,14 +590,15 @@ static void lcdGlutRender(void)
       glVertex2f( 1 - GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
       glVertex2f(-1 + GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
     glEnd();
-    pixValDraw = 0;
+    pixValDraw = GLCD_OFF;
     byteValIgnore = 0xff;
     brightnessDraw = 0;
   }
 
   // Draw display border in frame at 0.5 pixel from each border
   glBegin(GL_LINE_LOOP);
-    glColor3f(GLUT_FRAME_BRIGHTNESS, GLUT_FRAME_BRIGHTNESS, GLUT_FRAME_BRIGHTNESS);
+    glColor3f(GLUT_FRAME_BRIGHTNESS, GLUT_FRAME_BRIGHTNESS,
+      GLUT_FRAME_BRIGHTNESS);
     glVertex2f(-1 + GLUT_PIX_X_SIZE / 2,-1 + GLUT_PIX_Y_SIZE / 2);
     glVertex2f(-1 + GLUT_PIX_X_SIZE / 2, 1 - GLUT_PIX_Y_SIZE / 2);
     glVertex2f( 1 - GLUT_PIX_X_SIZE / 2, 1 - GLUT_PIX_Y_SIZE / 2);
@@ -704,13 +713,13 @@ void lcdGlutStartLineSet(unsigned char controller, unsigned char startLine)
 //
 void lcdGlutStatsPrint(void)
 {
+  struct timeval tv;
+  double diffDivider;
+    
   // As this is a multi-threaded interface we need to have exclusive
   // access to the counters
   pthread_mutex_lock(&mutexStats);
 
-  struct timeval tv;
-  double diffDivider;
-    
   printf("glut   : lcdByteRx=%llu, ", lcdGlutStats.byteReq);
   if (lcdGlutStats.byteReq == 0)
     printf("bitEff=-%%\n");
@@ -733,9 +742,8 @@ void lcdGlutStatsPrint(void)
   else
   {
     // Get time elapsed since interface start time
-    (void) gettimeofday(&tv, NULL);
-    diffDivider = (double)(((tv.tv_sec -
-      lcdGlutStats.timeStart.tv_sec) * 1E6 + 
+    gettimeofday(&tv, NULL);
+    diffDivider = (double)(((tv.tv_sec - lcdGlutStats.timeStart.tv_sec) * 1E6 +
       tv.tv_usec - lcdGlutStats.timeStart.tv_usec) / 1E4);
     printf("fps=%3.1f\n", (double)lcdGlutStats.ticks / diffDivider * 100);
   }
@@ -754,7 +762,7 @@ void lcdGlutStatsReset(void)
   // access to the counters
   pthread_mutex_lock(&mutexStats);
   memset(&lcdGlutStats, 0, sizeof(lcdGlutStats_t));
-  (void) gettimeofday(&lcdGlutStats.timeStart, NULL);
+  gettimeofday(&lcdGlutStats.timeStart, NULL);
   pthread_mutex_unlock(&mutexStats);
 }
 

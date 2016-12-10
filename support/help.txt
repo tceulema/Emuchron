@@ -2,8 +2,7 @@
 mchron - Emuchron emulator command line tool
 
 Use: mchron [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]
-            [-d <logfile>] [-b] [-h]
-  -b            - Backlight brightness support in ncurses terminal
+            [-d <logfile>] [-h]
   -d <logfile>  - Debug logfile name
   -g <geometry> - Geometry (x,y) of glut window
                   Default: "520x264"
@@ -91,6 +90,9 @@ Commands:
               controller-1: 0 = off, 1 = on
   'le'  - Erase lcd display
   'li'  - Inverse lcd display
+  'lnb' - Set ncurses backlight support
+          Argument: <support>
+              support: 0 = off, 1 = on
   'lp'  - Print controller state/registers
   'lr'  - Read controller lcd data in variable
           Arguments: <controller> <variable> 
@@ -104,7 +106,7 @@ Commands:
           Arguments: <controller> <data> 
               controller: 0, 1
               data: 0..255
-  'm'   - Start Monochron application
+  'm'   - Run Monochron application
           Arguments: <mode> <eeprom>
               mode: 'c' = start in single cycle mode, 'n' = start normal
               eeprom: 'k' = keep, 'r' = reset
@@ -206,8 +208,14 @@ Commands:
   'w'   - Wait for keypress or amount of time
           Argument: <delay>
               delay: 0 = wait for keypress, 1..1000000 = wait (msec)
-          When waiting, a 'q' will return control back to the mchron command
-          prompt
+          When waiting, a 'q' keypress will return control back to the mchron
+          command prompt
+  'wte' - Wait for wait timer expiry
+          Argument: <expiry>
+              expiry: 1..1000000 (msec)
+          When waiting, a 'q' keypress will return control back to the mchron
+          command prompt
+  'wts' - Start wait timer
   'x'   - Exit
 
 Examples:

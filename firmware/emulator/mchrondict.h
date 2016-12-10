@@ -179,9 +179,13 @@ cmdArgDomain_t argVarName1 =
 cmdArgDomain_t argVarName2 =
 { DOM_VAR_NAME, "", 0, 0, "word of [a-zA-Z_] characters" };
 
-// Wait delay: max 1M
+// Wait delay: max 1E6
 cmdArgDomain_t argNumDelay =
 { DOM_NUM_MAX, "", 0, 1E6, "0 = wait for keypress, >0 = wait (msec)" };
+
+// Wait timer expiry: 1..1E6
+cmdArgDomain_t argNumExpiry =
+{ DOM_NUM_RANGE, "", 1, 1E6, "msec" };
 
 // Commmand: info
 cmdArgDomain_t argInfoCommand =
@@ -327,6 +331,10 @@ cmdArg_t argLcdDispSet[] =
 { { ARG_UNUM,    "controller-0",&argNumOffOn },
   { ARG_UNUM,    "controller-1",&argNumOffOn },
   { ARG_END,     "",            NULL } };
+// Argument profile for ncurses backlight support
+cmdArg_t argLcdNcurBL[] =
+{ { ARG_UNUM,    "support",     &argNumOffOn },
+  { ARG_END,     "",            NULL } };
 // Argument profile for controller lcd read
 cmdArg_t argLcdRead[] =
 { { ARG_UNUM,    "controller",  &argNumController },
@@ -459,6 +467,10 @@ cmdArg_t argVarSet[] =
 cmdArg_t argWait[] =
 { { ARG_UNUM,    "delay",       &argNumDelay },
   { ARG_END,     "",            NULL } };
+// Argument profile for timer expiry
+cmdArg_t argExpiry[] =
+{ { ARG_UNUM,    "expiry",      &argNumExpiry },
+  { ARG_END,     "",            NULL } };
 
 // Command 'x'
 // No additional profiles are needed
@@ -519,15 +531,15 @@ cmdCommand_t cmdGroupLcd[] =
   { "lds", PC_CONTINUE,     CMDARGS(argLcdDispSet),  CMDHANDLER(doLcdDisplaySet),  "switch controller lcd display on/off" },
   { "le",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdErase),       "erase lcd display" },
   { "li",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdInverse),     "inverse lcd display" },
+  { "lnb", PC_CONTINUE,     CMDARGS(argLcdNcurBL),   CMDHANDLER(doLcdNcurBLSet),   "set ncurses backlight support" },
   { "lp",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdPrint),       "print controller state/registers" },
   { "lr",  PC_CONTINUE,     CMDARGS(argLcdRead),     CMDHANDLER(doLcdRead),        "read controller lcd data in variable" },
   { "lss", PC_CONTINUE,     CMDARGS(argLcdSLineSet), CMDHANDLER(doLcdStartLineSet),"set controller lcd start line" },
-  { "lw",  PC_CONTINUE,     CMDARGS(argLcdWrite),    CMDHANDLER(doLcdWrite),       "write data to controller lcd" }
- };
+  { "lw",  PC_CONTINUE,     CMDARGS(argLcdWrite),    CMDHANDLER(doLcdWrite),       "write data to controller lcd" } };
 
 // All commands for command group 'm' (monochron)
 cmdCommand_t cmdGroupMonochron[] =
-{ { "m",   PC_CONTINUE,     CMDARGS(argMonochron),   CMDHANDLER(doMonochron),      "start monochron application" } };
+{ { "m",   PC_CONTINUE,     CMDARGS(argMonochron),   CMDHANDLER(doMonochron),      "run monochron application" } };
 
 // All commands for command group 'p' (paint)
 cmdCommand_t cmdGroupPaint[] =
@@ -565,7 +577,9 @@ cmdCommand_t cmdGroupVar[] =
 
 // All commands for command group 'w' (wait)
 cmdCommand_t cmdGroupWait[] =
-{ { "w",   PC_CONTINUE,     CMDARGS(argWait),        CMDHANDLER(doWait),           "wait for keypress or time" } };
+{ { "w",   PC_CONTINUE,     CMDARGS(argWait),        CMDHANDLER(doWait),           "wait for keypress or time" },
+  { "wte", PC_CONTINUE,     CMDARGS(argExpiry),      CMDHANDLER(doWaitTimerExpiry),"wait for timer expiry" },
+  { "wts", PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doWaitTimerStart), "start expiry timer" } };
 
 // All commands for command group 'x' (exit)
 cmdCommand_t cmdGroupExit[] =

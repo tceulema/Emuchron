@@ -44,6 +44,7 @@ rn
 
 # Paint sin and cos curve and line between sin and cos
 w 1000
+wts
 rf x=xs+xe x<=xs+xl x=x+xe
   iif x==xs+xe
     # Initial start-off sin/cos points and a line between them
@@ -51,7 +52,7 @@ rf x=xs+xe x<=xs+xl x=x+xe
     vs cp=-cos(0)*yr+ys
     pl f xs sp xs cp
   ien
-  w 30
+  wte 30
   # Get new y values
   vs sy=-sin(2*pi/xl*(x-xs))*yr+ys
   vs cy=-cos(2*pi/xl*(x-xs))*yr+ys
@@ -67,10 +68,11 @@ rn
 
 # Pulse the graph using the backlight setting
 w 2000
+wts
 rf pu=0 pu<5 pu=pu+1
   rf bs=16 bs>=3 bs=bs-1
     lbs bs
-    w 40
+    wte 40
   rn
 rn
 lbs 16
@@ -90,21 +92,23 @@ pr f bx by 34 15
 # Flash the glcdline text in the box
 w 1000
 vs w=50
+wts
 rf fl=0 fl<7 fl=fl+1
   prf f bx+1 by+2 32 5 0 5
-  w w
+  wte w
   pa f bx+3 by+2 5x5p h 1 1 glcdline
-  w w
+  wte w
 rn
 
 # Flash the sin/cos text in the box
-vs w=50
 w 500
+vs w=50
+wts
 rf fl=0 fl<7 fl=fl+1
   prf f bx+1 by+8 32 5 0 5
-  w w
+  wte w
   pa f bx+2 by+8 5x5p h 1 1 sin / cos
-  w w
+  wte w
 rn
 
 # Add important messages
@@ -116,20 +120,21 @@ pa f mx my+12 5x5p h 1 1 ]]#fail
 # Rotate the important messages
 w 2000
 vs w=70
+wts
 prf f 6 43 33 17 0 5
 rf fl=0 fl<6 fl=fl+1
   pa f mx my 5x5p h 1 1 rnd>1e
-  w w
+  wte w
   pa f mx my+6 5x5p h 1 1 fx=auto
-  w w
+  wte w
   pa f mx my+12 5x5p h 1 1 ]]#fail
-  w w
+  wte w
   prf f mx my 27 5 0 5
-  w w
+  wte w
   prf f mx my+6 27 5 0 5
-  w w
+  wte w
   prf f mx my+12 27 5 0 5
-  w w
+  wte w
 rn
 pa f mx my 5x5p h 1 1 rnd>1e
 pa f mx my+6 5x5p h 1 1 fx=auto
@@ -139,32 +144,35 @@ pa f mx my+12 5x5p h 1 1 ]]#fail
 w 1500
 vs rb=pi^2*100000
 vs rs=5.317496278
+wts
 rf rn=0 rn<40 rn=rn+1
   vs rb=(rb*rs)%100000
   vs ra=(rb+rn*75)%100000
   pn f mx my+18 5x5p h 1 1 ra >%05.f<
-  w 100
+  wte 100
 rn
 
 # Flash the last random number
 w 1000
 vs w=50
+wts
 rf fl=0 fl<15 fl=fl+1
   prf f mx my+18 30 6 0 5
-  w w
+  wte w
   pn f mx my+18 5x5p h 1 1 ra >%05.f<
-  w w
+  wte w
 rn
 
 # Flash the entire contents of the box
 w 3000
 vs w=50
+wts
 rf fl=0 fl<15 fl=fl+1
   prf f bx+1 by+1 32 13 0 5
-  w w
+  wte w
   pa f bx+3 by+2 5x5p h 1 1 glcdline
   pa f bx+2 by+8 5x5p h 1 1 sin / cos
-  w w
+  wte w
 rn
 
 # Remove the important messages except last
@@ -193,9 +201,10 @@ rn
 
 # Remove the axis by fading backlight and exit
 w 500
+wts
 rf bs=15 bs>=0 bs=bs-1
   lbs bs
-  w 100
+  wte 100
 rn
 le
 lbs 16

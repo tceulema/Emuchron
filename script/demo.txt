@@ -6,7 +6,7 @@
 
 # Release any active clock and give a short beep
 cs 0
-b 1000 100
+b 1000 150
 
 # Demo several graphics and text functions
 e i ../script/paint.txt

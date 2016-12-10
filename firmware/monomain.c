@@ -6,25 +6,51 @@
 #ifndef EMULIN
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <util/delay.h>
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
 #include <avr/wdt.h>
-#include <i2c.h>
-#include "buttons.h"
+#include <util/delay.h>
+#include "i2c.h"
 #include "util.h"
 #else
 #include "emulator/stub.h"
 #include "emulator/stubrefs.h"
 #endif
-#include "monomain.h"
+#include "buttons.h"
 #include "ks0108.h"
 #include "glcd.h"
 #include "config.h"
 #include "anim.h"
-#ifdef MARIO
+#include "alarm.h"
+#include "monomain.h"
+
+// When configured in alarm.h [firmware] load the mario melody data
 #include "mariotune.h"
-#endif
+
+// Wait forever
+#define halt(x)		while (1)
+
+// Constants for calculating Timer2 interrupt return rates.
+// Using a return divider we make the RTC readout at a certain time interval,
+// x times per second. Using a secondary return divider we can make an event
+// that fires about once every second.
+// The original Monochron RTC readout rate is ~5.7Hz, which is sufficient to
+// support the pong clock, since it does not support a seconds indicator.
+// In Emuchron v1.0 this is increased to ~8.5Hz. This is done to detect
+// changes in seconds faster, leading to smoother 'seconds tick' animation in
+// clocks.
+// In Emuchron v3.0 this is increased to ~13.6Hz, executing at least one time
+// check per clock cycle of 75 msec (~13.3Hz). This is the best time event
+// granularity we can get for a functional clock.
+// Uncomment to implement RTC readout @ ~5.7Hz
+//#define TIMER2_RETURN_1	80
+//#define TIMER2_RETURN_2	6
+// Uncomment to implement RTC readout @ ~8.5Hz
+//#define TIMER2_RETURN_1	53
+//#define TIMER2_RETURN_2	9
+// Uncomment to implement RTC readout @ ~13.6Hz
+#define TIMER2_RETURN_1	33
+#define TIMER2_RETURN_2	14
 
 // The following global variables are for use in any Monochron clock.
 // In a Monochron clock its contents are defined and stable.
@@ -32,57 +58,46 @@ extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcCycleCounter;
-extern volatile uint8_t mcFgColor;
-extern volatile uint8_t mcBgColor;
+extern volatile uint8_t mcBgColor, mcFgColor;
 
-// The static list of clocks supported in Monochron and its pool pointer
-extern clockDriver_t monochron[];
-extern clockDriver_t *mcClockPool;
+// The following variables drive the configuration menu 
+extern volatile uint8_t cfgScreenMutex;
+extern volatile uint8_t cfgTickerActivity;
 
-// Indicates whether in the config menu something is busy writing
-// to the lcd, thus interfering with the process to update the time
-// in the config screen.
-extern volatile uint8_t screenmutex;
+// The following variables drive the button state and ADC conversion rate
+extern volatile uint8_t btnPressed;
+extern volatile uint8_t btnTickerHold;
+extern volatile uint8_t btnTickerConv;
 
-// These store the current button states for all 3 buttons. We can 
-// then query whether the buttons are pressed and released or pressed.
-// This allows for 'high speed incrementing' when setting config values.
-extern volatile uint8_t just_pressed;
-extern volatile uint8_t buttonholdcounter;
+// The following variables drive the realtime clock 
+volatile rtcDateTime_t rtcDateTime;
+volatile rtcDateTime_t rtcDateTimeNext;
+volatile uint8_t rtcTimeEvent = GLCD_FALSE;
 
-// Configuration keypress timeout counter
-extern volatile uint8_t timeoutcounter;
+// The following variables drive the Monochron alarm
+volatile uint8_t almAlarming = GLCD_FALSE;
+volatile uint8_t almAlarmSelect = 0;
+int16_t almTickerAlarm = 0;
+uint16_t almTickerSnooze = 0;
+static uint8_t almStopRequest = GLCD_FALSE;
+volatile uint8_t almSwitchOn = GLCD_FALSE;
 
-// The following variables are for internal use only to drive all
-// mcVariable elements. They are not be used in any Monochron
-// clock as their contents are considered unstable.
-volatile uint8_t time_s, time_m, time_h;
-volatile uint8_t date_d, date_m, date_y;
-volatile uint8_t new_ts, new_tm, new_th;
-volatile uint8_t new_dd, new_dm, new_dy;
-volatile uint8_t time_event = GLCD_FALSE;
-volatile uint8_t displaymode = SHOW_TIME;
-volatile uint8_t alarmOn, alarmSelect;
-volatile uint8_t alarming = GLCD_FALSE;
+// The following variables drive the clock animation and display state 
+static volatile uint8_t animTickerCycle;
+volatile uint8_t animDisplayMode = SHOW_TIME;
 
-// How long we have been snoozing and alarming
-volatile uint8_t animTicker;
-volatile uint16_t alarmTicker;
-uint16_t snoozeTimer = 0;
-int16_t alarmTimer = 0;
-static uint8_t reqAlarmStop = 0;
-
-// Runtime data for Mario or two-tone alarm
+// Runtime sound data for Mario or two-tone alarm
+static volatile uint16_t sndTickerTone = 0;
 #ifdef MARIO
 #ifndef EMULIN
-static uint16_t marioFreq = 0;
+static uint16_t sndMarioFreq = 0;
 #endif
-static uint8_t marioIdx = 0;
-static uint8_t marioIdxEnd = 0;
-static uint8_t marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-static uint8_t marioPauze = GLCD_TRUE;
+static uint8_t sndMarioIdx = 0;
+static uint8_t sndMarioIdxEnd = 0;
+static uint8_t sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+static uint8_t sndMarioPauze = GLCD_TRUE;
 #else
-static uint8_t alarmTone = 0;
+static uint8_t sndAlarmTone = 0;
 #endif
 
 // Time dividers
@@ -90,10 +105,31 @@ static uint8_t t2divider1 = 0;
 //static uint8_t t2divider2 = 0;
 
 // Local function prototypes
-static uint8_t rtcElementGet(uint8_t element, uint8_t nibbleMask);
+static void almSnoozeSet(void);
+static uint8_t bcdDecode(uint8_t element, uint8_t nibbleMask);
 static void rtcFailure(uint8_t code, uint8_t id);
-static void rtcTimeInit(void);
-static void snoozeSet(void);
+
+// The eeprom init default values upon eeprom reset/relocate.
+// For eeprom definitions refer to monomain.h [firmware].
+const uint8_t __attribute__ ((progmem)) eepDefault[] =
+{
+  EE_INITIALIZED,	// EE_OFFSET+0  - EE_INIT
+  8,			// EE_OFFSET+1  - EE_ALARM_HOUR
+  0,			// EE_OFFSET+2  - EE_ALARM_MIN
+  OCR2A_VALUE,		// EE_OFFSET+3  - EE_BRIGHT
+  1,			// EE_OFFSET+4  - EE_VOLUME (not used in Emuchron)
+  DATELONG_DOW,		// EE_OFFSET+5  - EE_REGION (not used in Emuchron)
+  TIME_24H,		// EE_OFFSET+6  - EE_TIME_FORMAT (not used in Emuchron)
+  0,			// EE_OFFSET+7  - EE_SNOOZE (not used in Emuchron)
+  0,			// EE_OFFSET+8  - EE_BGCOLOR
+  9,			// EE_OFFSET+9  - EE_ALARM_HOUR2
+  15,			// EE_OFFSET+10 - EE_ALARM_MIN2
+  10,			// EE_OFFSET+11 - EE_ALARM_HOUR3
+  30,			// EE_OFFSET+12 - EE_ALARM_MIN3
+  11,			// EE_OFFSET+13 - EE_ALARM_HOUR4
+  45,			// EE_OFFSET+14 - EE_ALARM_MIN4
+  0			// EE_OFFSET+15 - EE_ALARM_SELECT
+};
 
 //
 // Function: main
@@ -108,7 +144,7 @@ int monoMain(void)
 int main(void)
 #endif
 {
-  u08 nextClock = GLCD_FALSE;
+  u08 actionDefault = GLCD_FALSE;
 
   // Check if we were reset
   MCUSR = 0;
@@ -129,28 +165,28 @@ int main(void)
 
   // Init system real time clock
   DEBUGP("*** System clock");
-  new_ts = 60;
+  rtcDateTimeNext.timeSec = 60;
   rtcTimeInit();
 
   // Init data saved in eeprom
   DEBUGP("*** EEPROM");
-  init_eeprom();
+  eepInit();
   mcBgColor = eeprom_read_byte((uint8_t *)EE_BGCOLOR) % 2;
-  mcFgColor = (mcBgColor == OFF ? ON : OFF);
-  alarmSelect = eeprom_read_byte((uint8_t *)EE_ALARM_SELECT) % 4;
-  alarmTimeGet(alarmSelect, &mcAlarmH, &mcAlarmM);
+  mcFgColor = (mcBgColor == GLCD_OFF ? GLCD_ON : GLCD_OFF);
+  almAlarmSelect = eeprom_read_byte((uint8_t *)EE_ALARM_SELECT) % 4;
+  almTimeGet(almAlarmSelect, &mcAlarmH, &mcAlarmM);
   
   // Init buttons
   DEBUGP("*** Buttons");
-  buttonsInit();
+  btnInit();
 
   // Init based on alarm switch
   DEBUGP("*** Alarmstate");
-  alarmOn = GLCD_FALSE;
-  alarming = GLCD_FALSE;
-  snoozeTimer = 0;
-  alarmTimer = 0;
-  alarmStateSet();
+  almSwitchOn = GLCD_FALSE;
+  almAlarming = GLCD_FALSE;
+  almTickerSnooze = 0;
+  almTickerAlarm = 0;
+  almStateSet();
 
   // Setup 1-ms timer on timer0
   DEBUGP("*** 1-ms Timer");
@@ -172,7 +208,6 @@ int main(void)
   OCR2B = eeprom_read_byte((uint8_t *)EE_BRIGHT);
 #endif
   DDRB |= _BV(5);
-  beep(4000, 100);
 
   // Init lcd.
   // glcdInit locks and disables interrupts in one of its functions.
@@ -182,6 +217,7 @@ int main(void)
   // watch dog timer. The lcd should be initialized in way less than
   // 500 ms.
   DEBUGP("*** LCD");
+  beep(4000, 100);
   wdt_enable(WDTO_2S);
   glcdInit(mcBgColor);
 
@@ -191,135 +227,79 @@ int main(void)
 
   // Init to display the first defined Monochron clock
   DEBUGP("*** Start initial clock");
-  mchronTimeInit();
-  mcClockPool = monochron;
-  mcMchronClock = 0;
-  displaymode = SHOW_TIME;
+  rtcMchronTimeInit();
   animClockDraw(DRAW_INIT_FULL);
   DEBUGP("*** Init clock completed");
 
-  // This is the main event loop handler that will run forever
+  // This is the main loop event handler that will run forever
   while (1)
   {
-    // Set the duration of a single loop cycle
-    animTicker = ANIMTICK_MS;
+    // Set the duration of a single animation loop cycle
+    animTickerCycle = ANIM_TICK_CYCLE_MS;
 
     // Check buttons to see if we have interaction stuff to deal with
-
-    // When alarming while showing a clock, a +/Set button press will
-    // make us (re)snooze while the Menu button press will stop alarming.
-    if (just_pressed && alarming == GLCD_TRUE && displaymode == SHOW_TIME)
+    if (btnPressed && almAlarming == GLCD_TRUE)
     {
-      // The M button will stop the alarm.
-      // The +/S buttons will invoke/reset snoozing.
-      if (just_pressed & BTTN_MENU)
-        reqAlarmStop = 1;
+      // We're alarming while showing a clock. The M button will stop the
+      // alarm while the +/S buttons will invoke/reset snoozing.
+      if (btnPressed & BTN_MENU)
+        almStopRequest = GLCD_TRUE;
       else
-        snoozeSet();
-      just_pressed = 0;
+        almSnoozeSet();
     }
-
-    // At this stage potentially every button may be flagged as being
-    // pressed. To avoid race conditions between buttons allow only a single
-    // button press to be processed in a cycle and ignore the rest. The
-    // latter will be achieved by clearing just_pressed when a button press
-    // has been signalled.
-
-    // In checking the buttons, the Menu button has highest priority as it
-    // drives the config menu state-event machine and we don't want anything
-    // else to interfere with that.
-    if (just_pressed & BTTN_MENU)
+    else if (btnPressed & BTN_MENU)
     {
-      just_pressed = 0;
-
-      // The Menu button is pressed so initiate the state-event config menu
-      // or make it navigate to its next menu item. The latter is done by
-      // processing the just_pressed from within the menu to signal to
-      // continue at the next menu item in the config menu, or it signal
-      // its completion.
-      menu_main();
-      if (timeoutcounter == 0)
-      {
-        DEBUGP("Keypress timeout -> resume to clock");
-      }
-
-      // If the config menu is completely done, re-init both the time and a
-      // clock. We need to re-init Monochron time since it is most likely
-      // we've been in the config menu for several seconds.
-      if (displaymode == SHOW_TIME)
-      {
-        mchronTimeInit();
-        animClockDraw(DRAW_INIT_FULL);
-      }
+      // The Menu button is pressed so run the config menu.
+      // When completed sync Monochron time and re-init the active clock.
+      cfgMenuMain();
+      rtcMchronTimeInit();
+      animClockDraw(DRAW_INIT_FULL);
     }
-    else // Handle the Set or + button
+    else // BTN_SET or BTN_PLUS
     {
       // Check the Set button
-      if (just_pressed & BTTN_SET)
+      if (btnPressed & BTN_SET)
       {
-        if (animClockButton(just_pressed) == GLCD_FALSE)
+        if (animClockButton(btnPressed) == GLCD_FALSE)
         {
           // No button method has been defined for the active clock.
           // Default to the action set for the + button.
-          nextClock = GLCD_TRUE;
+          actionDefault = GLCD_TRUE;
           DEBUGP("Set button dflt to +");
-        }
-        else
-        {
-          // Set button has been processed
-          just_pressed = 0;
         }
       }
  
       // Check the + button and default Set button action
-      if ((just_pressed & BTTN_PLUS) || nextClock == GLCD_TRUE)
+      if ((btnPressed & BTN_PLUS) || actionDefault == GLCD_TRUE)
       {
         u08 initType;
-        u08 currMchronClock = mcMchronClock;
+        u08 myClock = mcMchronClock;
 
         // Select the next clock
         DEBUGP("Clock -> Next clock");
         initType = animClockNext();
 
-        if (currMchronClock != mcMchronClock)
-        {
-          // We have a new clock to initialize
-          animClockDraw(initType);
-        }
+        // If one clock configured invoke buttonpress, else init clock
+        if (mcMchronClock == myClock)
+          animClockButton(btnPressed);
         else
-        {
-          // There is only one clock configured
-          animClockButton(just_pressed);
-        }
+          animClockDraw(initType);
 
-        nextClock = GLCD_FALSE;
-        just_pressed = 0;
+        actionDefault = GLCD_FALSE;
       }
     }
 
-    // We're now done with button handling. If a Monochron clock is active
-    // have it update itself based on time/alarm/init events and data set
-    // in the global mcVariable variables.
-    if (displaymode == SHOW_TIME)
-    {
-      // Set time event state for clock cycle event handler and execute it
-      mcClockTimeEvent = time_event;
-      animClockDraw(DRAW_CYCLE);
-      if (mcClockTimeEvent == GLCD_TRUE)
-      {
-        // Clear the time event only when set
-        DEBUGP("Clear time event");
-        mcClockTimeEvent = GLCD_FALSE;
-        time_event = GLCD_FALSE;
-      }
-    }
+    // Clear any button press to allow a new button event. Then have the
+    // active clock update itself.
+    btnPressed = BTN_NONE;
+    animClockDraw(DRAW_CYCLE);
 
     // Get event(s) while waiting the remaining time of the loop cycle
 #ifdef EMULIN
     if (stubEventGet() == 'q')
       return 0;
 #else
-    while (animTicker);
+    while (animTickerCycle);
     // Uncomment this to manually 'step' using a terminal keypress via FTDI
     //uart_getchar();
 #endif
@@ -342,52 +322,62 @@ int main(void)
 #ifndef EMULIN
 SIGNAL(TIMER0_COMPA_vect)
 {
-  // Countdown timers
-  if (animTicker)
-    animTicker--;
-  if (buttonholdcounter)
-    buttonholdcounter--;
-
-  if (alarming == GLCD_TRUE && snoozeTimer == 0)
+  // Countdown timer for main loop animation (every 75 msec)
+  if (animTickerCycle > 0)
+    animTickerCycle--;
+  // Countdown timer for detecting press-hold of + button 
+  if (btnTickerHold > 0)
+    btnTickerHold--;
+  // Countdown timer for next ADC button conversion
+  if (btnTickerConv > 0)
   {
-    // We're alarming with sound
-    if (alarmTicker == 0)
+    btnTickerConv--;
+    if (btnTickerConv == 0)
+      btnConvStart();
+  }
+
+  // In case of audible alarming update alarm melody, if needed
+  if (almAlarming == GLCD_TRUE && almTickerSnooze == 0)
+  {
+    if (sndTickerTone == 0)
     {
+      // Audio countdown timer expired: we need to change the piezo
 #ifdef MARIO
       // Mario chiptune alarm
-      if (marioIdx == marioIdxEnd && marioPauze == GLCD_TRUE)
+      if (sndMarioIdx == sndMarioIdxEnd && sndMarioPauze == GLCD_TRUE)
       {
-        // End of current tune line. Move to next line or continue at beginning.
-        if (marioMasterIdx == (uint8_t)(sizeof(MarioMaster) - 2))
-          marioMasterIdx = 0;
+        // End of current tune line. Move to next line or return to beginning.
+        if (sndMarioMasterIdx == (uint8_t)(sizeof(MarioMaster) - 2))
+          sndMarioMasterIdx = 0;
         else
-          marioMasterIdx = marioMasterIdx + 2;
+          sndMarioMasterIdx = sndMarioMasterIdx + 2;
 
-        marioIdx = pgm_read_byte(&MarioMaster[marioMasterIdx]);
-        marioIdxEnd = marioIdx + pgm_read_byte(&MarioMaster[marioMasterIdx + 1]);
+        sndMarioIdx = pgm_read_byte(&MarioMaster[sndMarioMasterIdx]);
+        sndMarioIdxEnd = sndMarioIdx +
+          pgm_read_byte(&MarioMaster[sndMarioMasterIdx + 1]);
       }
 
       // Should we play a tone or a post-tone half beat pauze
-      if (marioPauze == GLCD_TRUE)
+      if (sndMarioPauze == GLCD_TRUE)
       {
         // Last played a half beat pauze, so now we play a tone
-        marioPauze = GLCD_FALSE;
-        marioFreq = (uint16_t)(pgm_read_byte(&MarioTones[marioIdx])) *
-          MAR_TONEFACTOR;
-        alarmTicker = (uint16_t)(pgm_read_byte(&MarioBeats[marioIdx])) *
-          MAR_TEMPO / MAR_BEATFACTOR;
+        sndMarioPauze = GLCD_FALSE;
+        sndMarioFreq = (uint16_t)(pgm_read_byte(&MarioTones[sndMarioIdx])) *
+          MAR_TONE_FACTOR;
+        sndTickerTone = (uint16_t)(pgm_read_byte(&MarioBeats[sndMarioIdx])) *
+          MAR_TEMPO / MAR_BEAT_FACTOR;
       }
       else
       {
         // Last played a tone, so now we play a half beat pauze
-        marioPauze = GLCD_TRUE;
-        marioFreq = 0;
-        alarmTicker = MAR_TEMPO / 2;
+        sndMarioPauze = GLCD_TRUE;
+        sndMarioFreq = 0;
+        sndTickerTone = MAR_TEMPO / 2;
         // When done we move to next tone
-        marioIdx++;
+        sndMarioIdx++;
       }
 
-      if (marioFreq == 0)
+      if (sndMarioFreq == 0)
       {
         // Be silent
         TCCR1B = 0;
@@ -401,12 +391,12 @@ SIGNAL(TIMER0_COMPA_vect)
         TCCR1B = _BV(WGM12) | _BV(CS10);
         TIMSK1 = _BV(TOIE1) | _BV(OCIE1A);
         // Set the frequency to use
-        OCR1A = (F_CPU / marioFreq) / 2;
+        OCR1A = (F_CPU / sndMarioFreq) / 2;
       }
 #else
       // Two-tone alarm
       // Tone cycle period timeout: go to next one
-      alarmTicker = ALARMTICK_MS;
+      sndTickerTone = SND_TICK_TONE_MS;
       if (TCCR1B == 0)
       {
         // End of silent period: next one will do audio 
@@ -414,12 +404,12 @@ SIGNAL(TIMER0_COMPA_vect)
         TCCR1B = _BV(WGM12) | _BV(CS10); // CTC with fastest timer
         TIMSK1 = _BV(TOIE1) | _BV(OCIE1A);
         // Select the frequency to use
-        if (alarmTone == 0)
+        if (sndAlarmTone == 0)
           OCR1A = (F_CPU / ALARM_FREQ_1) / 2;
         else
           OCR1A = (F_CPU / ALARM_FREQ_2) / 2;
         // Toggle frequency for next audio cycle
-        alarmTone = ~alarmTone;
+        sndAlarmTone = ~sndAlarmTone;
       }
       else
       {
@@ -430,22 +420,23 @@ SIGNAL(TIMER0_COMPA_vect)
       }
 #endif
     }
-    alarmTicker--;
+    // Countdown timer for next change in audio
+    sndTickerTone--;
   }
-  else if (alarmTimer == -1)
+  else if (almTickerAlarm == -1)
   {
     // Respond to request to stop alarm due to alarm timeout
     TCCR1B = 0;
     // Turn off piezo
     PIEZO_PORT &= ~_BV(PIEZO);
-    alarmTimer = 0;
+    almTickerAlarm = 0;
 #ifdef MARIO
     // On next audible alarm start at beginning of Mario tune
-    marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-    marioIdx = marioIdxEnd;
-    marioPauze = GLCD_TRUE;
+    sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+    sndMarioIdx = sndMarioIdxEnd;
+    sndMarioPauze = GLCD_TRUE;
 #else
-    alarmTone = 0;
+    sndAlarmTone = 0;
 #endif
   }
 }
@@ -457,8 +448,8 @@ SIGNAL(TIMER0_COMPA_vect)
 // Read and sync the RTC with internal system time. It can result in a
 // a Monochron time event, alarm trip event or alarm-end event when
 // appropriate.
-// Runs at about 30Hz, but will sync time considerably less due to time
-// dividers.
+// Runs at about every 2 msec, but will sync time considerably less due to
+// time dividers.
 //
 #ifdef EMULIN
 void monoTimer (void)
@@ -485,111 +476,96 @@ SIGNAL(TIMER2_OVF_vect)
     return;
   }
 
-  // This occurs at approx 5.7Hz or 8.5Hz.
+  // This occurs at approx 5.7Hz, 8.5Hz or 13.6Hz.
   // For this refer to defs of TIMER2_RETURN_x in monomain.h.
-  uint8_t last_s = time_s;
+  uint8_t lastSec = rtcDateTime.timeSec;
 
-  //DEBUG(putstring_nl("* RTC"));
+  //DEBUGP("* RTC");
 
   // Check alarm/snooze stop request from menu button
-  if (reqAlarmStop == 1)
+  if (almStopRequest == GLCD_TRUE)
   {
-    alarmTimer = 0;
-    reqAlarmStop = 0;
+    almTickerAlarm = 0;
+    almStopRequest = GLCD_FALSE;
   }
 
   // Check the alarm switch state
-  alarmStateSet();
+  almStateSet();
 
   // Get RTC time and compare with saved one
-  readi2ctime();
-  if (time_s != last_s)
+  rtcTimeRead();
+  if (rtcDateTime.timeSec != lastSec)
   {
     // Time has changed. Do admin on countdown timers.
-    if (timeoutcounter)
-      timeoutcounter--;
-    if (alarming == GLCD_TRUE)
+    if (cfgTickerActivity)
+      cfgTickerActivity--;
+    if (almAlarming == GLCD_TRUE)
     {
-      if (snoozeTimer == 1)
+      if (almTickerSnooze == 1)
       {
         // Init alarm data at starting positions right before we
         // return from snooze
 #ifdef MARIO
-        marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-        marioIdx = marioIdxEnd;
-        marioPauze = GLCD_TRUE;
+        sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+        sndMarioIdx = sndMarioIdxEnd;
+        sndMarioPauze = GLCD_TRUE;
 #else
-        alarmTone = 0;
+        sndAlarmTone = 0;
 #endif
         DEBUGP("Alarm -> Snooze timeout");
       }
-      if (snoozeTimer)
-        snoozeTimer--;
-      if (alarmTimer > 0)
-        alarmTimer--;
+      if (almTickerSnooze)
+        almTickerSnooze--;
+      if (almTickerAlarm > 0)
+        almTickerAlarm--;
     }
 
     // Log new time
     DEBUG(putstring("**** "));
-    DEBUG(uart_putw_dec(time_h));
+    DEBUG(uart_putw_dec(rtcDateTime.timeHour));
     DEBUG(uart_putchar(':'));
-    DEBUG(uart_putw_dec(time_m));
+    DEBUG(uart_putw_dec(rtcDateTime.timeMin));
     DEBUG(uart_putchar(':'));
-    DEBUG(uart_putw_dec(time_s));
+    DEBUG(uart_putw_dec(rtcDateTime.timeSec));
     DEBUG(putstring_nl(""));
 
-    // If we're in the setup menu we have a continuous time update
-    // except when editing time itself or when we're changing
-    // menu (screenmutex)
-    if ((displaymode == SET_ALARM || displaymode == SET_DATE ||
-         displaymode == SET_REGION || displaymode == SET_BRIGHTNESS ||
-         displaymode == SET_DISPLAY) && screenmutex == 0)
-    {
-      glcdSetAddress(MENU_INDENT + 12 * 6, 2);
-      glcdPrintNumberFg(time_h);
-      glcdWriteCharFg(':');
-      glcdPrintNumberFg(time_m);
-      glcdWriteCharFg(':');
-      glcdPrintNumberFg(time_s);
-    }
+    // If we're in the config main menu we have a continuous time update
+    // except when editing time itself or alarms or when we're changing
+    // menu (cfgScreenMutex)
+    if (animDisplayMode != SHOW_TIME && cfgScreenMutex == GLCD_FALSE)
+      cfgMenuTimeShow();
   }
 
-  // Signal a clock time event only when the previous has not been
-  // processed. This prevents a race condition on time data between
-  // the timer handler and the functional clock handler. The functional
-  // clock handler will clear the event after which a new time event
-  // can be set.
-  if (time_event == GLCD_FALSE && new_ts != time_s)
+  // Signal a clock time event only when the previous has not been processed
+  // yet. This prevents a race condition on time data between the timer handler
+  // and the functional clock handler. The functional clock handler will clear
+  // the clock time event after which a new one can be raised.
+  if (rtcTimeEvent == GLCD_FALSE && rtcDateTimeNext.timeSec != rtcDateTime.timeSec)
   {
-    new_ts = time_s;
-    new_tm = time_m;
-    new_th = time_h;
-    new_dd = date_d;
-    new_dm = date_m;
-    new_dy = date_y;
-    DEBUG(putstring_nl("Raise time event"));
-    time_event = GLCD_TRUE;
+    rtcDateTimeNext = rtcDateTime;
+    DEBUGP("Raise time event");
+    rtcTimeEvent = GLCD_TRUE;
   }
 
   // When the alarm switch is set to On we need to check a few things
-  if (alarmOn == GLCD_TRUE)
+  if (almSwitchOn == GLCD_TRUE)
   {
-    // Check if audible alarm has timed out (some may not wake up by an alarm)
-    if (alarming == GLCD_TRUE && alarmTimer == 0)
+    if (almAlarming == GLCD_FALSE && rtcDateTime.timeSec == 0 &&
+        rtcDateTime.timeMin == mcAlarmM && rtcDateTime.timeHour == mcAlarmH)
     {
-      DEBUG(putstring_nl("Alarm -> Timeout"));
-      alarming = GLCD_FALSE;
-      snoozeTimer = 0;
-      alarmTimer = -1;
+      // The active alarm time is tripped
+      DEBUGP("Alarm -> Tripped");
+      almAlarming = GLCD_TRUE;
+      almTickerAlarm = ALM_TICK_ALARM_SEC;
     }
-    
-    // Check if the active alarm time is tripped
-    if (alarming == GLCD_FALSE && time_s == 0 && time_m == mcAlarmM &&
-        time_h == mcAlarmH)
+    else if (almAlarming == GLCD_TRUE && almTickerAlarm == 0)
     {
-      DEBUG(putstring_nl("Alarm -> Tripped"));
-      alarming = GLCD_TRUE;
-      alarmTimer = MAXALARM;
+      // Audible alarm has timed out (some may not wake up by an alarm)
+      // or someone pressed the Menu button while alarming/snoozing
+      DEBUGP("Alarm -> Timeout");
+      almAlarming = GLCD_FALSE;
+      almTickerSnooze = 0;
+      almTickerAlarm = -1;
     }
   }
 
@@ -627,34 +603,49 @@ SIGNAL(TIMER1_COMPA_vect)
 #endif
 
 //
-// Function: alarmStateSet
+// Function: almSnoozeSet
+//
+// Make the alarm go snoozing
+//
+static void almSnoozeSet(void)
+{
+  DEBUGP("Alarm -> Snooze");
+  almTickerSnooze = ALM_TICK_SNOOZE_SEC;
+  almTickerAlarm = ALM_TICK_ALARM_SEC + ALM_TICK_SNOOZE_SEC;
+  TCCR1B = 0;
+  // Turn off piezo
+  PIEZO_PORT &= ~_BV(PIEZO);
+}
+
+//
+// Function: almStateSet
 //
 // Turn on/off the alarm based on the alarm switch position
 //
-void alarmStateSet(void)
+void almStateSet(void)
 {
   if (ALARM_PIN & _BV(ALARM))
   {
     // Turn off alarm if needed
-    if (alarmOn == GLCD_TRUE)
+    if (almSwitchOn == GLCD_TRUE)
     {
       DEBUGP("Alarm -> Inactive");
-      alarmOn = GLCD_FALSE;
-      snoozeTimer = 0;
-      alarmTimer = 0;
-      if (alarming == GLCD_TRUE)
+      almSwitchOn = GLCD_FALSE;
+      almTickerSnooze = 0;
+      almTickerAlarm = 0;
+      if (almAlarming == GLCD_TRUE)
       {
         // If there is audible alarm turn it off
         DEBUGP("Alarm -> Off");
-        alarming = GLCD_FALSE;
+        almAlarming = GLCD_FALSE;
         TCCR1B = 0;
 #ifdef MARIO
         // On next audible alarm start at beginning of Mario tune
-        marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-        marioIdx = marioIdxEnd;
-        marioPauze = GLCD_TRUE;
+        sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+        sndMarioIdx = sndMarioIdxEnd;
+        sndMarioPauze = GLCD_TRUE;
 #else
-        alarmTone = 0;
+        sndAlarmTone = 0;
 #endif
         // Turn off piezo
         PIEZO_PORT &= ~_BV(PIEZO);
@@ -664,57 +655,58 @@ void alarmStateSet(void)
   else
   {
     // Turn on functional alarm if needed
-    if (alarmOn == GLCD_FALSE)
+    if (almSwitchOn == GLCD_FALSE)
     {
       DEBUGP("Alarm -> Active");
       // Alarm on!
-      alarmOn = GLCD_TRUE;
+      almSwitchOn = GLCD_TRUE;
       // Reset snoozing and alarm
-      snoozeTimer = 0;
-      alarmTimer = 0;
+      almTickerSnooze = 0;
+      almTickerAlarm = 0;
 #ifdef MARIO
       // On next audible alarm start at beginning of Mario tune
-      marioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-      marioIdx = marioIdxEnd;
-      marioPauze = GLCD_TRUE;
+      sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+      sndMarioIdx = sndMarioIdxEnd;
+      sndMarioPauze = GLCD_TRUE;
 #else
-      alarmTone = 0;
+      sndAlarmTone = 0;
 #endif
     }   
   }
 }
 
 //
-// Function: alarmTimeGet
+// Function: almTimeGet
 //
 // Get the requested alarm time from the eeprom
 //
-void alarmTimeGet(uint8_t alarmId, volatile uint8_t *hour,
+void almTimeGet(uint8_t alarmId, volatile uint8_t *hour,
   volatile uint8_t *min)
 {
-  uint8_t *aHour, *aMin;
+  uint8_t *eepHour, *eepMin;
 
   if (alarmId == 0)
   {
-    aHour = (uint8_t *)EE_ALARM_HOUR;
-    aMin = (uint8_t *)EE_ALARM_MIN;
+    eepHour = (uint8_t *)EE_ALARM_HOUR;
+    eepMin = (uint8_t *)EE_ALARM_MIN;
   }
   else
   {
-    aHour = (uint8_t *)(EE_ALARM_HOUR2) + (alarmId - 1) * 2;
-    aMin = aHour + 1;
+    // Alarm 2..4 are sequential in eeprom
+    eepHour = (uint8_t *)(EE_ALARM_HOUR2) + (alarmId - 1) * 2;
+    eepMin = eepHour + 1;
   }
 
-  *hour = eeprom_read_byte(aHour) % 24;
-  *min = eeprom_read_byte(aMin) % 60;
+  *hour = eeprom_read_byte(eepHour) % 24;
+  *min = eeprom_read_byte(eepMin) % 60;
 }
 
 //
-// Function: alarmTimeSet
+// Function: almTimeSet
 //
 // Save the requested alarm time in the eeprom
 //
-void alarmTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min)
+void almTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min)
 {
   uint8_t *aHour, *aMin;
 
@@ -725,12 +717,33 @@ void alarmTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min)
   }
   else
   {
+    // Alarm 2..4 are sequential in memory
     aHour = (uint8_t *)(EE_ALARM_HOUR2) + (alarmId - 1) * 2;
     aMin = aHour + 1;
   }
 
   eeprom_write_byte(aHour, hour);
   eeprom_write_byte(aMin, min);
+}
+
+//
+// Function: bcdDecode
+//
+// Decode a BCD element into an integer type
+//
+static uint8_t bcdDecode(uint8_t element, uint8_t nibbleMask)
+{
+  return ((element >> 4) & nibbleMask) * 10 + (element & 0xF);
+}
+
+//
+// Function: bcdEncode
+//
+// Encode an integer type into a BCD element
+//
+uint8_t bcdEncode(uint8_t x)
+{
+  return ((x / 10) << 4) | (x % 10);
 }
 
 //
@@ -766,155 +779,46 @@ void beep(uint16_t freq, uint8_t duration)
 }
 
 //
-// Function: dotw
-//
-// Return the day number of the week (0=Sun .. 6=Sat)
-//
-uint8_t dotw(uint8_t mon, uint8_t day, uint8_t yr)
-{
-  uint16_t month, year;
-
-  // Calculate day of the week
-  month = mon;
-  year = 2000 + yr;
-  if (mon < 3)
-  {
-    month += 12;
-    year -= 1;
-  }
-  return (day + (2 * month) + (6 * (month + 1) / 10) + year +
-    (year / 4) - (year / 100) + (year / 400) + 1) % 7;
-}
-
-//
-// Function: i2bcd
-//
-// Convert value to BCD
-//
-inline uint8_t i2bcd(uint8_t x)
-{
-  return ((x / 10) << 4) | (x % 10);
-}
-
-//
-// Function: init_eeprom
+// Function: eepInit
 //
 // Initialize the eeprom. This should occur only in rare occasions as
 // once it is set it should stay initialized forever.
 //
-void init_eeprom(void)
+void eepInit(void)
 {
-  // Set eeprom to a default state.
+  uint8_t *i;
+
+  // Check the integrity of the eeprom for Monochron defaults
   if (eeprom_read_byte((uint8_t *)EE_INIT) != EE_INITIALIZED)
   {
-    eeprom_write_byte((uint8_t *)EE_ALARM_HOUR, 8);
-    eeprom_write_byte((uint8_t *)EE_ALARM_MIN, 0);
-    eeprom_write_byte((uint8_t *)EE_BRIGHT, OCR2A_VALUE);
-    eeprom_write_byte((uint8_t *)EE_VOLUME, 1);
-    eeprom_write_byte((uint8_t *)EE_REGION, DATELONG_DOW);
-    eeprom_write_byte((uint8_t *)EE_TIME_FORMAT, TIME_24H);
-    eeprom_write_byte((uint8_t *)EE_BGCOLOR, 0);
-    eeprom_write_byte((uint8_t *)EE_ALARM_HOUR2, 9);
-    eeprom_write_byte((uint8_t *)EE_ALARM_MIN2, 15);
-    eeprom_write_byte((uint8_t *)EE_ALARM_HOUR3, 10);
-    eeprom_write_byte((uint8_t *)EE_ALARM_MIN3, 30);
-    eeprom_write_byte((uint8_t *)EE_ALARM_HOUR4, 11);
-    eeprom_write_byte((uint8_t *)EE_ALARM_MIN4, 45);
-    eeprom_write_byte((uint8_t *)EE_ALARM_SELECT, 0);
+    // Set eeprom to a default state. The last address to update is EE_INIT
+    // since that location identifies the integrity of the eeprom data.
+    // So, start at address 1 up to the end of the init array.
+    for (i = (uint8_t *)1; i < (uint8_t *)sizeof(eepDefault); i++)
+      eeprom_write_byte(EE_OFFSET + i, pgm_read_byte(&eepDefault[(size_t)i]));
     eeprom_write_byte((uint8_t *)EE_INIT, EE_INITIALIZED);
   }
 }
 
 //
-// Function: leapyear
+// Function: rtcDotw
 //
-// Identify whether a year is a leap year
+// Return the day number of the week (0=Sun .. 6=Sat)
 //
-uint8_t leapyear(uint16_t y)
+uint8_t rtcDotw(uint8_t mon, uint8_t day, uint8_t year)
 {
-  return ( (!(y % 4) && (y % 100)) || !(y % 400));
-}
+  uint16_t myMon, myYear;
 
-//
-// Function: mchronTimeInit
-//
-// Re-initialize the functional Monochron clock time. It will discard a
-// pending time event (may be zero seconds old, a few seconds or even
-// minutes) and will create a fresh time event that is based on *now*.
-//
-void mchronTimeInit(void)
-{
-  mcClockTimeEvent = GLCD_FALSE;
-#ifndef EMULIN
-  // First wait for a stable state (=registered time event)
-  while (time_event == GLCD_FALSE);
-  // Then force a re-init of the monochron time upon scan restart
-  new_ts = 60;
-  // Then restart the time scan mechanism
-  DEBUGP("Clear time event");
-  time_event = GLCD_FALSE;
-  // And finally wait again for a stable situation (< 175 msec)
-  while (time_event == GLCD_FALSE);
-#else
-  // As the emulator event loop is not in a separate thread nor is
-  // interrupt driven we have to do things a bit differently
-  DEBUGP("Clear time event");
-  time_event = GLCD_FALSE;
-  new_ts = 60;
-  while (time_event == GLCD_FALSE)
-    monoTimer();
-#endif
-  mcClockTimeEvent = GLCD_TRUE;
-}
-
-//
-// Function: readi2ctime
-//
-// Read the real-time clock (RTC)
-//
-uint8_t readi2ctime(void)
-{
-  uint8_t regaddr = 0, r;
-  uint8_t clockdata[8];
-  
-  // Get the time from the RTC
-  cli();
-  r = i2cMasterSendNI(0xD0, 1, &regaddr);
-  if (r != 0)
-    rtcFailure(r, 0);
-  r = i2cMasterReceiveNI(0xD0, 7, &clockdata[0]);
-  sei();
-  if (r != 0)
-    rtcFailure(r, 1);
-
-  // Process the time from the RTC
-  time_s = rtcElementGet(clockdata[0], 0x7);
-  time_m = rtcElementGet(clockdata[1], 0x7);
-  if (clockdata[2] & _BV(6))
+  // Calculate day of the week
+  myMon = mon;
+  myYear = 2000 + year;
+  if (mon < 3)
   {
-    // "12 hr" mode
-    time_h = ((clockdata[2] >> 5) & 0x1) * 12 + 
-      rtcElementGet(clockdata[2], 0x1);
+    myMon += 12;
+    myYear -= 1;
   }
-  else
-  {
-    time_h = rtcElementGet(clockdata[2], 0x3);
-  }  
-  date_d = rtcElementGet(clockdata[4], 0x3);
-  date_m = rtcElementGet(clockdata[5], 0x1);
-  date_y = rtcElementGet(clockdata[6], 0xF);
-
-  return clockdata[0] & 0x80;
-}
-
-//
-// Function: rtcElementGet
-//
-// Get a time element value from the rtc readout.
-//
-static uint8_t rtcElementGet(uint8_t element, uint8_t nibbleMask)
-{
-  return ((element >> 4) & nibbleMask) * 10 + (element & 0xF);
+  return (day + (2 * myMon) + (6 * (myMon + 1) / 10) + myYear +
+    (myYear / 4) - (myYear / 100) + (myYear / 400) + 1) % 7;
 }
 
 //
@@ -941,36 +845,78 @@ static void rtcFailure(uint8_t code, uint8_t id)
 }
 
 //
+// Function: rtcLeapYear
+//
+// Identify whether a year is a leap year
+//
+uint8_t rtcLeapYear(uint16_t year)
+{
+  return ((!(year % 4) && (year % 100)) || !(year % 400));
+}
+
+//
+// Function: rtcMchronTimeInit
+//
+// (Re-)initialize the functional Monochron clock time. It will discard a
+// pending time event (may be zero seconds old, a few seconds or even
+// minutes) and will create a fresh time event that is based on *now*.
+//
+void rtcMchronTimeInit(void)
+{
+  mcClockTimeEvent = GLCD_FALSE;
+#ifndef EMULIN
+  // First wait for a registered time event (that may pass immediately)
+  while (rtcTimeEvent == GLCD_FALSE);
+  // Then restart the time scan mechanism while forcing a new time to
+  // be generated
+  DEBUGP("Clear time event");
+  rtcDateTimeNext.timeSec = 60;
+  rtcTimeEvent = GLCD_FALSE;
+  // And finally wait for a new registered time event (<70 msec)
+  while (rtcTimeEvent == GLCD_FALSE);
+#else
+  // As the emulator event loop is not in a separate thread nor is
+  // interrupt driven we have to do things a bit differently
+  DEBUGP("Clear time event");
+  rtcTimeEvent = GLCD_FALSE;
+  rtcDateTimeNext.timeSec = 60;
+  while (rtcTimeEvent == GLCD_FALSE)
+    monoTimer();
+#endif
+  mcClockTimeEvent = GLCD_TRUE;
+}
+
+//
 // Function: rtcTimeInit
 //
 // Initialize RTC time data for first time use
 //
-static void rtcTimeInit(void)
+void rtcTimeInit(void)
 {
   // Talk to clock
   i2cInit();
 
-  if (readi2ctime())
+  if (rtcTimeRead())
   {
-    DEBUGP("Uh oh, RTC was off, lets reset it!");
-    writei2ctime(00, 00, 12, 1, 1, 16); // Noon Jan 1 2016
+    DEBUGP("Require reset RTC");
+    rtcTimeWrite(00, 00, 12, 1, 1, 17); // Noon Jan 1 2017
   }
 
-  readi2ctime();
+  rtcTimeRead();
 
-  DEBUG(putstring("\n\rread "));
-  DEBUG(uart_putw_dec(time_h));
+  DEBUG(putstring("\nread "));
+  DEBUG(uart_putw_dec(rtcDateTime.timeHour));
   DEBUG(uart_putchar(':'));
-  DEBUG(uart_putw_dec(time_m));
+  DEBUG(uart_putw_dec(rtcDateTime.timeMin));
   DEBUG(uart_putchar(':'));
-  DEBUG(uart_putw_dec(time_s));
+  DEBUG(uart_putw_dec(rtcDateTime.timeSec));
 
   DEBUG(uart_putchar('\t'));
-  DEBUG(uart_putw_dec(date_d));
+  DEBUG(uart_putw_dec(rtcDateTime.dateDay));
   DEBUG(uart_putchar('/'));
-  DEBUG(uart_putw_dec(date_m));
+  DEBUG(uart_putw_dec(rtcDateTime.dateMon));
   DEBUG(uart_putchar('/'));
-  DEBUG(uart_putw_dec(date_y));
+  DEBUG(uart_putw_dec(rtcDateTime.dateYear));
   DEBUG(putstring_nl(""));
 
   TCCR2B = _BV(CS22) | _BV(CS21) | _BV(CS20); // div by 1024
@@ -983,43 +929,67 @@ static void rtcTimeInit(void)
 }
 
 //
-// Function: snoozeSet
+// Function: rtcTimeRead
 //
-// Make the alarm go snoozing
+// Read the real-time clock (RTC)
 //
-static void snoozeSet(void)
+uint8_t rtcTimeRead(void)
 {
-  DEBUGP("Alarm -> Snooze");
-  snoozeTimer = MAXSNOOZE;
-  alarmTimer = MAXALARM + MAXSNOOZE;
-  TCCR1B = 0;
-  // Turn off piezo
-  PIEZO_PORT &= ~_BV(PIEZO);
-  // Force a clock to display the time
-  displaymode = SHOW_TIME;
+  uint8_t regaddr = 0, r;
+  uint8_t clockdata[8];
+  
+  // Get the time from the RTC
+  cli();
+  r = i2cMasterSendNI(0xD0, 1, &regaddr);
+  if (r != 0)
+    rtcFailure(r, 0);
+  r = i2cMasterReceiveNI(0xD0, 7, clockdata);
+  sei();
+  if (r != 0)
+    rtcFailure(r, 1);
+
+  // Process the time from the RTC
+  rtcDateTime.timeSec = bcdDecode(clockdata[0], 0x7);
+  rtcDateTime.timeMin = bcdDecode(clockdata[1], 0x7);
+  if (clockdata[2] & _BV(6))
+  {
+    // "12 hr" mode
+    rtcDateTime.timeHour = ((clockdata[2] >> 5) & 0x1) * 12 + 
+      bcdDecode(clockdata[2], 0x1);
+  }
+  else
+  {
+    // "24 hr" mode
+    rtcDateTime.timeHour = bcdDecode(clockdata[2], 0x3);
+  }  
+  rtcDateTime.dateDay = bcdDecode(clockdata[4], 0x3);
+  rtcDateTime.dateMon = bcdDecode(clockdata[5], 0x1);
+  rtcDateTime.dateYear = bcdDecode(clockdata[6], 0xF);
+
+  return clockdata[0] & 0x80;
 }
 
 //
-// Function: writei2ctime
+// Function: rtcTimeWrite
 //
 // Set the real-time clock (RTC)
 //
-void writei2ctime(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
-  uint8_t mon, uint8_t yr)
+void rtcTimeWrite(uint8_t sec, uint8_t min, uint8_t hour, uint8_t day,
+  uint8_t mon, uint8_t year)
 {
   uint8_t clockdata[8];
 
   clockdata[0] = 0;           // address
-  clockdata[1] = i2bcd(sec);  // s
-  clockdata[2] = i2bcd(min);  // m
-  clockdata[3] = i2bcd(hr);   // h
-  clockdata[4] = 0;           // day
-  clockdata[5] = i2bcd(date); // date
-  clockdata[6] = i2bcd(mon);  // month
-  clockdata[7] = i2bcd(yr);   // year
+  clockdata[1] = bcdEncode(sec);
+  clockdata[2] = bcdEncode(min);
+  clockdata[3] = bcdEncode(hour);
+  clockdata[4] = 0;           // day of week
+  clockdata[5] = bcdEncode(day);
+  clockdata[6] = bcdEncode(mon);
+  clockdata[7] = bcdEncode(year);
 
   cli();
-  uint8_t r = i2cMasterSendNI(0xD0, 8, &clockdata[0]);
+  uint8_t r = i2cMasterSendNI(0xD0, 8, clockdata);
   sei();
   if (r != 0)
     rtcFailure(r, 2);

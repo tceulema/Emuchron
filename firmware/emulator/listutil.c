@@ -41,7 +41,7 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine);
 // Return values:
 // -1 : invalid command 
 //  0 : success
-// >0 : line number of block in which command cannot be matched
+// >0 : starting line number of block in which command cannot be matched
 //
 static int cmdLineComplete(cmdPcCtrl_t **cmdPcCtrlLast, cmdPcCtrl_t **cmdPcCtrlRoot,
   cmdLine_t *cmdLineLast)
@@ -257,8 +257,7 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
     // Process the command name scan result that includes validating
     // the command name (but not its arguments), retrieving the command
     // dictionary and matching control blocks
-    lineNumErr = cmdLineComplete(&cmdPcCtrlLast, cmdPcCtrlRoot,
-      cmdLineLast);
+    lineNumErr = cmdLineComplete(&cmdPcCtrlLast, cmdPcCtrlRoot, cmdLineLast);
     if (lineNumErr != 0)
       break;
 
@@ -370,8 +369,7 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
     // Process the command name scan result that includes validating
     // the command name (but not its arguments) and matching control
     // blocks
-    lineNumErr = cmdLineComplete(&cmdPcCtrlLast, cmdPcCtrlRoot,
-      cmdLineLast);
+    lineNumErr = cmdLineComplete(&cmdPcCtrlLast, cmdPcCtrlRoot, cmdLineLast);
     if (lineNumErr != 0)
       break;
 

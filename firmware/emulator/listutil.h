@@ -1,10 +1,10 @@
 //*****************************************************************************
-// Filename : 'listvarutil.h'
+// Filename : 'listutil.h'
 // Title    : Defines for command list functionality
 //*****************************************************************************
 
-#ifndef LISTVARUTIL_H
-#define LISTVARUTIL_H
+#ifndef LISTUTIL_H
+#define LISTUTIL_H
 
 #include "interpreter.h"
 

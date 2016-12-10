@@ -21,9 +21,8 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
+extern volatile uint8_t mcFgColor;
 
 //
 // Function: exampleCycle
@@ -73,19 +72,13 @@ void exampleCycle(void)
 //
 // Initialize the lcd display of a very simple clock.
 // This function is called once upon clock initialization.
+// At this point the display has already been cleared.
 //
 void exampleInit(u08 mode)
 {
   DEBUGP("Init Example");
 
-  // Start from scratch by clearing the lcd using the background color
-  glcdClearScreen(mcBgColor);
-
   // Paint a text on the lcd with 2x horizontal scaling
   glcdPutStr3(11, 2, FONT_5X7N, "-Example-", 2, 1, mcFgColor);
-
-  // Force the alarm info area to init itself in animAlarmAreaUpdate()
-  // upon the first call to exampleCycle()
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
 }
 

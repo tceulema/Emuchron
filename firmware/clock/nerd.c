@@ -27,9 +27,8 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
+extern volatile uint8_t mcFgColor;
 
 // Structure defining the LCD element locations for a single clock
 typedef struct _nerdLocation_t
@@ -111,10 +110,7 @@ void nerdInit(u08 mode)
 {
   DEBUGP("Init Nerd");
 
-  // Draw static clock layout
-  glcdClearScreen(mcBgColor);
-
-  // The clock header and fixed elements for the individual nerd clocks
+  // Draw clock header and fixed elements for the individual nerd clocks.
   glcdPutStr2(9,   1, FONT_5X5P, "*** binary/octal/hex clock ***", mcFgColor);
   glcdPutStr2(37,  8, FONT_5X5P, "(h:m:s - d/m/y)", mcFgColor);
   glcdPutStr2(48, 17, FONT_5X5P, ":            :", mcFgColor);
@@ -123,9 +119,6 @@ void nerdInit(u08 mode)
   glcdPutStr2(38, 40, FONT_5X5P, "o    /o    /o", mcFgColor);
   glcdPutStr2(38, 49, FONT_5X5P, "o\\    :o\\    :o\\", mcFgColor);
   glcdPutStr2(36, 56, FONT_5X5P, "o\\    /o\\  /o\\", mcFgColor);
-    
-  // Force the alarm info area to init itself
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
 }
 
 //

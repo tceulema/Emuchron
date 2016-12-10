@@ -3,7 +3,6 @@
 // Title    : Defs for generating and accessing a QR
 //*****************************************************************************
 
-// WARNING:
 // The code supported by this header is designed for a redundancy 1 (L), level
 // 2 (25x25) QR clock, allowing to encode a string up to 32 characters.
 // For more info refer to qrencode.c [firmware/clock].

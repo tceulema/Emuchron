@@ -9,10 +9,18 @@
 #include "interpreter.h"
 #include "controller.h"
 
+// The coredump origin types
+#define ORIGIN_GLCD	0
+#define ORIGIN_CTRL	1
+#define ORIGIN_EEPROM	2
+
+// The active alarm type
+#define ALM_MONOCHRON	0
+#define ALM_EMUCHRON	1
+
 // Definition of a structure to hold the main() arguments
 typedef struct _emuArgcArgv_t
 {
-  int argBacklight;			// argv index for ncurses backlight arg
   int argDebug;				// argv index for logfile arg
   int argGlutGeometry;			// argv index for glut geometry arg
   int argGlutPosition;			// argv index for glut window pos arg
@@ -29,7 +37,8 @@ int emuStartModeGet(char startId);
 
 // mchron environment functions
 int emuArgcArgvGet(int argc, char *argv[]);
-void emuCoreDump(const char *location, u08 controller, u08 x, u08 y, u08 data);
+void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
+  int arg3, int arg4);
 void emuSigSetup(void);
 void emuWinClose(void);
 
@@ -40,7 +49,7 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source);
 // mchron interpreter support functions
 void emuClockRelease(int echoCmd);
 void emuClockUpdate(void);
-void emuTimePrint(void);
+void emuTimePrint(int type);
 void emuTimeSync(void);
 
 // mchron logfile functions

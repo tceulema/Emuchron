@@ -13,8 +13,6 @@
 #include "emulator/mchronutil.h"
 #include "emulator/controller.h"
 #endif
-
-#include "global.h"
 #include "ks0108.h"
 
 // Definition of a structure that holds the functional lcd cursor and
@@ -24,7 +22,7 @@ typedef struct _glcdLcdCursor_t
 {
   unsigned char lcdXAddr;
   unsigned char lcdYAddr;
-  unsigned char ctrlY[GLCD_NUM_CONTROLLERS];
+  unsigned char ctrlYAddr[GLCD_NUM_CONTROLLERS];
 } glcdLcdCursor_t;
 
 // The functional lcd cursor
@@ -174,7 +172,7 @@ void glcdControlWrite(u08 controller, u08 data)
 #ifdef EMULIN
   // Check if controller is out of bounds (should never happen)
   if (controller >= GLCD_NUM_CONTROLLERS)
-    emuCoreDump(__func__, controller, 0, 0, data);
+    emuCoreDump(ORIGIN_GLCD, __func__, controller, 0, 0, data);
 
   // Execute the action in the controller
   ctrlExecute(CTRL_METHOD_COMMAND, controller, data);
@@ -321,7 +319,7 @@ void glcdDataWrite(u08 data)
   if (controller >= GLCD_NUM_CONTROLLERS ||
       glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
       glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
-    emuCoreDump(__func__, controller, glcdLcdCursor.lcdXAddr,
+    emuCoreDump(ORIGIN_GLCD, __func__, controller, glcdLcdCursor.lcdXAddr,
       glcdLcdCursor.lcdYAddr, data);
 
   // Write data to controller lcd buffer
@@ -383,7 +381,7 @@ u08 glcdDataRead(void)
   if (controller >= GLCD_NUM_CONTROLLERS ||
       glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
       glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
-    emuCoreDump(__func__, controller, glcdLcdCursor.lcdXAddr,
+    emuCoreDump(ORIGIN_GLCD, __func__, controller, glcdLcdCursor.lcdXAddr,
       glcdLcdCursor.lcdYAddr, 0);
 
   // Read data from controller lcd buffer
@@ -445,7 +443,7 @@ static void glcdReset(u08 resetState)
 
   // Init admin of controller y page so it will sync at the first cursor request
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-    glcdLcdCursor.ctrlY[i] = 255;
+    glcdLcdCursor.ctrlYAddr[i] = 255;
 }
 
 //
@@ -461,7 +459,7 @@ void glcdClearScreen(u08 color)
   u08 xAddr;
   u08 data;
 
-  if (color == ON)
+  if (color == GLCD_ON)
     data = 0xff;
   else
     data = 0x00;
@@ -516,21 +514,21 @@ void glcdResetScreen(void)
 //
 // Set the lcd cursor position in one of the lcd controllers
 //
-void glcdSetAddress(u08 x, u08 yLine)
+void glcdSetAddress(u08 xAddr, u08 yAddr)
 {
 #ifdef EMULIN
   extern long long ctrlLcdSetAddress;
 
   // Check if requested cursor is out of bounds (should never happen)
   ctrlLcdSetAddress++;
-  if (x >= GLCD_XPIXELS || (yLine >> GLCD_CONTROLLER_YPAGEBITS) > 0)
-    emuCoreDump(__func__, 0, x, yLine, 0);
+  if (xAddr >= GLCD_XPIXELS || (yAddr >> GLCD_CONTROLLER_YPAGEBITS) > 0)
+    emuCoreDump(ORIGIN_GLCD, __func__, 0, xAddr, yAddr, 0);
 #endif
   // Set cursor x and y address.
   // The set address functions are setup such that we must set the x position
   // first to get the destination controller and only then set the y position.
-  glcdSetXAddress(x);
-  glcdSetYAddress(yLine);
+  glcdSetXAddress(xAddr);
+  glcdSetYAddress(yAddr);
 }
 
 //
@@ -561,10 +559,11 @@ static void glcdSetYAddress(u08 yAddr)
   glcdLcdCursor.lcdYAddr = yAddr & GLCD_CONTROLLER_YPAGEMASK;
 
   // Set page address on destination controller only when changed
-  if (glcdLcdCursor.lcdYAddr == glcdLcdCursor.ctrlY[controller])
-    return;
-  glcdLcdCursor.ctrlY[controller] = glcdLcdCursor.lcdYAddr;
-  glcdControlWrite(controller, GLCD_SET_PAGE | glcdLcdCursor.lcdYAddr);
+  if (glcdLcdCursor.lcdYAddr != glcdLcdCursor.ctrlYAddr[controller])
+  {
+    glcdLcdCursor.ctrlYAddr[controller] = glcdLcdCursor.lcdYAddr;
+    glcdControlWrite(controller, GLCD_SET_PAGE | glcdLcdCursor.lcdYAddr);
+  }
 }
 
 //

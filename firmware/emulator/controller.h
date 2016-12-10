@@ -14,12 +14,6 @@
 #define CTRL_METHOD_READ	1	// A glcdDataRead() method
 #define CTRL_METHOD_WRITE	2	// A glcdDataWrite() method
 
-// The controller commands used in combination with CTRL_METHOD_COMMAND
-#define CTRL_CMD_DISPLAY	0	// Set display on/off
-#define CTRL_CMD_COLUMN		1	// Set cursor x column
-#define CTRL_CMD_PAGE		2	// Set cursor y page
-#define CTRL_CMD_START_LINE	3	// Set display start line
-
 // The mergeable graphics statistics report and reset types
 #define CTRL_STATS_GLCD		0x1	// glcd stats
 #define CTRL_STATS_CTRL		0x2	// Controller stats
@@ -52,4 +46,5 @@ u08 ctrlExecute(u08 method, u08 controller, u08 data);
 // Lcd device methods
 void ctrlLcdBacklightSet(u08 brightness);
 void ctrlLcdFlush(void);
+void ctrlLcdNcurBLSet(u08 support);
 #endif

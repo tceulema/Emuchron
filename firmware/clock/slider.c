@@ -195,9 +195,6 @@ void sliderInit(u08 mode)
 
   DEBUGP("Init Slider");
 
-  // Start from scratch
-  glcdClearScreen(mcBgColor);
-
   // Draw the top row numbers
   val[0] = '0';
   val[1] = '\0';
@@ -221,8 +218,7 @@ void sliderInit(u08 mode)
   sliderElementInit(SLIDER_RIGHT_X_START, SLIDER_MON_Y_START, 1, animMonth);
   sliderElementInit(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START, 9, animYear);
   
-  // Force the alarm info area to init itself
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
+  // Init alarm blink state
   mcU8Util1 = GLCD_FALSE;
 }
 

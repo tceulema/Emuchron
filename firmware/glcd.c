@@ -25,7 +25,7 @@
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // To optimize lcd access, all relevant data from a single lcd line can be read
-// in first, then processed and then written back to the lcd. The lcdLine[]
+// in first, then processed and then written back to the lcd. The glcdBuffer[]
 // array below is the buffer that will be used for this purpose.
 // This method drastically reduces switching between the read and write modes
 // of the lcd and significantly improves the speed of the lcd api: smoother
@@ -36,7 +36,7 @@ extern volatile uint8_t mcBgColor, mcFgColor;
 // Monochron behaves like a monolithic application except for glcdPutStr() that
 // never requires a buffer anyway.
 // Note: Use glcdBufferRead() to read lcd data into the buffer.
-u08 lcdLine[GLCD_XPIXELS];
+static u08 glcdBuffer[GLCD_XPIXELS];
 
 // The following arrays contain bitmap templates for fill options third up/down
 static u08 pattern3Up[] =
@@ -61,225 +61,174 @@ static u08 fontWidth;
 static u16 fontCharIdx;
 
 // Local function prototypes
+static void glcdBufferBitUpdate(u08 x, u08 y);
 static void glcdBufferRead(u08 x, u08 yByte, u08 len);
-static u08 glcdBufferBitUpdate(u08 x, u08 bit, u08 color);
+static u08 glcdCharWidthGet(char c, u08 *idxOffset);
 static u08 glcdFontByteGet(u08 color);
 static u16 glcdFontIdxGet(unsigned char c);
-static u08 glcdCharWidthGet(char c, u08 *idxOffset);
 
 //
 // Function: glcdCircle2
 //
-// Draw a (dotted) circle centered at px[xCenter,yCenter] with radius in px
+// Draw a (dotted) circle centered at px[xCenter,yCenter] with radius in px.
 //
 void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
 {
-  u08 n;
+  u08 i;
+  u08 j;
   s08 x = 0;
   s08 y = radius;
   s08 tswitch = 3 - 2 * (s08)radius;
   s08 half = 0;
   s08 third = 0;
-  u08 yStart = ((yCenter - radius) >> 3);
-  u08 lineCount = ((yCenter + radius) >> 3) - yStart  + 1;
-  u08 yLine = yStart;
-  u08 line;
+  u08 yLine;
+  u08 yLineEnd = ((yCenter + radius) >> 3);
   u08 xStart;
   u08 xEnd;
-  u08 sectionWrite;
-  u08 mode;
 
   // Set filter for HALF draw mode
   if (lineType == CIRCLE_HALF_U)
     half = 1;
 
-  // Split up the circle generation in circle sections per y-line byte
-  for (line = 0; line < lineCount; line++)
-  {
-    // mode = 0: get x-axis range of current y-line on right side of circle
-    //           by circle section pixels
-    // mode = 1: read line buffer on right side of circle range and apply
-    //           circle section pixels
-    // mode = 2: read line buffer on left side of circle x range and apply
-    //           circle section pixels
-    for (mode = 0; mode < 3; mode++)
-    {
-      // Reset circle generation parameters
-      x = 0;
-      y = radius;
-      third = 0;
-      tswitch = 3 - 2 * (s08)radius;
-      sectionWrite = GLCD_FALSE;
+  // Initialize buffer that stores the template of the circle section to draw
+  for (j = 0; j <= radius; j++)
+    glcdBuffer[GLCD_CONTROLLER_XPIXELS + j] = 0;
 
-      // Specific initializations per mode
-      if (mode == 0)
+  // Split up the circle generation in circle sections per y-line byte
+  for (yLine = ((yCenter - radius) >> 3); yLine <= yLineEnd; yLine++)
+  {
+    // Reset circle generation parameters
+    x = 0;
+    y = radius;
+    third = 0;
+    tswitch = 3 - 2 * (s08)radius;
+    xStart = 255;
+    xEnd = 0;
+
+    // Generate template pixels using the right side of the circle y-line
+    while (x <= y)
+    {
+      if (lineType == CIRCLE_FULL ||
+          (lineType == CIRCLE_THIRD && third == 0) ||
+          (lineType != CIRCLE_THIRD && (x & 0x1) == half))
       {
-        xStart = 255;
-        xEnd = 0;
+        j = GLCD_FALSE;
+        if (((yCenter + y) >> 3) == yLine)
+        {
+          // Mark bottom-right pixel in template
+          j = GLCD_TRUE;
+          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + x, yCenter + y);
+        }
+        if (((yCenter - y) >> 3) == yLine)
+        {
+          // Mark top-right pixel in template
+          j = GLCD_TRUE;
+          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + x, yCenter - y);
+        }
+        if (j == GLCD_TRUE)
+        {
+          // Sync x range scope to process
+          if (xCenter + x < xStart)
+            xStart = xCenter + x;
+          if (xCenter + x > xEnd)
+            xEnd = xCenter + x;
+          j = GLCD_FALSE;
+        }
+        if (((yCenter + x) >> 3) == yLine)
+        {
+          // Mark bottom-right pixel in template
+          j = GLCD_TRUE;
+          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + y, yCenter + x);
+        }
+        if (((yCenter - x) >> 3) == yLine)
+        {
+          // Mark top-right pixel in template
+          j = GLCD_TRUE;
+          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + y, yCenter - x);
+        }
+        if (j == GLCD_TRUE)
+        {
+          // Sync x range scope to process
+          if (xCenter + y < xStart)
+            xStart = xCenter + y;
+          if (xCenter + y > xEnd)
+            xEnd = xCenter + y;
+        }
       }
-      else if (mode == 1)
+
+      // Go to next set of circle dots
+      if (tswitch < 0)
       {
-        // In case no pixels are found (which is possible in case of use of
-        // the HALF or THIRD draw type) then quit this y-line
-        if (xStart == 255)
-          break;
-        // Load line section for right side of circle
-        glcdBufferRead(xStart, yLine, xEnd - xStart + 1);
+        tswitch = tswitch + 4 * x + 6;
       }
       else
       {
-        // Load line section for left side of circle
-        n = xStart;
-        xStart = xCenter - (xEnd - xCenter);
-        xEnd = xCenter - (n - xCenter);
-        glcdBufferRead(xStart, yLine, xEnd - xStart + 1);
+        tswitch = tswitch + 4 * (x - y) + 10;
+        y--;
       }
+      x++;
 
-      while (x <= y)
-      {
-        if (lineType == CIRCLE_FULL ||
-            ((lineType == CIRCLE_HALF_U || lineType == CIRCLE_HALF_E) &&
-             (x & 0x1) == half) ||
-            (lineType == CIRCLE_THIRD && third == 0))
-        {
-          if (((yCenter + y) >> 3) == yLine)
-          {
-            // Bottom left-right pixels based on y
-            if (mode == 0)
-            {
-              // Update lcd range boundaries prior to reading from lcd
-              if (xCenter + x < xStart)
-                xStart = xCenter + x;
-              if (xCenter + x > xEnd)
-                xEnd = xCenter + x;
-            }
-            else if (mode == 1)
-            {
-              // Mark bottom-right pixel in buffer
-              sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter + x - xStart, (yCenter + y) & 0x7,
-                  color);
-            }
-            else
-            {
-              // Mark bottom-left pixel in buffer
-              sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter - xStart - x, (yCenter + y) & 0x7,
-                  color);
-            }
-          }
-          if (((yCenter - y) >> 3) == yLine)
-          {
-            // Top left-right pixels based on y
-            if (mode == 0)
-            {
-              // Update lcd range boundaries prior to reading from lcd
-              if (xCenter + x < xStart)
-                xStart = xCenter + x;
-              if (xCenter + x > xEnd)
-                xEnd = xCenter + x;
-            }
-            else if (mode == 1)
-            {
-              // Mark bottom-right pixel in buffer
-              sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter + x - xStart, (yCenter - y) & 0x7,
-                  color);
-            }
-            else
-            {
-              // Mark bottom-left pixel in buffer
-              sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter - xStart - x, (yCenter - y) & 0x7,
-                  color);
-            }
-          }
-          if (((yCenter + x) >> 3) == yLine)
-          {
-            // Bottom left-right pixels based on x
-            if (mode == 0)
-            {
-              // Update lcd range boundaries prior to reading from lcd
-              if (xCenter + y < xStart)
-                xStart = xCenter + y;
-              if (xCenter + y > xEnd)
-                xEnd = xCenter + y;
-            }
-            else if (mode == 1)
-            {
-              // Mark bottom-right pixel in buffer
-              sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter + y - xStart, (yCenter + x) & 0x7,
-                  color);
-            }
-            else
-            {
-              // Mark bottom-left pixel in buffer
-              sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter - xStart - y, (yCenter + x) & 0x7,
-                  color);
-            }
-          }
-          if (((yCenter - x) >> 3) == yLine)
-          {
-            // Top left-right pixels based on y
-            if (mode == 0)
-            {
-              // Update lcd range boundaries prior to reading from lcd
-              if (xCenter + y < xStart)
-                xStart = xCenter + y;
-              if (xCenter + y > xEnd)
-                xEnd = xCenter + y;
-            }
-            else if (mode == 1)
-            {
-              // Mark bottom-right pixel in buffer
-              sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter + y - xStart, (yCenter - x) & 0x7,
-                  color);
-            }
-            else
-            {
-              // Mark bottom-left pixel in buffer
-              sectionWrite = sectionWrite |
-                glcdBufferBitUpdate(xCenter - xStart - y, (yCenter - x) & 0x7,
-                  color);
-            }
-          }
-        }
-
-        // Go to next set of circle dots
-        if (tswitch < 0)
-        {
-          tswitch = tswitch + 4 * x + 6;
-        }
-        else
-        {
-          tswitch = tswitch + 4 * (x - y) + 10;
-          y--;
-        }
-        x++;
-
-        // Set next offset for THIRD draw type
-        if (third == 2)
-          third = 0;
-        else
-          third++;
-      }
-
-      // If the line buffer is filled and is marked to diff with what's
-      // on the lcd, write its contents back to the lcd
-      if (mode != 0 && sectionWrite == GLCD_TRUE)
-      {
-        // Set lcd cursor and write all lcd bytes back
-        glcdSetAddress(xStart, yLine);
-        for (n = xStart; n <= xEnd; n++)
-          glcdDataWrite(lcdLine[n - xStart]);
-      }
+      // Set next offset for THIRD draw type
+      if (third == 2)
+        third = 0;
+      else
+        third++;
     }
 
-    // Move to next y-line
-    yLine++;
+    // At this point the circle section template for the y-line is generated.
+    // In case the template is empty, which is possible when using the two
+    // HALF draw types, then quit this y-line
+    if (xStart == 255)
+      continue;
+
+    // Load line section for right side of circle y-line
+    glcdBufferRead(xStart, yLine, xEnd - xStart + 1);
+
+    // Map section template onto the right side circle section and write
+    // back to lcd
+    glcdSetAddress(xStart, yLine);
+    j = GLCD_CONTROLLER_XPIXELS + (xStart - xCenter);
+    for (i = 0; i <= xEnd - xStart; i++)
+    {
+      if (color == GLCD_ON)
+        glcdDataWrite(glcdBuffer[i] | glcdBuffer[j]);
+      else
+        glcdDataWrite(glcdBuffer[i] & ~glcdBuffer[j]);
+      j++;
+    }
+
+    // Set adresses for line section for left side of circle y-line
+    j = xStart;
+    xStart = xCenter - (xEnd - xCenter);
+    xEnd = xCenter - (j - xCenter);
+
+    // The top/bottom center pixel has already been drawn
+    j = xEnd;
+    if (j == xCenter)
+      j--;
+
+    // Load lcd line section in buffer and prepare write back
+    if (xStart <= j)
+    {
+      glcdBufferRead(xStart, yLine, j - xStart + 1);
+      glcdSetAddress(xStart, yLine);
+    }
+
+    // Map mirrored section template on left circle section
+    j = GLCD_CONTROLLER_XPIXELS + (xCenter - xStart);
+    for (i = 0; i <= xEnd - xStart; i++)
+    {
+      if (j != GLCD_CONTROLLER_XPIXELS)
+      {
+        if (color == GLCD_ON)
+          glcdDataWrite(glcdBuffer[i] | glcdBuffer[j]);
+        else
+          glcdDataWrite(glcdBuffer[i] & ~glcdBuffer[j]);
+      }
+      // Clear section template for next y-line
+      glcdBuffer[j] = 0;
+      j--;
+    }
   }
 }
 
@@ -296,11 +245,11 @@ void glcdDot(u08 x, u08 y, u08 color)
 
   // Get lcd byte containing the dot
   glcdSetAddress(x, y >> 3);
-  oldByte = glcdDataRead();	// Dummy read
+  glcdDataRead();		// Dummy read
   oldByte = glcdDataRead();	// Read back current value
 
   // Set/clear dot in new lcd byte
-  if (color == ON)
+  if (color == GLCD_ON)
     newByte = (oldByte | mask);
   else
     newByte = (oldByte & ~mask);
@@ -320,7 +269,8 @@ void glcdDot(u08 x, u08 y, u08 color)
 // Draw a filled circle centered at px[xCenter,yCenter] with radius in px
 // Note: fillType FILL_INVERSE is NOT supported
 //
-void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType, u08 color)
+void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
+  u08 color)
 {
   s08 x = 0;
   s08 y = radius;
@@ -334,8 +284,8 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType, u08 col
   // line draw actions in the same area (so, draw the vertical line only
   // once). Consider this an optimization to the core of the tswitch method.
   // Second, an optimization merges multiple vertical line draw actions into
-  // a single rectangle fill draw. This optimization builds on optimizing
-  // the interface to our lcd display and is therefor protocol oriented.
+  // a single rectangle fill draw. This builds on optimizing the interface
+  // to our lcd display and is therefor hardware oriented.
   while (x <= y)
   {
     if (x != y)
@@ -512,7 +462,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType, u08
     {
       // Get lcd source byte when needed
       if (useBuffer == GLCD_TRUE)
-        lcdByte = lcdLine[i];
+        lcdByte = glcdBuffer[i];
 
       // Set template that we have to apply to the lcd byte
       if (fillType == FILL_FULL)
@@ -521,7 +471,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType, u08
         template = 0x00;
       else if (fillType == FILL_HALF)
       {
-        if (color == ON || i == 0)
+        if (color == GLCD_ON || i == 0)
           template = ~template;
       }
       else if (fillType == FILL_THIRDUP)
@@ -532,7 +482,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType, u08
         template = ~lcdByte;
 
       // Depending on the draw color invert the template
-      if (color == OFF && fillType != FILL_INVERSE)
+      if (color == GLCD_OFF && fillType != FILL_INVERSE)
         template = ~template;
 
       // Merge the lcd byte and the template we just made
@@ -612,7 +562,7 @@ u08 glcdGetWidthStr(u08 font, char *data)
     // inverted pixel bytes
     glcdSetAddress(0, y);
     for (x = 0; x < GLCD_XPIXELS; x++)
-      glcdDataWrite(~(lcdLine[x]));
+      glcdDataWrite(~(glcdBuffer[x]));
   }
 }*/
 
@@ -623,152 +573,124 @@ u08 glcdGetWidthStr(u08 font, char *data)
 //
 void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
 {
-  u08 n;
-  u08 mode;
+  u08 n = 0;
+  u08 i;
   s08 deltaX = x2 - x1;
   s08 deltaY = y2 - y1;
   u08 deltaXAbs = (u08)ABS(deltaX);
   u08 deltaYAbs = (u08)ABS(deltaY);
   u08 sgnDeltaX = SIGN(deltaX);
   u08 sgnDeltaY = SIGN(deltaY);
-  u08 x = (deltaYAbs >> 1);
-  u08 y = (deltaXAbs >> 1);
+  u08 modifierX = (deltaYAbs >> 1);
+  u08 modifierY = (deltaXAbs >> 1);
   u08 drawX = x1;
   u08 drawY = y1;
-  u08 yLine;
-  u08 lineCount;
+  u08 yLine = y1 >> 3;
+  u08 lineCount = ABS((y2 >> 3) - yLine) + 1;
   u08 line;
-  u08 lastX = x;
-  u08 lastY = y;
-  u08 lastN = 0;
-  u08 lastDrawX = x1;
-  u08 lastDrawY = y1;
-  u08 xStart, xEnd;
-  u08 sectionWrite;
-  u08 nextY;
+  u08 startX, endX;
+  s08 firstWrite;
+  u08 readByte;
+  u08 finalByte;
+  u08 mode = 1;
+  u08 endValue = deltaYAbs;
 
-  // Find start and end y-line
-  yLine = y1 >> 3;
-  lineCount = ABS((y2 >> 3) - yLine) + 1;
+  // Set selector for line pixel generation
+  if (deltaXAbs >= deltaYAbs)
+  {
+    mode = 0;
+    endValue = deltaXAbs;
+  }
+
+  // Initialize buffer that stores the template of the line section to draw
+  for (i = (x1 <= x2 ? x1 : x2); i <= (x1 >= x2 ? x1 : x2); i++)
+    glcdBuffer[i] = 0;
 
   // Split up the draw line in sections of lcd y-lines
   for (line = 0; line < lineCount; line++)
   {
-    // mode = 0: get x-axis range of current y-line by line section pixels
-    // mode = 1: read line buffer on x-axis range and apply line section pixels
-    for (mode = 0; mode < 2; mode++)
-    {
-      // Restore starting points for the line section
-      x = lastX;
-      y = lastY;
-      drawX = lastDrawX;
-      drawY = lastDrawY;
-      nextY = GLCD_FALSE;
-      sectionWrite = GLCD_FALSE;
+    // Find the x range for the y line section
+    startX = drawX;
+    endX = drawX;
+    firstWrite = -1;
 
+    // Apply the first line section pixel in the line buffer
+    glcdBufferBitUpdate(drawX, drawY);
+
+    // Add points until we find the end of a line or line section
+    while (n < endValue)
+    {
+      // Set x and y draw points for line section pixel
       if (mode == 0)
       {
-        // Find the x range for the y line section
-        xStart = drawX;
-        xEnd = drawX;
-      }
-      else
-      {
-        // Read the line section x range in the line buffer
-        glcdBufferRead(xStart, yLine, xEnd - xStart + 1);
-
-        // Apply the first line section pixel in the line buffer
-        sectionWrite = sectionWrite |
-           glcdBufferBitUpdate(drawX - xStart, drawY & 0x7, color);
-      }
-
-      if (deltaXAbs >= deltaYAbs)
-      {
-        for (n = lastN; n < deltaXAbs; n++)
+        modifierY += deltaYAbs;
+        if (modifierY >= deltaXAbs)
         {
-          // Set x and y draw points for line section pixel
-          y += deltaYAbs;
-          if (y >= deltaXAbs)
-          {
-            y -= deltaXAbs;
-            drawY += sgnDeltaY;
-            if (yLine != (drawY >> 3))
-              nextY = GLCD_TRUE;
-          }
-          drawX += sgnDeltaX;
-
-          // Detect end of line section
-          if (nextY == GLCD_TRUE)
-            break;
-
-          if (mode == 0)
-          {
-            // Update the line section x start and end point
-            if (drawX < xStart)
-              xStart = drawX;
-            if (drawX > xEnd)
-              xEnd = drawX;
-          }
-          else
-          {
-            // Update the line section pixel in the line buffer
-            sectionWrite = sectionWrite |
-              glcdBufferBitUpdate(drawX - xStart, drawY & 0x7, color);
-          }
-        }
-      }
-      else
-      {
-        for (n = lastN; n < deltaYAbs; n++)
-        {
-          // Set x and y draw points for line section pixel
-          x += deltaXAbs;
-          if (x >= deltaYAbs)
-          {
-            x -= deltaYAbs;
-            drawX += sgnDeltaX;
-          }
+          modifierY -= deltaXAbs;
           drawY += sgnDeltaY;
-
-          // Detect end of line section
-          if (yLine != (drawY >> 3))
-            break;
-
-          if (mode == 0)
-          {
-            // Update the line section x start and end point
-            if (drawX < xStart)
-              xStart = drawX;
-            if (drawX > xEnd)
-              xEnd = drawX;
-          }
-          else
-          {
-            // Update the line section pixel in the line buffer
-            sectionWrite = sectionWrite |
-              glcdBufferBitUpdate(drawX - xStart, drawY & 0x7, color);
-          }
         }
+        drawX += sgnDeltaX;
       }
+      else
+      {
+        modifierX += deltaXAbs;
+        if (modifierX >= deltaYAbs)
+        {
+          modifierX -= deltaYAbs;
+          drawX += sgnDeltaX;
+        }
+        drawY += sgnDeltaY;
+      }
+
+      // Detect end of line section
+      if (yLine != (drawY >> 3))
+        break;
+
+      // Update the line section x start and end point
+      if (drawX < startX)
+        startX = drawX;
+      if (drawX > endX)
+        endX = drawX;
+
+      // Update the line section pixel in the line buffer
+      glcdBufferBitUpdate(drawX, drawY);
+      n++;
     }
 
-    // Set starting points for next iteration
-    lastN = n + 1;
-    lastX = x;
-    lastY = y;
-    lastDrawX = drawX;
-    lastDrawY = drawY;
-
-    // All the line section pixels are in the line buffer, so write
-    // it back, when needed
-    if (sectionWrite == GLCD_TRUE)
+    // At this point a linebuffer contains the pixel template for the line
+    // section. Now read all affected lcd pixel bytes and apply template.
+    glcdSetAddress(startX, yLine);
+    for (i = startX; i <= endX; i++)
     {
-      glcdSetAddress(xStart, yLine);
-      for (n = xStart; n <= xEnd; n++)
-        glcdDataWrite(lcdLine[n - xStart]);
+      // Do dummy read when needed and apply template
+      if (i == startX || (i & GLCD_CONTROLLER_XPIXMASK) == 0)
+        glcdDataRead();
+      readByte = glcdDataRead();
+      if (color == GLCD_ON)
+        finalByte = readByte | glcdBuffer[i];
+      else
+        finalByte = readByte & ~glcdBuffer[i];
+
+      // Save final byte while keeping track of first byte changed
+      if (firstWrite == -1 && readByte != finalByte)
+        firstWrite = i;
+      glcdBuffer[i] = finalByte;
+      glcdNextAddress();
     }
 
-    // Set next y line
+    // At this point the linebuffer contains the bytes to write to the lcd.
+    // Write back starting at the first byte that has changed (if any).
+    if (firstWrite >= 0)
+      glcdSetAddress(firstWrite, yLine);
+    for (i = startX; i <= endX; i++)
+    {
+      if (firstWrite >= 0 && i >= firstWrite)
+        glcdDataWrite(glcdBuffer[i]);
+      glcdBuffer[i] = 0;
+    }
+
+    // Starting points for next iteration
+    n = n + 1;
     yLine = yLine + sgnDeltaY;
   }
 }
@@ -938,7 +860,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
 
       // Get lcd byte in case not all 8 pixels are to be processed
       if (lcdPixelsToDo != 8)
-        lcdByte = lcdLine[i];
+        lcdByte = glcdBuffer[i];
 
       // Set the number of bits to process in lcd byte
       lcdPixelsLeft = lcdPixelsToDo;
@@ -1070,11 +992,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
     lcdPixelStart = 7;
   }
 
-  // Loop for each of the character width elements
-  c = data;
-  startChar = c;
-
-  // Loop through each y-pixel byte
+  // Loop through each y-pixel byte bit by bit
   while (h < strHeight)
   {
     // In some cases we partly update an lcd byte
@@ -1104,7 +1022,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
     // consecutive lcd bytes
     glcdSetAddress(xStart, yByte);
 
-    // Start at the current string character and its font byte.
+    // Start at the current string character and its font byte
 
     // Set mask for final build of lcd byte
     mask = (0xff >> (8 - lcdPixelsToDo));
@@ -1122,7 +1040,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
     {
       // Get lcd byte in case not all 8 pixels are to be processed
       if (lcdPixelsToDo != 8)
-        lcdByte = lcdLine[i];
+        lcdByte = glcdBuffer[i];
 
       // Set the number of bits to process in lcd byte
       lcdPixelsLeft = lcdPixelsToDo;
@@ -1264,14 +1182,14 @@ void glcdWriteChar(unsigned char c, u08 color)
   for (i = 0; i < 5; i++)
   {
     fontByte = pgm_read_byte(&Font5x7[(c - 0x20) * 5 + i]);
-    if (color == OFF)
+    if (color == GLCD_OFF)
       glcdDataWrite(~fontByte);
     else
       glcdDataWrite(fontByte);
   }
 
   // Write a spacer line
-  if (color == OFF) 
+  if (color == GLCD_OFF) 
     glcdDataWrite(0xff);
   else 
     glcdDataWrite(0x00);
@@ -1289,39 +1207,9 @@ void glcdWriteCharFg(unsigned char c)
 }
 
 //
-// Function: glcdBufferBitUpdate
-//
-// Update a bit in a line buffer byte and indicate if anything changed
-//
-static u08 glcdBufferBitUpdate(u08 x, u08 bit, u08 color)
-{
-  unsigned char oldByte;
-  unsigned char newByte;
-  u08 mask;
-
-  // Apply the bit in the buffer byte and verify whether it actually requires
-  // a writeback
-  oldByte = lcdLine[x];
-  mask = (1 << bit);
-  if (color == ON)
-    newByte = (oldByte | mask);
-  else
-    newByte = (oldByte & ~mask);
-  if (oldByte != newByte)
-  {
-    // The requested bit differs from the current one
-    lcdLine[x] = newByte;
-    return GLCD_TRUE;
-  }
-
-  // The requested bit remains unchanged
-  return GLCD_FALSE;
-}
-
-//
 // Function: glcdBufferRead
 //
-// Read lcd data from a y byte into buffer lcdLine[]
+// Read lcd data from a y byte into buffer glcdBuffer[]
 //
 static void glcdBufferRead(u08 x, u08 yByte, u08 len)
 {
@@ -1330,7 +1218,7 @@ static void glcdBufferRead(u08 x, u08 yByte, u08 len)
 #ifdef EMULIN
   // Check for buffer read overflow request
   if (len > GLCD_XPIXELS)
-    emuCoreDump(__func__, 0, x, yByte, len);
+    emuCoreDump(ORIGIN_GLCD, __func__, 0, x, yByte, len);
 #endif
 
   // Set cursor on first byte to read
@@ -1341,12 +1229,22 @@ static void glcdBufferRead(u08 x, u08 yByte, u08 len)
     // Do a dummy read on the first read and the first read after switching
     // between controllers. For this refer to the controller specs.
     if (i == 0 || ((x + i) & GLCD_CONTROLLER_XPIXMASK) == 0)
-      lcdLine[i] = glcdDataRead();
+      glcdDataRead();
 
     // Read the lcd byte and move to next cursor address
-    lcdLine[i] = glcdDataRead();
+    glcdBuffer[i] = glcdDataRead();
     glcdNextAddress();
   }
+}
+
+//
+// Function: glcdBufferBitUpdate
+//
+// Update a bit in a line buffer byte
+//
+static void glcdBufferBitUpdate(u08 x, u08 y)
+{
+  glcdBuffer[x] = (glcdBuffer[x] | (1 << (y & 0x7)));
 }
 
 //
@@ -1391,7 +1289,7 @@ static u08 glcdFontByteGet(u08 color)
   }
 
   // In case of reverse color invert font byte
-  if (color == OFF)
+  if (color == GLCD_OFF)
     fontByte = ~fontByte;
 
   return fontByte;

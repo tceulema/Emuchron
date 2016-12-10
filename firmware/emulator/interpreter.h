@@ -97,6 +97,7 @@ typedef struct _cmdInput_t
   FILE *file;				// Input stream (stdin or file)
   char *input;				// Pointer to resulting single input line
   int readMethod;			// Input read method (readline or manual)
+  int initialized;			// Structure initialized indicator
 } cmdInput_t;
 
 // Definition of a structure holding domain info for a command argument

@@ -50,7 +50,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern char animHour[];
@@ -197,10 +196,7 @@ void puzzleInit(u08 mode)
 
   DEBUGP("Init Puzzle");
 
-  // Draw static clock layout
-  glcdClearScreen(mcBgColor);
-
-  // Draw the top row numbers
+  // Draw the top row numbers.
   val[0] = '0';
   val[1] = '\0';
   for (x = 0; x <= 9; x++)
@@ -226,9 +222,6 @@ void puzzleInit(u08 mode)
           PUZZLE_BULB_RADIUS, CIRCLE_FULL, mcFgColor);
     }
   }
-  
-  // Force the alarm info area to init itself
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
 
   // Reset the parameters for the clock/help page
   mcU8Util1 = 0;

@@ -58,11 +58,14 @@ void glcdRectangle(u08 x, u08 y, u08 a, u08 b, u08 color);
 
 // Draw and fill rectangle
 void glcdFillRectangle(u08 x, u08 y, u08 a, u08 b, u08 color);
-void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType, u08 color);
+void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
+  u08 color);
 
 // Draw full/dotted/filled circle of <radius> at <xCenter,yCenter>
-void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color);
-void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType, u08 color);
+void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType,
+  u08 color);
+void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
+  u08 color);
 
 // Write a standard ascii character (values 20-127)
 // to the display at current cursor location
@@ -80,7 +83,8 @@ void glcdPrintNumberFg(u08 n);
 
 // Write a horizontal string at pixel position [x,y]
 u08 glcdPutStr2(u08 x, u08 y, u08 font, char *data, u08 color);
-u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale, u08 color);
+u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
+  u08 color);
 
 // Write a vertical string at pixel position [x,y]
 u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data, 

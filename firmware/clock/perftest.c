@@ -88,8 +88,9 @@
 #ifndef EMULIN
 #include "../util.h"
 #endif
-#include "../ks0108.h"
 #include "../monomain.h"
+#include "../buttons.h"
+#include "../ks0108.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "perftest.h"
@@ -188,8 +189,8 @@ extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
 // The internal RTC clock time and button press indicators
-extern volatile uint8_t new_ts, new_tm, new_th;
-extern volatile uint8_t just_pressed;
+extern volatile rtcDateTime_t rtcDateTimeNext;
+extern volatile uint8_t btnPressed;
 
 // Generic test utility function prototypes
 static u08 perfButtonGet(void);
@@ -277,7 +278,6 @@ void perfInit(u08 mode)
   DEBUGP("Init Perftest");
 
   // Give welcome screen
-  glcdClearScreen(mcBgColor);
   glcdPutStr2(1, 1, FONT_5X5P, "monochron glcd performance test", mcFgColor);
 
 #ifdef EMULIN
@@ -305,12 +305,12 @@ static u08 perfTestCircle2(void)
   button = perfSuiteWelcome("glcdCircle2");
   if (button == 'q')
     return GLCD_TRUE;
-  else if (button != BTTN_PLUS)
+  else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
   // Test 1: Non-overlapping circles, each with different draw types.
   button = perfTestInit("glcdCircle2", 1);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -362,7 +362,7 @@ static u08 perfTestCircle2(void)
   // The circles are identical to the ones drawn in puzzle.c, allowing a
   // good real-life measurement of draw optimizations.
   button = perfTestInit("glcdCircle2", 2);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -428,13 +428,13 @@ static u08 perfTestDot(void)
   button = perfSuiteWelcome("glcdDot");
   if (button == 'q')
     return GLCD_TRUE;
-  else if (button != BTTN_PLUS)
+  else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
   // Test 1: Paint dots where each dot inverts the current color.
   // Will have a 100% lcd byte efficiency.
   button = perfTestInit("glcdDot", 1);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -491,7 +491,7 @@ static u08 perfTestDot(void)
   // Test 2: Paint dots where, on average, each dot is inverted once in
   // every two update cycles.
   button = perfTestInit("glcdDot", 2);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -564,13 +564,13 @@ static u08 perfTestLine(void)
   button = perfSuiteWelcome("glcdLine");
   if (button == 'q')
     return GLCD_TRUE;
-  else if (button != BTTN_PLUS)
+  else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
   // Test 1: Draw analog clock updates. This gives a real-life measurement
   // of draw optimizations.
   button = perfTestInit("glcdLine", 1);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -615,7 +615,7 @@ static u08 perfTestLine(void)
 
   // Test 2: Non-overlapping lines with varying length and draw angle.
   button = perfTestInit("glcdLine", 2);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -683,12 +683,12 @@ static u08 perfTestFillCircle2(void)
   button = perfSuiteWelcome("glcdFillCircle2");
   if (button == 'q')
     return GLCD_TRUE;
-  else if (button != BTTN_PLUS)
+  else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
   // Test 1: Overlapping filled circles, each with different fill types.
   button = perfTestInit("glcdFillCircle2", 1);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -732,7 +732,7 @@ static u08 perfTestFillCircle2(void)
   // The circles are identical to the ones drawn in puzzle.c, allowing a
   // good real-life measurement of draw optimizations.
   button = perfTestInit("glcdFillCircle2", 2);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -806,7 +806,7 @@ static u08 perfTestFillRectangle2(void)
   button = perfSuiteWelcome("glcdFillRectangle2");
   if (button == 'q')
     return GLCD_TRUE;
-  else if (button != BTTN_PLUS)
+  else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
   // Test 1: Replacing filled rectangles of varying size, each with different
@@ -814,7 +814,7 @@ static u08 perfTestFillRectangle2(void)
   // It is the 'c' implementation of the rectangle5.txt test script with a
   // twist on paint color that varies per test cycle.
   button = perfTestInit("glcdFillRectangle2", 1);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -863,7 +863,7 @@ static u08 perfTestFillRectangle2(void)
   // Test 2: Painting large filled rectangles where a first paints a subset
   // area of a second one.
   button = perfTestInit("glcdFillRectangle2", 2);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -915,7 +915,7 @@ static u08 perfTestFillRectangle2(void)
 
   // Test 3: Painting large filled rectangles without any overlap.
   button = perfTestInit("glcdFillRectangle2", 3);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -968,7 +968,7 @@ static u08 perfTestFillRectangle2(void)
   // Only fill using HALF/THIRD to specifically measure the expected
   // improved draw performance of these types in v1.3.
   button = perfTestInit("glcdFillRectangle2", 4);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1022,13 +1022,13 @@ static u08 perfTestPutStr3(void)
   button = perfSuiteWelcome("glcdPutStr3");
   if (button == 'q')
     return GLCD_TRUE;
-  else if (button != BTTN_PLUS)
+  else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
   // Test 1: Draw text lines crossing a y-pixel byte. This is the most common
   // use for this function. Use the 5x7n font.
   button = perfTestInit("glcdPutStr3", 1);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1070,7 +1070,7 @@ static u08 perfTestPutStr3(void)
   // Test 2: Draw text lines with font scaling, causing y-pixel byte crossings
   // and full lcd bytes to be written. Use the 5x7n font.
   button = perfTestInit("glcdPutStr3", 2);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1111,7 +1111,7 @@ static u08 perfTestPutStr3(void)
 
   // Test 3: Draw text lines crossing a y-pixel byte. Use the 5x5p font.
   button = perfTestInit("glcdPutStr3", 3);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1153,7 +1153,7 @@ static u08 perfTestPutStr3(void)
   // Test 4: Draw text lines with font scaling, causing y-pixel byte crossings
   // and full lcd bytes to be written. Use the 5x5p font.
   button = perfTestInit("glcdPutStr3", 4);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1195,7 +1195,7 @@ static u08 perfTestPutStr3(void)
   // Test 5: Draw text lines fitting in a single y-pixel byte.
   // Use the 5x7n font.
   button = perfTestInit("glcdPutStr3", 5);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1254,13 +1254,13 @@ static u08 perfTestPutStr3v(void)
   button = perfSuiteWelcome("glcdPutStr3v");
   if (button == 'q')
     return GLCD_TRUE;
-  else if (button != BTTN_PLUS)
+  else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
   // Test 1: Draw text lines bottom-up without font scaling.
   // This is the most common use for this function. Use font 5x5p.
   button = perfTestInit("glcdPutStr3v", 1);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1303,7 +1303,7 @@ static u08 perfTestPutStr3v(void)
   // Test 2: Draw text lines bottom-up with font scaling.
   // Use font 5x7n.
   button = perfTestInit("glcdPutStr3v", 2);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1346,7 +1346,7 @@ static u08 perfTestPutStr3v(void)
   // Test 3: Draw text lines top-down without font scaling.
   // This is the most common use for this function. Use font 5x7n.
   button = perfTestInit("glcdPutStr3v", 3);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1389,7 +1389,7 @@ static u08 perfTestPutStr3v(void)
   // Test 4: Draw text lines top-down with font scaling.
   // Use font 5x5p.
   button = perfTestInit("glcdPutStr3v", 4);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1449,12 +1449,12 @@ static u08 perfTestPutStr(void)
   button = perfSuiteWelcome("glcdPutStr");
   if (button == 'q')
     return GLCD_TRUE;
-  else if (button != BTTN_PLUS)
+  else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
   // Test 1: Draw text lines, beging the most common use for this function.
   button = perfTestInit("glcdPutStr", 1);
-  while (button == BTTN_PLUS)
+  while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
@@ -1508,8 +1508,8 @@ static u08 perfButtonGet(void)
   u08 button;
 
   // Get and clear (if any) button
-  button = just_pressed;
-  just_pressed = '\0';
+  button = btnPressed;
+  btnPressed = BTN_NONE;
   return button;
 #else
   // Accept any keypress when pressed
@@ -1541,28 +1541,28 @@ static u08 perfButtonWait(u08 type)
 #endif
 
   // Clear any button pressed and wait for button
-  just_pressed = 0;
+  btnPressed = BTN_NONE;
 
 #ifndef EMULIN
   // Get any button from Monochron
-  while (just_pressed == 0);
-  button = just_pressed;
-  just_pressed = 0;
+  while (btnPressed == BTN_NONE);
+  button = btnPressed;
+  btnPressed = BTN_NONE;
 #else
   // Get +,s,m,q, others default to MENU button
-  char ch = kbWaitKeypress(GLCD_FALSE);
+  char ch = waitKeypress(GLCD_FALSE);
   if (ch >= 'A' && ch <= 'Z')
     ch = ch - 'A' + 'a';
   if (ch == '+')
-    button = BTTN_PLUS;
+    button = BTN_PLUS;
   else if (ch == 's')    
-    button = BTTN_SET;
+    button = BTN_SET;
   else if (ch == 'm')    
-    button = BTTN_MENU;
+    button = BTN_MENU;
   else if (ch == 'q')
     button = 'q';
   else
-    button = BTTN_MENU;
+    button = BTN_MENU;
 #endif
 
   return button;
@@ -1641,10 +1641,10 @@ static void perfTestBegin(void)
   testStats.elementsDrawn = 0;
 
   // Mark test start time
-  mchronTimeInit();
-  testStats.startSec = new_ts;
-  testStats.startMin = new_tm;
-  testStats.startHour = new_th;
+  rtcMchronTimeInit();
+  testStats.startSec = rtcDateTimeNext.timeSec;
+  testStats.startMin = rtcDateTimeNext.timeMin;
+  testStats.startHour = rtcDateTimeNext.timeHour;
 }
 
 //
@@ -1658,13 +1658,13 @@ static u08 perfTestEnd(u08 interruptTest)
   u08 length;
 
   // Clear any button press
-  just_pressed = 0;
+  btnPressed = BTN_NONE;
 
   // Mark test end time
-  mchronTimeInit();
-  testStats.endSec = new_ts;
-  testStats.endMin = new_tm;
-  testStats.endHour = new_th;
+  rtcMchronTimeInit();
+  testStats.endSec = rtcDateTimeNext.timeSec;
+  testStats.endMin = rtcDateTimeNext.timeMin;
+  testStats.endHour = rtcDateTimeNext.timeHour;
 
 #ifdef EMULIN
   // In case we're using glut, give the lcd device some time to catch up

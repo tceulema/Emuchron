@@ -7,7 +7,7 @@
 #define QR_H
 
 // The number of clock cycles needed to create and display a QR
-#define QR_GEN_CYCLES	6
+#define QR_GEN_CYCLES	5
 
 // QR clock
 void qrCycle(void);

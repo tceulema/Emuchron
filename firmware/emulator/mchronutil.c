@@ -27,15 +27,15 @@
 #include "mchronutil.h"
 
 // Monochron defined data
-extern volatile uint8_t time_event;
-extern volatile uint8_t time_s, time_m, time_h;
-extern volatile uint8_t date_d, date_m, date_y;
-extern volatile uint8_t new_ts;
+extern volatile rtcDateTime_t rtcDateTime;
+extern volatile rtcDateTime_t rtcDateTimeNext;
+extern volatile uint8_t rtcTimeEvent;
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
+extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
 
@@ -54,7 +54,7 @@ extern uint8_t emuAlarmH;
 extern uint8_t emuAlarmM;
 
 // Debug file
-extern FILE *debugFile;
+extern FILE *stubDebugStream;
 
 // The command line input stream control structure
 extern cmdInput_t cmdInput;
@@ -92,7 +92,6 @@ int emuArgcArgvGet(int argc, char *argv[])
   char *tty = emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty;
 
   // Init references to command line argument positions
-  emuArgcArgv.argBacklight = 0;
   emuArgcArgv.argDebug = 0;
   emuArgcArgv.argGlutGeometry = 0;
   emuArgcArgv.argGlutPosition = 0;
@@ -103,7 +102,6 @@ int emuArgcArgvGet(int argc, char *argv[])
   emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_FALSE;
   emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_TRUE;
   emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty[0] = '\0';
-  emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.useBacklight = GLCD_FALSE;
   emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.winClose = emuWinClose;
   emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posX = 100;
   emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posY = 100;
@@ -115,21 +113,7 @@ int emuArgcArgvGet(int argc, char *argv[])
   // lcd output configs and debug logfile 
   while (argCount < argc)
   {
-    if (strncmp(argv[argCount], "-b", 2) == 0)
-    {
-      // Ncurses backlight support
-      if (argv[argCount][2] == ' ' || argv[argCount][2] == '\0')
-      {
-        emuArgcArgv.argBacklight = argCount;
-        argCount = argCount + 1;
-      }
-      else
-      {
-        emuArgcArgv.argBacklight = -1;
-        break;
-      }
-    }
-    else if (strncmp(argv[argCount], "-d", 4) == 0)
+    if (strncmp(argv[argCount], "-d", 4) == 0)
     {
       // Debug output file name
       emuArgcArgv.argDebug = argCount + 1;
@@ -168,13 +152,12 @@ int emuArgcArgvGet(int argc, char *argv[])
   }
 
   // Check result of command line processing
-  if (emuArgcArgv.argBacklight == -1 || emuArgcArgv.argLcdType >= argc ||
-      emuArgcArgv.argDebug >= argc || emuArgcArgv.argGlutGeometry >= argc ||
-      emuArgcArgv.argTty >= argc || emuArgcArgv.argGlutPosition >= argc)
+  if (emuArgcArgv.argLcdType >= argc || emuArgcArgv.argDebug >= argc ||
+      emuArgcArgv.argGlutGeometry >= argc || emuArgcArgv.argTty >= argc ||
+      emuArgcArgv.argGlutPosition >= argc)
   {
     printf("Use: %s [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]\n", __progname);
-    printf("            [-d <logfile>] [-b] [-h]\n");
-    printf("  -b            - Backlight support in ncurses terminal\n");
+    printf("            [-d <logfile>] [-h]\n");
     printf("  -d <logfile>  - Debug logfile name\n");
     printf("  -g <geometry> - Geometry (x,y) of glut window\n");
     printf("                  Default: \"520x264\"\n");
@@ -194,10 +177,6 @@ int emuArgcArgvGet(int argc, char *argv[])
     printf("  ./%s -l ncurses -t /dev/pts/1 -d debug.log\n", __progname);
     return CMD_RET_ERROR;
   }
-
-  // Validate support for backlight in ncurses window
-  if (emuArgcArgv.argBacklight > 0)
-    emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.useBacklight = GLCD_TRUE;
 
   // Validate lcd stub output device
   if (emuArgcArgv.argLcdType > 0)
@@ -360,8 +339,8 @@ void emuClockRelease(int echoCmd)
   mcMchronClock = 0;
 
   // Kill alarm (if sounding anyway) and reset it
-  alarmSoundKill();
-  alarmClear();
+  alarmSoundStop();
+  alarmSoundReset();
 }
 
 //
@@ -390,27 +369,18 @@ void emuClockUpdate(void)
     int i;
 
     for (i = 0; i < QR_GEN_CYCLES; i++)
-    {
       animClockDraw(DRAW_CYCLE);
-      if (i == 0)
-      {
-        mcClockTimeEvent = GLCD_FALSE;
-        DEBUGP("Clear time event");
-      }
-    }
   }
   else
   {
     // For a clock by default a single clock cycle is needed
     // to update its layout
     animClockDraw(DRAW_CYCLE);
-    mcClockTimeEvent = GLCD_FALSE;
-    DEBUGP("Clear time event");
   }
 
   // Update clock layout
   ctrlLcdFlush();
-  time_event = GLCD_FALSE;
+  rtcTimeEvent = GLCD_FALSE;
 }
 
 //
@@ -430,29 +400,49 @@ u08 emuColorGet(char colorId)
 //
 // Function: emuCoreDump
 //
-// There's something terribly wrong in the graphics interface. It is usually
-// caused by bad functional clock code or a bad mchron command line request
-// that tries to do stuff outside the boundaries of a buffer or lcd display.
+// There's something terribly wrong in Emuchron. It may be caused by bad
+// (functional clock) code, a bad mchron command line request or a bug in
+// the Emuchron emulator.
 // Provide some feedback and generate a coredump file (when enabled).
 // Note: A graceful environment shutdown is taken care of by the SIGABRT
 // signal handler, invoked by abort().
 // Note: In order to get a coredump file it requires to run shell command 
 // "ulimit -c unlimited" once in the mchron shell.
 //
-void emuCoreDump(const char *location, u08 controller, u08 x, u08 y, u08 data)
+void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
+  int arg3, int arg4)
 {
-  // Provide feedback
-  // Note: y = vertical lcd byte location (0..7)
-  printf("\n*** invalid graphics api request in %s()\n", location);
-  printf("api info (controller:x:y:data) = (%d:%d:%d:%d)\n",
-    (int)controller, (int)x, (int)y, (int)data);
+  if (origin == ORIGIN_GLCD)
+  {
+    // Error in the glcd interface
+    // Note: y = vertical lcd byte location (0..7)
+    printf("\n*** invalid graphics api request in %s()\n", location);
+    printf("api info (controller:x:y:data) = (%d:%d:%d:%d)\n",
+      arg1, arg2, arg3, arg4);
+  }
+  else if (origin == ORIGIN_CTRL)
+  {
+    // Error in the controller interface
+    printf("\n*** invalid controller api request in %s()\n", location);
+    printf("api info (method/data)= %d\n", arg1);
+  }
+  else if (origin == ORIGIN_EEPROM)
+  {
+    // Error in the eeprom interface
+    printf("\n*** invalid eeprom api request in %s()\n", location);
+    printf("api info (address)= %d\n", arg1);
+  }
+
+  // Dump all Monochron variables. Might be useful.
   printf("*** registered variables\n");
   varPrint("", "*");
+
+  // Stating the obvious
   printf("*** debug by loading coredump file (when created) in a debugger\n");
 
   // Switch back to regular keyboard input mode and kill audible sound (if any)
   kbModeSet(KB_MODE_LINE);
-  alarmSoundKill();
+  alarmSoundStop();
 
   // Depending on the lcd device(s) used we'll see the latest image or not.
   // In case we're using ncurses, regardless with or without glut, flush the
@@ -472,7 +462,7 @@ void emuCoreDump(const char *location, u08 controller, u08 x, u08 y, u08 data)
   {
     // Have end-user confirm abort, allowing a screendump to be made prior to
     // actual coredump
-    kbWaitKeypress(GLCD_FALSE);
+    waitKeypress(GLCD_FALSE);
   }
 
   // Cleanup command line read interface, forcing the readline history (when
@@ -614,10 +604,10 @@ int emuLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
   }
   else
   {
-    // The remaining control block type are invalid on the command line
-    // as they need to link to a repeat-for or if-then command. As
-    // such, they can only be entered via multi line keyboard input or
-    // a command file.
+    // All other control block types are invalid on the command line
+    // as they need to link to either a repeat-for or if-then command.
+    // As such, they can only be entered via multi line keyboard input
+    // or a command file.
     printf("%s? cannot match this command: %s\n", argCmd[0].argName,
       argWord[0]);
     retVal = CMD_RET_ERROR;
@@ -744,8 +734,8 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
 //
 void emuLogfileClose(void)
 {
-  if (debugFile != NULL)
-    fclose(debugFile);
+  if (stubDebugStream != NULL)
+    fclose(stubDebugStream);
 }
 
 //
@@ -763,8 +753,8 @@ void emuLogfileOpen(char fileName[])
   }
   else
   {
-    debugFile = fopen(fileName, "a");
-    if (debugFile == NULL)
+    stubDebugStream = fopen(fileName, "a");
+    if (stubDebugStream == NULL)
     {
       // Something went wrong opening the logfile
       printf("Cannot open debug output file \"%s\".\n", fileName);
@@ -772,7 +762,7 @@ void emuLogfileOpen(char fileName[])
     else
     {
       // Disable buffering so we can properly 'tail -f' the file
-      setbuf(debugFile, NULL);
+      setbuf(stubDebugStream, NULL);
       DEBUGP("**** logging started");
     }
   }
@@ -815,7 +805,7 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
   {
     // Keyboard: "^C"
     kbModeSet(KB_MODE_LINE);
-    alarmSoundKill();
+    alarmSoundStop();
     invokeExit = GLCD_TRUE;
     printf("\n<ctrl>c - interrupt\n");
     exit(-1);
@@ -824,7 +814,7 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
   {
     // Keyboard: "^Z"
     kbModeSet(KB_MODE_LINE);
-    alarmSoundKill();
+    alarmSoundStop();
     invokeExit = GLCD_TRUE;
     printf("\n<ctrl>z - stop\n");
     exit(-1);
@@ -834,7 +824,7 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
     struct sigaction sigAction;
 
     kbModeSet(KB_MODE_LINE);
-    alarmSoundKill();
+    alarmSoundStop();
     invokeExit = GLCD_TRUE;
 
     // We must clear the sighandler for SIGABRT or else we'll get an
@@ -917,11 +907,16 @@ int emuStartModeGet(char startId)
 //
 // Print the time/date/alarm
 //
-void emuTimePrint(void)
+void emuTimePrint(int type)
 {
-  printf("time   : %02d:%02d:%02d (hh:mm:ss)\n", time_h, time_m, time_s);
-  printf("date   : %02d/%02d/%04d (dd/mm/yyyy)\n", date_d, date_m, date_y + 2000);
-  printf("alarm  : %02d:%02d (hh:mm)\n", emuAlarmH, emuAlarmM);
+  printf("time   : %02d:%02d:%02d (hh:mm:ss)\n", rtcDateTime.timeHour,
+    rtcDateTime.timeMin, rtcDateTime.timeSec);
+  printf("date   : %02d/%02d/%04d (dd/mm/yyyy)\n", rtcDateTime.dateDay,
+    rtcDateTime.dateMon, rtcDateTime.dateYear + 2000);
+  if (type == ALM_EMUCHRON)
+    printf("alarm  : %02d:%02d (hh:mm)\n", emuAlarmH, emuAlarmM);
+  else
+    printf("alarm  : %02d:%02d (hh:mm)\n", mcAlarmH, mcAlarmM);
   alarmSwitchShow();
 }
 
@@ -932,10 +927,10 @@ void emuTimePrint(void)
 //
 void emuTimeSync(void)
 {
-  new_ts = 60;
+  rtcDateTimeNext.timeSec = 60;
   DEBUGP("Clear time event");
-  time_event = GLCD_FALSE;
-  mchronTimeInit();
+  rtcTimeEvent = GLCD_FALSE;
+  rtcMchronTimeInit();
 }
 
 //
@@ -956,7 +951,7 @@ void emuTimeSync(void)
 void emuWinClose(void)
 {
   kbModeSet(KB_MODE_LINE);
-  alarmSoundKill();
+  alarmSoundStop();
   cmdInputCleanup(&cmdInput);
   if (invokeExit == GLCD_FALSE)
   {

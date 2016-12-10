@@ -16,20 +16,20 @@
 #include "varutil.h"
 
 // A structure to hold runtime information for a named numeric variable
-typedef struct _variable_t
+typedef struct _varVariable_t
 {
   char *name;			// Variable name
   int active;			// Whether variable is in use
   double varValue;		// The current numeric value of the variable
-  struct _variable_t *prev;	// Pointer to preceding bucket member
-  struct _variable_t *next;	// Pointer to next bucket member
-} variable_t;
+  struct _varVariable_t *prev;	// Pointer to preceding bucket member
+  struct _varVariable_t *next;	// Pointer to next bucket member
+} varVariable_t;
 
 // A structure to hold a list of numeric variables
 typedef struct _varBucket_t
 {
   int count;			// Number of bucket members
-  struct _variable_t *var;	// Pointer to first bucket member
+  struct _varVariable_t *var;	// Pointer to first bucket member
 } varBucket_t;
 
 // The administration of mchron variables.
@@ -52,7 +52,7 @@ static varBucket_t varBucket[VAR_BUCKETS];
 static int varCount = 0;
 
 // Local function prototypes
-static int varPrintValue(char *var, double value, int detail);
+static int varValPrint(char *var, double value, int detail);
 
 //
 // Function: varClear
@@ -65,7 +65,7 @@ int varClear(char *argName, char *var)
   int bucketId;
   int bucketListId;
   int i = 0;
-  variable_t *delVar;
+  varVariable_t *delVar;
 
   varId = varIdGet(var);
   if (varId == -1)
@@ -119,8 +119,8 @@ int varIdGet(char *var)
   int found = GLCD_FALSE;
   int compare = 0;
   int i = 0;
-  variable_t *checkVar;
-  variable_t *myVar;
+  varVariable_t *checkVar;
+  varVariable_t *myVar;
 
   // Create a simple hash of first and optionally second character of
   // var name to obtain a variable bucket number
@@ -181,7 +181,7 @@ int varIdGet(char *var)
     }
 
     // Add variable to end of the bucket list
-    myVar = malloc(sizeof(variable_t));
+    myVar = malloc(sizeof(varVariable_t));
     myVar->name = malloc(strlen(var) + 1);
     strcpy(myVar->name, var);
     myVar->active = GLCD_FALSE;
@@ -254,8 +254,8 @@ int varPrint(char *argName, char *var)
     if (varCount != 0)
     {
       // Get pointers to all variables and then sort them
-      variable_t *myVar;
-      variable_t *varSort[varCount];
+      varVariable_t *myVar;
+      varVariable_t *varSort[varCount];
 
       for (i = 0; i < VAR_BUCKETS; i++)
       {
@@ -293,7 +293,7 @@ int varPrint(char *argName, char *var)
         {
           varInUse++;
           spaceCount = spaceCount +
-            varPrintValue(varSort[i]->name, varSort[i]->varValue, GLCD_FALSE);
+            varValPrint(varSort[i]->name, varSort[i]->varValue, GLCD_FALSE);
           if (spaceCount % 10 != 0)
           {
             printf("%*s", 10 - spaceCount % 10, "");
@@ -334,22 +334,11 @@ int varPrint(char *argName, char *var)
       return CMD_RET_ERROR;
 
     // Print var value
-    varPrintValue(var, varValue, GLCD_TRUE);
+    varValPrint(var, varValue, GLCD_TRUE);
     printf("\n");
   }
 
   return CMD_RET_OK;
-}
-
-//
-// Function: varPrintValue
-//
-// Print a single variable value and return the length
-// of the printed string
-//
-static int varPrintValue(char *var, double value, int detail)
-{
-  return printf("%s=", var) + cmdArgValuePrint(value, detail);
 }
 
 //
@@ -360,13 +349,13 @@ static int varPrintValue(char *var, double value, int detail)
 void varReset(void)
 {
   int i = 0;
-  variable_t *delVar;
-  variable_t *nextVar;
+  varVariable_t *delVar;
+  varVariable_t *nextVar;
 
   // Clear each bucket
   for (i = 0; i < VAR_BUCKETS; i++)
   {
-    // Clear all variable in bucket
+    // Clear all variables in bucket
     nextVar = varBucket[i].var;
     while (nextVar != NULL)
     {
@@ -391,7 +380,7 @@ double varValGet(int varId, int *varError)
   int bucketId;
   int bucketListId;
   int i = 0;
-  variable_t *myVar;
+  varVariable_t *myVar;
 
   // Check if we have a valid id
   if (varId < 0)
@@ -421,6 +410,16 @@ double varValGet(int varId, int *varError)
 }
 
 //
+// Function: varValPrint
+//
+// Print a single variable value and return the length of the printed string
+//
+static int varValPrint(char *var, double value, int detail)
+{
+  return printf("%s=", var) + cmdArgValuePrint(value, detail);
+}
+
+//
 // Function: varValSet
 //
 // Set the value of a named variable using its id.
@@ -440,7 +439,7 @@ double varValSet(int varId, double value)
     int bucketId;
     int bucketListId;
     int i = 0;
-    variable_t *myVar;
+    varVariable_t *myVar;
 
     // Get reference to variable
     bucketId = varId & VAR_BUCKETS_MASK;

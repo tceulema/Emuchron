@@ -108,25 +108,20 @@ void spotAxisInit(u08 clockId)
 
     // Draw y-axis value 10 markers
     for (i = 24; i <= 54; i = i + 5)
-    {
       glcdDot(7, i, mcFgColor);
-    }
   }
 
   // Draw clock dependent things and setup coordinates for axis labels
   if (clockId == CHRON_CASCADE)
   {
-    // Cascade
     xs = 75; xh = 13; y = 58;
   }
   else if (clockId == CHRON_TRAFLIGHT)
   {
-    // Trafficlight
     xs = 78; xh = 10; y = 58;
   }
-  else // clockId == CHRON_SPEEDDIAL
+  else
   {
-    // Speeddial
     xs = 78; xh = 10; y = 54;
   }
 
@@ -188,10 +183,8 @@ void spotBarUpdate(u08 x, u08 y, u08 maxVal, u08 maxHeight, u08 width,
 
   // Clear what was above it (if any)
   if (oldBarHeight > newBarHeight)
-  {
     glcdFillRectangle(x, y - oldBarHeight + valYOffset, width,
       oldBarHeight - newBarHeight, mcBgColor);
-  }
 }
 
 //
@@ -220,7 +213,6 @@ void spotCommonInit(char *label, u08 mode)
   else
   {
     // Full init: start from scratch
-    glcdClearScreen(mcBgColor);
 
     // Draw main lines for menu bar, vis title bar and filter panel
     glcdFillRectangle(0, 7, GLCD_XPIXELS, 1, mcFgColor);
@@ -258,9 +250,6 @@ void spotCommonInit(char *label, u08 mode)
         FP_Y_START + i * FP_Y_OFFSET_SIZE + FP_RS_Y_OFFSET, FP_RS_WIDTH,
         FP_RS_HEIGHT, mcFgColor);
     }
-
-    // Force the alarm info area to init itself in the Title bar
-    mcAlarmSwitch = ALARM_SWITCH_NONE;
   }
 }
 

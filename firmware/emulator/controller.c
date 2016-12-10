@@ -5,8 +5,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "../monomain.h"
 #include "../ks0108.h"
-#include "../config.h"
 #include "mchronutil.h"
 #include "controller.h"
 
@@ -74,9 +74,9 @@ extern uint16_t OCR2B;
 // - Write data to controller lcd using cursor
 //
 // This module only takes indirectly care of displaying the lcd data. The main
-// function is to implement an emulated lcd controller. The result of a controller
-// machine event however is forwarded via this module to each of the active lcd
-// devices, each holding a private copy of the lcd image data.
+// function is to implement an emulated lcd controller. The result of a
+// controller machine event however is forwarded via this module to each of the
+// active lcd devices, each holding a private copy of the lcd image data.
 //
 // This module is setup such that a single state-event machine is supported
 // that emulates a set of two lcd controllers.
@@ -144,6 +144,12 @@ extern uint16_t OCR2B;
 // - At the end of a controller line at position 63, the x cursor resets to
 //   position 0. In other words: resets to the beginning of the same y page.
 //
+
+// The controller commands (in addition to lcd read and write commands)
+#define CTRL_CMD_DISPLAY	0	// Set display on/off
+#define CTRL_CMD_COLUMN		1	// Set cursor x column
+#define CTRL_CMD_PAGE		2	// Set cursor y page
+#define CTRL_CMD_START_LINE	3	// Set display start line
 
 // The controller states
 #define CTRL_STATE_CURSOR	0	// Cursor has been set (initial state)
@@ -406,7 +412,7 @@ u08 ctrlExecute(u08 method, u08 controller, u08 data)
   else
   {
     // Invalid action method
-    emuCoreDump(__func__, 0, 0, 0, method);
+    emuCoreDump(ORIGIN_CTRL, __func__, method, 0, 0, 0);
   }
 
   // Dump controller request
@@ -577,7 +583,7 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
   else
   {
     // Invalid command
-    emuCoreDump(__func__, 0, 0, 0, data);
+    emuCoreDump(ORIGIN_CTRL, __func__, data, 0, 0, 0);
     // We will not get here (dummy return)
     return 0;
   }
@@ -634,29 +640,16 @@ u08 ctrlInit(ctrlDeviceArgs_t ctrlDeviceArgs)
 }
 
 //
-// Function: ctrlRegisterGet
-//
-// Get a copy of the controller registers
-//
-void ctrlRegisterGet(u08 controller, ctrlRegister_t *ctrlRegisterCopy)
-{
-  ctrlController_t *ctrlController = &ctrlControllers[controller];
-
-  memcpy(ctrlRegisterCopy, &ctrlController->ctrlRegister,
-    sizeof(ctrlRegister_t));
-}
-
-//
 // Function: ctrlCleanup
 //
 // Shut down the lcd display in stub device
 //
 void ctrlCleanup(void)
 {
-  if (useGlut == GLCD_TRUE)
-    lcdGlutCleanup();
   if (useNcurses == GLCD_TRUE)
     lcdNcurCleanup();
+  if (useGlut == GLCD_TRUE)
+    lcdGlutCleanup();
 }
 
 //
@@ -684,7 +677,17 @@ void ctrlLcdFlush(void)
     lcdGlutFlush();
   if (useNcurses == GLCD_TRUE)
     lcdNcurFlush();
-  return;
+}
+
+//
+// Function: ctrlLcdNcurBLSet
+//
+// Enable/disable ncurses backlight support
+//
+void ctrlLcdNcurBLSet(u08 support)
+{
+  if (useNcurses == GLCD_TRUE)
+    lcdNcurBacklight((unsigned char)support);
 }
 
 //
@@ -784,7 +787,6 @@ void ctrlStatsPrint(int type)
     if (useNcurses == GLCD_TRUE)
       lcdNcurStatsPrint();
   }
-  return;
 }
 
 //
@@ -817,7 +819,5 @@ void ctrlStatsReset(int type)
     if (useNcurses == GLCD_TRUE)
       lcdNcurStatsReset();
   }
-
-  return;
 }
 

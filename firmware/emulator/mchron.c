@@ -9,14 +9,17 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 // Monochron defines
-#include "../ks0108.h"
 #include "../monomain.h"
+#include "../buttons.h"
+#include "../ks0108.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "../config.h"
+#include "../alarm.h"
 
 // Monochron clocks
 #include "../clock/analog.h"
@@ -53,7 +56,7 @@
 #define TO_UINT16_T(d)	((uint16_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 
 // Monochron defined data
-extern volatile uint8_t time_event;
+extern volatile uint8_t animDisplayMode;
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -64,6 +67,8 @@ extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern clockDriver_t *mcClockPool;
+extern clockDriver_t monochron[];
+extern volatile uint8_t rtcTimeEvent;
 
 // The variables that store the processed command line arguments
 extern char argChar[];
@@ -109,11 +114,14 @@ uint8_t emuAlarmM = 9;
 // Current command file execution depth
 int fileExecDepth = 0;
 
+// The timer used for the 'we' and 'ws' commands
+struct timeval tvTimer;
+
 // The emulator background/foreground color of the lcd display and backlight
-// OFF = 0 = black color (=0x0 bit value in lcd memory)
-// ON  = 1 = white color (=0x1 bit value in lcd memory)
-static u08 emuBgColor = OFF;
-static u08 emuFgColor = ON;
+// GLCD_OFF = 0 = black color (=0x0 bit value in lcd memory)
+// GLCD_ON  = 1 = white color (=0x1 bit value in lcd memory)
+static u08 emuBgColor = GLCD_OFF;
+static u08 emuFgColor = GLCD_ON;
 static u08 emuBacklight = 16;
 
 // The clocks supported in the mchron clock test environment.
@@ -175,10 +183,6 @@ int main(int argc, char *argv[])
   }
 #endif
 
-  // Force first time init Monochron eeprom
-  stubEepromReset();
-  init_eeprom();
-
   // Init the lcd color modes
   mcBgColor = emuBgColor;
   mcFgColor = emuFgColor;
@@ -226,17 +230,22 @@ int main(int argc, char *argv[])
 
   // Init the stubbed alarm switch to 'Off' and clear audible alarm
   alarmSwitchSet(GLCD_FALSE, GLCD_FALSE);
-  alarmSoundKill();
+  alarmSoundStop();
 
-  // Init emuchron system clock and report time+date+alarm
-  readi2ctime();
-  emuTimePrint();
+  // Init emuchron system clock + clock plugin time, then print it
+  rtcTimeInit();
+  rtcMchronTimeInit();
+  emuTimePrint(ALM_EMUCHRON);
 
-  // Init functional clock plugin time
-  mchronTimeInit();
-
-  // Initialize mchron named variable buckets
+  // Init mchron named variable buckets
   varInit();
+
+  // Init Monochron eeprom
+  stubEepReset();
+  eepInit();
+
+  // Init mchron wait expiry timer
+  waitTimerStart(&tvTimer);
 
   // Init the command line input interface
   cmdInput.file = stdin;
@@ -286,7 +295,7 @@ int main(int argc, char *argv[])
 
   // Shutdown gracefully by killing audio and stopping the controller
   // and lcd device(s)
-  alarmSoundKill();
+  alarmSoundStop();
   ctrlCleanup();
   
   // Stop debug output 
@@ -341,7 +350,7 @@ int doAlarmPos(cmdLine_t *cmdLine)
   // Update clock when active
   if (mcClockPool[mcMchronClock].clockId != CHRON_NONE)
   {
-    alarmStateSet();
+    almStateSet();
     animClockDraw(DRAW_CYCLE);
     ctrlLcdFlush();
   }
@@ -350,8 +359,8 @@ int doAlarmPos(cmdLine_t *cmdLine)
   if (echoCmd == CMD_ECHO_YES)
   {
     // Report current time+date+alarm
-    readi2ctime();
-    emuTimePrint();
+    rtcTimeRead();
+    emuTimePrint(ALM_EMUCHRON);
   }
 
   return CMD_RET_OK;
@@ -391,10 +400,10 @@ int doAlarmSet(cmdLine_t *cmdLine)
       // switch twice. Note: This may cause a slight blink in the alarm
       // area when using the glut lcd device.
       alarmSwitchToggle(GLCD_FALSE);
-      alarmStateSet();
+      almStateSet();
       animClockDraw(DRAW_CYCLE);
       alarmSwitchToggle(GLCD_FALSE);
-      alarmStateSet();
+      almStateSet();
       animClockDraw(DRAW_CYCLE);
     }
     else
@@ -409,8 +418,8 @@ int doAlarmSet(cmdLine_t *cmdLine)
   if (echoCmd == CMD_ECHO_YES)
   {
     // Report current time+date+alarm
-    readi2ctime();
-    emuTimePrint();
+    rtcTimeRead();
+    emuTimePrint(ALM_EMUCHRON);
   }
 
   return CMD_RET_OK;
@@ -429,7 +438,7 @@ int doAlarmToggle(cmdLine_t *cmdLine)
   // Update clock when active
   if (mcClockPool[mcMchronClock].clockId != CHRON_NONE)
   {
-    alarmStateSet();
+    almStateSet();
     animClockDraw(DRAW_CYCLE);
     ctrlLcdFlush();
   }
@@ -438,8 +447,8 @@ int doAlarmToggle(cmdLine_t *cmdLine)
   if (echoCmd == CMD_ECHO_YES)
   {
     // Report current time+date+alarm
-    readi2ctime();
-    emuTimePrint();
+    rtcTimeRead();
+    emuTimePrint(ALM_EMUCHRON);
   }
 
   return CMD_RET_OK;
@@ -486,7 +495,7 @@ int doClockFeed(cmdLine_t *cmdLine)
 
   // Init alarm and functional clock time
   mcAlarming = GLCD_FALSE;
-  mchronTimeInit();
+  rtcMchronTimeInit();
 
   // Init stub event handler used in main loop below
   stubEventInit(startMode, stubHelpClockFeed);
@@ -494,25 +503,17 @@ int doClockFeed(cmdLine_t *cmdLine)
   // Run clock until 'q'
   while (ch != 'q')
   {
-    // Get timer event and execute clock cycle
+    // Get timer event
     ch = stubEventGet();
 
     // Process keyboard events
     if (ch == 's')
-      animClockButton(BTTN_SET);
+      animClockButton(BTN_SET);
     if (ch == '+')
-      animClockButton(BTTN_PLUS);
+      animClockButton(BTN_PLUS);
 
     // Execute a clock cycle for the clock
-    mcClockTimeEvent = time_event;
     animClockDraw(DRAW_CYCLE);
-    ctrlLcdFlush();
-    if (mcClockTimeEvent == GLCD_TRUE)
-    {
-      DEBUGP("Clear time event");
-      mcClockTimeEvent = GLCD_FALSE;
-      time_event = GLCD_FALSE;
-    }
 
     // Just processed another cycle
     mcCycleCounter++;
@@ -523,8 +524,8 @@ int doClockFeed(cmdLine_t *cmdLine)
     kbModeSet(KB_MODE_LINE);
 
   // Kill alarm (if sounding anyway) and reset it
-  alarmSoundKill();
-  alarmClear();
+  alarmSoundStop();
+  alarmSoundReset();
 
   return CMD_RET_OK;
 }
@@ -554,12 +555,11 @@ int doClockSelect(cmdLine_t *cmdLine)
   }
   else
   {
-    // Switch to new clock
-    alarmSoundKill();
-    mcClockTimeEvent = GLCD_TRUE;
+    // Switch to new clock: init and do first clock cycle
+    alarmSoundStop();
     mcMchronClock = clock;
     mcAlarmSwitch = ALARM_SWITCH_NONE;
-    alarmStateSet();
+    almStateSet();
     animClockDraw(DRAW_INIT_FULL);
     emuClockUpdate();
   }
@@ -599,7 +599,7 @@ int doDateReset(cmdLine_t *cmdLine)
 
   // Report (new) time+date+alarm
   if (echoCmd == CMD_ECHO_YES)
-    emuTimePrint();
+    emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
 }
@@ -627,7 +627,7 @@ int doDateSet(cmdLine_t *cmdLine)
 
   // Report (new) time+date+alarm
   if (echoCmd == CMD_ECHO_YES)
-    emuTimePrint();
+    emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
 }
@@ -1054,21 +1054,51 @@ int doLcdErase(cmdLine_t *cmdLine)
 int doLcdInverse(cmdLine_t *cmdLine)
 {
   // Toggle the foreground and background colors
-  if (mcBgColor == OFF)
+  if (mcBgColor == GLCD_OFF)
   {
-    emuBgColor = mcBgColor = ON;
-    emuFgColor = mcFgColor = OFF;
+    emuBgColor = mcBgColor = GLCD_ON;
+    emuFgColor = mcFgColor = GLCD_OFF;
   }
   else
   {
-    emuBgColor = mcBgColor = OFF;
-    emuFgColor = mcFgColor = ON;
+    emuBgColor = mcBgColor = GLCD_OFF;
+    emuFgColor = mcFgColor = GLCD_ON;
   }
 
   // Inverse the display
   glcdFillRectangle2(0, 0, GLCD_XPIXELS, GLCD_YPIXELS, ALIGN_TOP, FILL_INVERSE,
     mcFgColor);
   ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdNcurBLSet
+//
+// Set ncurses backlight support on/off
+//
+int doLcdNcurBLSet(cmdLine_t *cmdLine)
+{
+  u08 support = TO_UINT8_T(argDouble[0]);
+
+  // Ignore if ncurses device is not used
+  if (emuArgcArgv.ctrlDeviceArgs.useNcurses == GLCD_FALSE)
+    return CMD_RET_OK;;
+
+  // Set ncurses backlight support on/off
+  ctrlLcdNcurBLSet(support);
+  ctrlLcdFlush();
+
+  // Report the new support setting
+  if (echoCmd == CMD_ECHO_YES)
+  {
+    printf("ncurses backlight support: ");
+    if (support == GLCD_TRUE)
+      printf("on\n");
+    else
+      printf("off\n");
+  }
 
   return CMD_RET_OK;
 }
@@ -1171,18 +1201,21 @@ int doMonochron(cmdLine_t *cmdLine)
     kbModeSet(KB_MODE_SCAN);
 
   // Set essential Monochron startup data
+  mcClockPool = monochron;
+  mcMchronClock = 0;
   mcClockTimeEvent = GLCD_FALSE;
   mcAlarmSwitch = ALARM_SWITCH_NONE;
+  animDisplayMode = SHOW_TIME;
 
   // Clear the screen so we won't see any flickering upon
   // changing the backlight later on
-  glcdClearScreen(OFF);
+  glcdClearScreen(GLCD_OFF);
 
   // Upon request force the eeprom to init and, based on that, set the
   // backlight of the lcd stub device
   if (argChar[1] == 'r')
   {
-    stubEepromReset();
+    stubEepReset();
     ctrlLcdBacklightSet(OCR2A_VALUE);
   }
   else
@@ -1584,7 +1617,7 @@ int doStatsReset(cmdLine_t *cmdLine)
 int doTimeFlush(cmdLine_t *cmdLine)
 {
   // Get current time+date
-  readi2ctime();
+  rtcTimeRead();
 
   // Sync mchron time with (new) time
   emuTimeSync();
@@ -1594,7 +1627,7 @@ int doTimeFlush(cmdLine_t *cmdLine)
 
   // Report (new) time+date+alarm
   if (echoCmd == CMD_ECHO_YES)
-    emuTimePrint();
+    emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
 }
@@ -1607,10 +1640,10 @@ int doTimeFlush(cmdLine_t *cmdLine)
 int doTimePrint(cmdLine_t *cmdLine)
 {
   // Get current time+date
-  readi2ctime();
+  rtcTimeRead();
 
   // Report time+date+alarm
-  emuTimePrint();
+  emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
 }
@@ -1633,7 +1666,7 @@ int doTimeReset(cmdLine_t *cmdLine)
 
   // Report time+date+alarm
   if (echoCmd == CMD_ECHO_YES)
-    emuTimePrint();
+    emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
 }
@@ -1661,7 +1694,7 @@ int doTimeSet(cmdLine_t *cmdLine)
 
   // Report new time+date+alarm
   if (echoCmd == CMD_ECHO_YES)
-    emuTimePrint();
+    emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
 }
@@ -1730,14 +1763,14 @@ int doWait(cmdLine_t *cmdLine)
   {
     // Wait for keypress
     if (listExecDepth == 0)
-      ch = kbWaitKeypress(GLCD_FALSE);
+      ch = waitKeypress(GLCD_FALSE);
     else
-      ch = kbWaitKeypress(GLCD_TRUE);
+      ch = waitKeypress(GLCD_TRUE);
   }
   else
   {
     // Wait delay*0.001 sec
-    ch = kbWaitDelay(delay);
+    ch = waitDelay(delay);
   }
 
   // A 'q' will interrupt any command execution
@@ -1747,6 +1780,42 @@ int doWait(cmdLine_t *cmdLine)
     return CMD_RET_INTERRUPT;
   }
 
+  return CMD_RET_OK;
+}
+
+//
+// Function: doWaitTimerExpiry
+//
+// Wait for timer expiry in multiples of 1 msec.
+//
+int doWaitTimerExpiry(cmdLine_t *cmdLine)
+{
+  int delay = 0;
+  suseconds_t remaining;
+  char ch = '\0';
+
+  // Wait for timer expiry (if not already expired)
+  delay = TO_INT(argDouble[0]);
+  ch = waitTimerExpiry(&tvTimer, delay, GLCD_TRUE, &remaining);
+
+  // A 'q' will interrupt any command execution
+  if (ch == 'q' && listExecDepth > 0)
+  {
+    printf("quit\n");
+    return CMD_RET_INTERRUPT;
+  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doWaitTimerStart
+//
+// Start a new wait timer
+//
+int doWaitTimerStart(cmdLine_t *cmdLine)
+{
+  waitTimerStart(&tvTimer);
   return CMD_RET_OK;
 }
 

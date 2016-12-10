@@ -30,7 +30,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 #ifdef DIGI_GLITCH
@@ -42,8 +41,8 @@ extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcU8Util1, mcU8Util2, mcU8Util3, mcU8Util4;
 #endif
 
-extern unsigned char *months[12];
-extern unsigned char *days[7];
+extern char *animMonths[12];
+extern char *animDays[7];
 
 #ifdef DIGI_GLITCH
 // Random value for determining the occurrence and duration of glitch
@@ -107,9 +106,10 @@ void digitalCycle(void)
       mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
   {
     glcdPutStr2(DIGI_DATE_X_START, digiDateYStart, FONT_5X7N,
-      (char *)days[dotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)], mcFgColor);
+      (char *)animDays[rtcDotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)],
+      mcFgColor);
     glcdPutStr2(DIGI_DATE_X_START + 24, digiDateYStart, FONT_5X7N,
-      (char *)months[mcClockNewDM - 1], mcFgColor);
+      (char *)animMonths[mcClockNewDM - 1], mcFgColor);
     animValToStr(mcClockNewDD, clockInfo);
     clockInfo[2] = ',';
     clockInfo[3] = ' ';
@@ -240,16 +240,9 @@ static void digitalInit(u08 mode)
   DEBUGP("Init Digital");
 
   // Draw static clock layout
-  if (mode == DRAW_INIT_FULL)
-  {
-    // Start from scratch
-    glcdClearScreen(mcBgColor);
-  }
-  else
-  {
-    // Clear area with digital clock and leave alarm area unharmed
+  // On partial init clear digital clock area but leave alarm area unharmed
+  if (mode == DRAW_INIT_PARTIAL)
     glcdFillRectangle(0, 0, GLCD_XPIXELS, DIGI_ALARM_Y_START - 1, mcBgColor);
-  }
 
   // Draw the ":" separators between hour:min(:sec)
   glcdPutStr3(digiTimeXStart + 2 * 6 * digiTimeXScale + digiTimeXScale,
@@ -260,10 +253,6 @@ static void digitalInit(u08 mode)
       digiTimeYStart, FONT_5X7N, ":", digiTimeXScale, digiTimeYScale,
       mcFgColor);
   
-  // Force the alarm info area to init itself
-  if (mode == DRAW_INIT_FULL)
-    mcAlarmSwitch = ALARM_SWITCH_NONE;
-
 #ifdef DIGI_GLITCH
   // Reset lcd display and init the first glitch cycle
   glcdResetScreen();

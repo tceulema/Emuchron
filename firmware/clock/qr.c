@@ -3,18 +3,93 @@
 // Title    : Animation code for MONOCHRON QR clock
 //*****************************************************************************
 
+#include <stdio.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
 #endif
 #ifndef EMULIN
 #include "../util.h"
 #endif
+#include <string.h>
 #include "../ks0108.h"
 #include "../monomain.h"
 #include "../glcd.h"
 #include "../anim.h"
-#include "qr.h"
 #include "qrencode.h"
+#include "qr.h"
+
+//
+// Let's first do some basic math and apply common sense.
+// This clock displays a QR redundancy 1 (L), level 2 (25x25) QR, allowing to
+// encode a text string up to 32 characters.
+// An initial estimate of calculating and drawing a QR from scratch shows this
+// will take about 0.25 seconds of raw Atmel CPU power (avr-gcc 4.8.1 with
+// Emuchron v3.0 code base).
+// If this were to be done in a single clock cycle, that is scheduled to last
+// up to 75 msec, the button user interface and blinking elements such as the
+// alarm time, would freeze in that period. From a UI perspective this is not
+// acceptable.
+// To overcome this behavior we need to split up the QR generation process in
+// chunks where each chunk is executed in a single clock cycle, limited by its
+// 75 msec duration. So, the QR generation process must be put into a state
+// that the clock code will use to execute manageable chunck of work. Splitting
+// up the CPU workload over multiple clock cycles means that we need to wait
+// more time before the actual QR is drawn on the LCD display, but we won't
+// have any UI lag, and that's what matters most. We must make sure though that
+// each chunk of work fits within a single clock cycle of 75 msec.
+// There is another benefit of splitting up the CPU load over clock cycles.
+// The number of clock cycles needed to generate the QR will always be the same
+// and therefor always a constant x times 75 msec cycles. In adition to that,
+// the last step, being the QR Draw, requires an almost constant amount of CPU
+// time regardless the encoded string, making the QR always appear at the same
+// moment between consecutive seconds. This is good UI.
+//
+// For a single QR 8 different masks are tried (evaluated), and the best mask
+// will be used for displaying the QR. A mask is a method of dispersing the
+// data over the QR area. The quality of a mask is determined by looking at how
+// good or bad the black and white pixels are spread over the QR. The most CPU
+// consuming element in trying a mask by far is to determine that good/badness
+// of a mask.
+// For our QR generation process the following split-up is implemented using a
+// process state variable. Each single process state is processed in a single
+// clock cycle of 75 msec:
+// 0    - Idle (no QR generation active).
+// 1    - Init QR generation process and try mask 0+1.
+// 2    - Try mask 2+5.
+// 3    - Try mask 3+6.
+// 4    - Try mask 4+7, apply best mask and complete QR.
+// 5    - Draw QR.
+//
+// Using a debug version of the firmware we can find out how much CPU time each
+// state has left from its 75 msec cycle. Note that this time also includes
+// interrupt handler time (1-msec handler, RTC handler, button handler) and
+// blinking the alarm time during alarming. The latter appears to cost somewhat
+// more than 1 msec. However, it also includes time to send the debug strings
+// over the FTDI port and it is therefore believed that the actual numbers per
+// cycle are slightly higher than shown here, so consider them worst-case
+// scenario values.
+// The following numbers are obtained using avr-gcc 4.8.1 (Debian 8) and the
+// Emuchron v3.0 code base while the clock is alarming:
+//
+// State    Min time      Avg time
+//         left (msec)   left (msec)
+//   1         9            10.8
+//   2        21            22.8
+//   3        20            21.2
+//   4        13            17.1
+//   5        63            63.8
+//
+// Seeing the result for state 2 and 3, trying a single mask will take on
+// average about 27 msec of raw CPU power. State 1 is the most CPU intensive,
+// but having 9 msec left within its cycle as a worst-case is well within cycle
+// 'safety limits'.
+//
+// So, how long will it take to generate and display a QR from scratch?
+// We need in total 5 clock cycles. Cycles 1..4  will take 75 msec each.
+// Drawing the QR in cycle 5 takes about 11 msec to complete.
+// This means that a total of 4 x 0.075 + 0.011 = 0.311 seconds is required.
+// You will notice this timelag upon initializing a QR clock.
+//
 
 // Specifics for QR clock
 #define QR_ALARM_X_START	2
@@ -29,99 +104,18 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
 
 // Day of the week and month text strings
-extern unsigned char *months[12];
-extern unsigned char *days[7];
+extern char *animMonths[12];
+extern char *animDays[7];
 
 // Data interface to the QR encode module
 extern unsigned char strinbuf[];
 extern unsigned char qrframe[];
-
-// Let's first do some basic math and apply common sense.
-// This clock displays a QR redundancy 1 (L), level 2 (25x25) QR, allowing to
-// encode a string up to 32 characters in its text.
-// An initial estimate of calculating and drawing a QR from scratch shows this
-// will take about 0.3 seconds of Atmel CPU power.
-// If this were to be done in a single clock cycle, that is scheduled to last up
-// to 75 msec, the button user interface and blinking elements, such as the alarm
-// time, would freeze in that period. From a UI perspective this is not
-// acceptable.
-// To overcome this behavior we will split up the QR generation process in chunks
-// where each chunk is executed in a single clock cycle, limited by its 75 msec
-// duration. So, the QR generation process must be put into a state that the
-// clock code will use to execute a manageable amount of work to be done for
-// generating a QR. Splitting up the CPU workload over multiple clock cycles
-// means that we need to wait more time before the actual QR is drawn on the LCD
-// display, but we won't have any UI lag, and that's what matters most. We must
-// make sure though that each chunk of work fits in a single clock cycle of 75
-// msec.
-// There is another benefit of splitting up the CPU load over clock cycles.
-// The number of clock cycles needed to generate the QR is always the same and
-// therefor always a constant x times 75 msec cycles. In adition to that, the
-// last step, being the QR Draw, requires an almost constant amount of CPU
-// regardless the encoded string, making the QR always appear at the same moment
-// between consecutive seconds. This is good UI.
-//
-// For a single QR 8 different masks are tried (evaluated), and the best mask
-// will be used for displaying the QR. A mask is a method of dispersing the data
-// over the QR area. The quality of a mask is determined by looking at how good
-// or bad the black and white pixels are spread over the QR. The most time
-// consuming element in trying a mask is to determine that goodness/badness of a
-// mask.
-// For our QR generation process the following split-up is implemented using a
-// process state variable. Each single process state is processed in a single
-// clock cycle:
-// 0    - Idle (no QR generation active).
-// 1    - Init QR generation process and try mask 0.
-// 2..4 - Try mask 1..6 (6 in total). Each state will try 2 masks.
-// 5    - Try mask 7, apply best mask and complete QR.
-// 6    - Draw QR.
-//
-// Using an initial debug version of the firmware we can find out how much CPU
-// time each mask try will take to complete. Note that this time also includes
-// interrupt handler time (1-msec handler, RTC handler, button handler). However,
-// it also includes time to send the debug strings over the FTDI port and it is
-// therefore believed that the actual numbers per cycle are slightly lower than
-// shown here, so consider them worst-case scenario values.
-//
-// The CPU time to complete a single mask (+/- 1 msec), using avr-gcc 4.3.5 and
-// the Emuchron v1.2 codebase, is as follows:
-// Mask 0: (not relevant; can easily be combined with other tasks in state 1)
-// Mask 1: 30 msec
-// Mask 2: 29 msec
-// Mask 3: 30 msec
-// Mask 4: 30 msec
-// Mask 5: 33 msec
-// Mask 6: 33 msec
-// Mask 7: (not relevant; can easily be combined with other tasks in state 5)
-//
-// We can see from this that mask 5 and 6 take the longest to complete. Therefor
-// combining these two masks in the same calculation state should be avoided.
-// It is chosen that in state 2, 3 and 4 we will combine resp. mask 1+4, 2+5 and
-// 3+6, spreading the relatively long CPU time of mask 5 and 6 over separate
-// states.
-// Combining two mask calculations in a single clock cycle of 75 msec, where
-// state 4 (combining mask 3+6) will consume the most CPU, leaves us about 15 to
-// 12 msec spare CPU time for other tasks.
-// In practice there is only one task remaining, which is inverting the alarm
-// time when alarming/snoozing. It turns out this takes about 5 msec to complete
-// and may appear in one of the cycles as additional time cost. Even including
-// this additional 5 msec in a cycle there is still a small time buffer left to
-// complete the cycle within 75 msec. A debug version shows that the minimum time
-// left for state 4 during alarming/snoozing state was never lower than 6 msec.
-// This is not much but it is well within the given timeframe we have available.
-//
-// So, how long will it take to calculate and display a QR from scratch?
-// We need in total 6 clock cycles. Cycles 1..5 will take 75 msec each. A debug
-// version shows that displaying a QR, in cycle 6, takes about 13 msec.
-// This means that a total of 5 x 0.075 + 0.013 = 0.388 seconds is needed.
-// You will notice this timelag upon initializing a QR clock.
 
 // mcU8Util1 holds the state (=active chunk) of the QR generation process as
 // described above
@@ -140,7 +134,7 @@ static void qrMarkerDraw(u08 x, u08 y);
 // like it make the textstring empty (""), and the clock will ignore it.
 // Note: The length of the message below will be truncated after 23 chars
 // when in HMS mode and after 26 chars when in HM mode.
-static char *msgAprilFools = "The cake is a lie.";
+static char *qrAprilFools = "The cake is a lie.";
 
 //
 // Function: qrCycle
@@ -191,19 +185,18 @@ void qrCycle(void)
       strinbuf[5 + offset] = '\n';
 
       // Add date or special message on april 1st
-      if (mcClockNewDD == 1 && mcClockNewDM == 4 && msgAprilFools[0] != '\0')
+      if (mcClockNewDD == 1 && mcClockNewDM == 4 && qrAprilFools[0] != '\0')
       {
         // Add special message on april 1st
-        for (i = 0; msgAprilFools[i] != '\0'; i++)
-          strinbuf[i + offset + 6] = msgAprilFools[i];
-        strinbuf[i + offset + 6] = '\0';
+        memcpy(&strinbuf[offset + 6], qrAprilFools, strlen(qrAprilFools) + 1);
       }
       else
       {
         // Add date "DDD MMM dd, 20YY"
         // Put the three chars of day of the week and month in QR string
-        dow = (char *)days[dotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)];
-        mon = (char *)months[mcClockNewDM - 1];
+        dow = (char *)animDays[rtcDotw(mcClockNewDM, mcClockNewDD,
+          mcClockNewDY)];
+        mon = (char *)animMonths[mcClockNewDM - 1];
         for (i = 0; i < 3; i++)
         {
           strinbuf[i + offset + 6] = dow[i];
@@ -232,30 +225,32 @@ void qrCycle(void)
   // Check the state of the QR generation process and take appropriate action
   if (mcU8Util1 == 1)
   {
-    // Init QR generation and try the first mask (= mask 0)
+    // Init QR generation and try mask 0+1
     qrGenInit();
     qrMaskTry(0);
+    qrMaskTry(1);
     // Set state for next QR generation cycle
     mcU8Util1++;
   }
-  else if (mcU8Util1 >= 2 && mcU8Util1 <= 4)
+  else if (mcU8Util1 == 2 || mcU8Util1 == 3)
   {
-    // Try two of 6 QR masks (1..6)
-    // Mask combination for a state: 1+4, 2+5, 3+6
-    qrMaskTry(mcU8Util1 - 1);
-    qrMaskTry(mcU8Util1 + 2);
+    // Try two out of 4 QR masks
+    // Mask combination for a state: 2+5, 3+6
+    qrMaskTry(mcU8Util1);
+    qrMaskTry(mcU8Util1 + 3);
     // Set state for next QR generation cycle
     mcU8Util1++;
   }
-  else if (mcU8Util1 == 5)
+  else if (mcU8Util1 == 4)
   {
-    // Try mask 7 and apply the best QR mask found
+    // Try mask 4+7 and apply the best QR mask found
+    qrMaskTry(4);
     qrMaskTry(7);
     qrMaskApply();
     // Set state for next QR generation cycle
     mcU8Util1++;
   }
-  else if (mcU8Util1 == 6)
+  else if (mcU8Util1 == 5)
   {
     // Draw the QR
     qrDraw();
@@ -279,55 +274,52 @@ void qrInit(u08 mode)
   // Start from scratch
   if (mode == DRAW_INIT_FULL)
   {
-    glcdClearScreen(mcBgColor);
-
-    if (mcBgColor == ON)
+    if (mcBgColor == GLCD_ON)
     {
       // Draw a black border around the QR clock
       glcdRectangle(QR_X_START - QR_BORDER - 1, QR_Y_START - QR_BORDER - 1,
         QR_PIX_FACTOR * WD + 2 * QR_BORDER + 2,
-        QR_PIX_FACTOR * WD + 2 * QR_BORDER + 2,
-        OFF);
+        QR_PIX_FACTOR * WD + 2 * QR_BORDER + 2, GLCD_OFF);
     }
     else
     {
-      // Draw a white border for the QR clock
+      // Draw a white area for the QR clock
       glcdFillRectangle(QR_X_START - QR_BORDER, QR_Y_START - QR_BORDER,
         QR_PIX_FACTOR * WD + 2 * QR_BORDER,
-        QR_PIX_FACTOR * WD + 2 * QR_BORDER,
-        ON);
+        QR_PIX_FACTOR * WD + 2 * QR_BORDER, GLCD_ON);
     }
 
     // Draw elements of QR that need to be drawn only once
     qrMarkerDraw(QR_X_START, QR_Y_START);
     qrMarkerDraw(QR_X_START, QR_Y_START + 18 * QR_PIX_FACTOR);
     qrMarkerDraw(QR_X_START + 18 * QR_PIX_FACTOR, QR_Y_START);
-    glcdRectangle(QR_X_START + 16 * QR_PIX_FACTOR, QR_Y_START + 16 * QR_PIX_FACTOR,
-      10, 10, OFF);
-    glcdRectangle(QR_X_START + 16 * QR_PIX_FACTOR + 1, QR_Y_START + 16 * QR_PIX_FACTOR + 1,
-      8, 8, OFF);
-    glcdRectangle(QR_X_START + 18 * QR_PIX_FACTOR, QR_Y_START + 18 * QR_PIX_FACTOR,
-      2, 2, OFF);
+    glcdRectangle(QR_X_START + 16 * QR_PIX_FACTOR,
+      QR_Y_START + 16 * QR_PIX_FACTOR, 10, 10, GLCD_OFF);
+    glcdRectangle(QR_X_START + 16 * QR_PIX_FACTOR + 1,
+      QR_Y_START + 16 * QR_PIX_FACTOR + 1, 8, 8, GLCD_OFF);
+    glcdRectangle(QR_X_START + 18 * QR_PIX_FACTOR,
+      QR_Y_START + 18 * QR_PIX_FACTOR, 2, 2, GLCD_OFF);
   }
   else
   {
     // Clear the QR area except the markers
     glcdFillRectangle(QR_X_START + 8 * QR_PIX_FACTOR, QR_Y_START,
-      9 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR + 1, ON);
+      9 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR + 1, GLCD_ON);
     glcdFillRectangle(QR_X_START, QR_Y_START + 8 * QR_PIX_FACTOR,
-      16 * QR_PIX_FACTOR, 10 * QR_PIX_FACTOR, ON);
-    glcdFillRectangle(QR_X_START + 16 * QR_PIX_FACTOR, QR_Y_START + 8 * QR_PIX_FACTOR,
-      9 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR, ON);
-    glcdFillRectangle(QR_X_START + 8 * QR_PIX_FACTOR, QR_Y_START + 18 * QR_PIX_FACTOR,
-      8 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR, ON);
-    glcdFillRectangle(QR_X_START + 21 * QR_PIX_FACTOR, QR_Y_START + 16 * QR_PIX_FACTOR,
-      4 * QR_PIX_FACTOR, 9 * QR_PIX_FACTOR, ON);
-    glcdFillRectangle(QR_X_START + 16 * QR_PIX_FACTOR, QR_Y_START + 21 * QR_PIX_FACTOR,
-      5 * QR_PIX_FACTOR, 5 * QR_PIX_FACTOR, ON);
+      16 * QR_PIX_FACTOR, 10 * QR_PIX_FACTOR, GLCD_ON);
+    glcdFillRectangle(QR_X_START + 16 * QR_PIX_FACTOR,
+      QR_Y_START + 8 * QR_PIX_FACTOR, 9 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR,
+      GLCD_ON);
+    glcdFillRectangle(QR_X_START + 8 * QR_PIX_FACTOR,
+      QR_Y_START + 18 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR,
+      GLCD_ON);
+    glcdFillRectangle(QR_X_START + 21 * QR_PIX_FACTOR,
+      QR_Y_START + 16 * QR_PIX_FACTOR, 4 * QR_PIX_FACTOR, 9 * QR_PIX_FACTOR,
+      GLCD_ON);
+    glcdFillRectangle(QR_X_START + 16 * QR_PIX_FACTOR,
+      QR_Y_START + 21 * QR_PIX_FACTOR, 5 * QR_PIX_FACTOR, 5 * QR_PIX_FACTOR,
+      GLCD_ON);
   }
-
-  // Force the alarm info area to init itself
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
 
   // Set initial QR generation state to idle
   mcU8Util1 = 0;
@@ -338,18 +330,18 @@ void qrInit(u08 mode)
 //
 // Draw the complete QR on the LCD. Each QR dot is 2x2 pixels.
 // The simple way to do this is to use glcdFillRectangle() for each QR dot.
-// However, drawing 625 QR dots is inefficient and will take more that 0.6 sec
-// to complete. Not good. Instead, we'll use dedicated code that will not require
-// to read from the LCD and will only write full LCD bytes filled with multiple
-// QR dots. The code also applies hardcoded shortcuts preventing unnecessary
-// write actions to the LCD.
-// The code uses similar techniques implemented in the glcd.c [firmware] library.
-// It turns out it draws the QR in about 13 msec. Compared to using the simple
-// glcdFillRectangle() solution that's pretty fast.
+// However, drawing 625 QR dots is inefficient and will take more that 0.3 sec
+// to complete. Not good. Instead, we'll use dedicated code that will not
+// require to read from the LCD and will only write full LCD bytes filled with
+// multiple QR dots. The code also applies hardcoded shortcuts preventing
+// unnecessary write actions to the LCD.
+// The code uses similar techniques implemented in the glcd.c [firmware]
+// library. It turns out it draws the QR in about 11 msec. Compared to using
+// the simple glcdFillRectangle() solution that's pretty fast.
 //
-// WARNING: For reasons of efficiency, the code makes assumptions on the y start
-// location, the size factor of the QR and the QR border in both normal and
-// inverse display mode. If you change the value of the definitions for
+// WARNING: For reasons of efficiency, the code makes assumptions on the y
+// start location, the size factor of the QR and the QR border in both normal
+// and inverse display mode. If you change the value of the definitions for
 // QR_Y_START, QR_PIX_FACTOR and QR_BORDER you must modify this function as
 // well. Changing QR_X_START should be ok (but why would you want to do that?)
 //
@@ -383,7 +375,7 @@ static void qrDraw(void)
     if (yByte == 0)
     {
       // Lcd top row pixels
-      if (mcBgColor == OFF)
+      if (mcBgColor == GLCD_OFF)
         template = 0x78;
       else
         template = 0x7b;
@@ -391,7 +383,7 @@ static void qrDraw(void)
     else if (yByte == 7)
     {
       // Lcd bottom row pixels
-      if (mcBgColor == OFF)
+      if (mcBgColor == GLCD_OFF)
         template = 0x1e;
       else
         template = 0xde;
@@ -469,7 +461,7 @@ static void qrDraw(void)
 //
 static void qrMarkerDraw(u08 x, u08 y)
 {
-  glcdRectangle(x, y, 14, 14, OFF);
-  glcdRectangle(x + 1, y + 1, 12, 12, OFF);
-  glcdFillRectangle(x + 4, y + 4, 6, 6, OFF);
+  glcdRectangle(x, y, 14, 14, GLCD_OFF);
+  glcdRectangle(x + 1, y + 1, 12, 12, GLCD_OFF);
+  glcdFillRectangle(x + 4, y + 4, 6, 6, GLCD_OFF);
 }

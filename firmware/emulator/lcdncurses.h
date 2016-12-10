@@ -14,7 +14,6 @@
 typedef struct _lcdNcurInitArgs_t
 {
   char tty[NCURSES_TTYLEN + 1];	// ncurses tty
-  int useBacklight;		// Process backlight change requests
   void (*winClose)(void);	// mchron callback upon ncurses window close
 } lcdNcurInitArgs_t;
 
@@ -28,6 +27,7 @@ void lcdNcurStatsPrint(void);
 void lcdNcurStatsReset(void);
 
 // Lcd device content methods
+void lcdNcurBacklight(unsigned char support);
 void lcdNcurBacklightSet(unsigned char backlight);
 void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data);
 void lcdNcurDisplaySet(unsigned char controller, unsigned char display);

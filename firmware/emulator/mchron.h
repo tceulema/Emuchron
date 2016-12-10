@@ -28,6 +28,7 @@ int doLcdCursorSet(cmdLine_t *cmdLine);
 int doLcdDisplaySet(cmdLine_t *cmdLine);
 int doLcdErase(cmdLine_t *cmdLine);
 int doLcdInverse(cmdLine_t *cmdLine);
+int doLcdNcurBLSet(cmdLine_t *cmdLine);
 int doLcdPrint(cmdLine_t *cmdLine);
 int doLcdRead(cmdLine_t *cmdLine);
 int doLcdStartLineSet(cmdLine_t *cmdLine);
@@ -51,6 +52,8 @@ int doVarPrint(cmdLine_t *cmdLine);
 int doVarReset(cmdLine_t *cmdLine);
 int doVarSet(cmdLine_t *cmdLine);
 int doWait(cmdLine_t *cmdLine);
+int doWaitTimerExpiry(cmdLine_t *cmdLine);
+int doWaitTimerStart(cmdLine_t *cmdLine);
 int doExit(cmdLine_t *cmdLine);
 
 // Program counter control block handler prototypes
