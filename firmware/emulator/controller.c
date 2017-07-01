@@ -22,7 +22,7 @@ extern uint16_t OCR2B;
 //  ^          ^
 //  |  64 px   |  64 px
 //  v          V
-//  
+//
 // An lcd byte represents 8 px and is implemented vertically.
 // So, when lcd byte bit 0 starts at px[x,y] then bit 7 ends at px[x,y+7].
 //
@@ -97,7 +97,7 @@ extern uint16_t OCR2B;
 // to a new state that may be identical to the current one. Controller register
 // command events will not impact the lcd image data but may impact how the lcd
 // image will be displayed.
-// The result of a controller event is a flag indicating whether the lcd image 
+// The result of a controller event is a flag indicating whether the lcd image
 // requires a redraw in an lcd stub device.
 //
 // The following state-event diagram is implemented where the action specifies
@@ -302,7 +302,7 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload);
 //
 static void ctrlAddressNext(ctrlRegister_t *ctrlRegister)
 {
-  // This is how the actual contrioller behaves:
+  // This is how the actual controller behaves:
   // At end of x reset to beginning of x, else just increment
   if (ctrlRegister->x >= GLCD_CONTROLLER_XPIXELS - 1)
     ctrlRegister->x = 0;
@@ -717,9 +717,9 @@ void ctrlRegPrint(void)
     // Print them
     printf("ctrl-%01d : state=%s, display=%d, startline=%d\n",
       i, state, ctrlRegister->display, ctrlRegister->startLine);
-    printf("       : x=%d, y=%d, write=0x%02x, read=0x%02x\n", 
+    printf("       : x=%d, y=%d, write=%d (0x%02x), read=%d (0x%02x)\n",
       ctrlRegister->x, ctrlRegister->y, ctrlRegister->dataWrite,
-      ctrlRegister->dataRead);
+      ctrlRegister->dataWrite, ctrlRegister->dataRead, ctrlRegister->dataRead);
   }
 }
 
@@ -778,7 +778,7 @@ void ctrlStatsPrint(int type)
           (int)(ctrlStats->startLineCnf * 100 / ctrlStats->startLineReq));
     }
   }
-  
+
   // Report lcd stub device statistics
   if ((type & CTRL_STATS_LCD) != 0)
   {
@@ -792,7 +792,7 @@ void ctrlStatsPrint(int type)
 //
 // Function: ctrlStatsReset
 //
-// Reset the statistics for the glcd interface, controllers and lcd devices 
+// Reset the statistics for the glcd interface, controllers and lcd devices
 //
 void ctrlStatsReset(int type)
 {

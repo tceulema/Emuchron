@@ -22,11 +22,9 @@
 #include "../config.h"
 #include "../alarm.h"
 
-// Linux ALSA performance gets progressively worse with every Debian release.
-// As of Debian 8, when used as a VM, short audio pulses are being clipped
-// while also generating an alsa buffer under-run runtime error. As emuchron
-// is developed and tested only in VM's it is unknown whether this behavior
-// also applies to native Debian installations.
+// When used in a VM, Linux ALSA performance gets progressively worse with
+// every Debian release. As of Debian 8, short audio pulses are being clipped
+// while also generating an alsa buffer under-run runtime error.
 // In any case, it turns out that when prefixing a short audio pulse with a
 // larger pulse with no audio (0 Hz), the buffer under-run is avoided, and the
 // subsequent small audio pulse is no longer clipped. In case a series of
@@ -44,10 +42,11 @@
 // Note that depending on the system on which emuchron runs this pulse length
 // may be larger or smaller or not needed at all. Play (pun intended) with
 // both values until you find something that makes you feel comfortable.
-// On my machines the values as set below seems to hit a sweet spot.
-// Also note that for now only Debian 8 seems to require a blank prefix pulse.
-// Use mchron command 'b' (beep) to test this.
+// On my machines prefix pulse value 95 (msec) seems to hit a sweet spot.
+// To re-iterate, only Debian 8 or later run as a VM seems to require a blank
+// prefix pulse. Use mchron command 'b' (beep) to test this.
 #define ALSA_PREFIX_PULSE_MS	95
+//#define ALSA_PREFIX_PULSE_MS	0
 #define ALSA_PREFIX_ADD_MS	(ALSA_PREFIX_PULSE_MS + 25)
 
 // Monochron global data
@@ -396,13 +395,13 @@ static int kbHit(void)
 {
   struct timeval tv;
   fd_set rdfs;
- 
+
   tv.tv_sec = 0;
   tv.tv_usec = 0;
- 
+
   FD_ZERO(&rdfs);
   FD_SET(STDIN_FILENO, &rdfs);
- 
+
   select(STDIN_FILENO + 1, &rdfs, NULL, NULL, &tv);
   return FD_ISSET(STDIN_FILENO, &rdfs);
 }
@@ -444,7 +443,7 @@ char kbKeypressScan(u08 quitFind)
 
   return ch;
 }
- 
+
 //
 // Function: kbModeGet
 //
@@ -508,7 +507,7 @@ void stubBeep(uint16_t hz, uint16_t msec)
     sprintf(shellCmd,
       "/usr/bin/play -q -n -t alsa synth %f sin %d > /dev/null 2>&1",
       (float)(msec) / 1000L, hz);
-  }    
+  }
   system(shellCmd);
 }
 
@@ -881,7 +880,7 @@ u08 stubI2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
     struct timeval tv;
     struct tm *tm;
     time_t timeClock;
-  
+
     gettimeofday(&tv, NULL);
     timeClock = tv.tv_sec + timeDelta;
     tm = localtime(&timeClock);
@@ -1041,7 +1040,7 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
     tmNewCopy.tm_min = min;
     tmNewCopy.tm_hour = hr;
   }
-  // else 80 -> default back to system time as currently populated 
+  // else 80 -> default back to system time as currently populated
 
   // Verify what to do with date
   if (date == 70)
@@ -1058,7 +1057,7 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
     tmNewCopy.tm_mon = mon - 1;
     tmNewCopy.tm_year = yr + 100;
   }
-  // else 80 -> default back to system time as currently populated 
+  // else 80 -> default back to system time as currently populated
 
   // Prepare for a validity check on the requested date
   tmNewDateValidate1 = tmNewCopy;
@@ -1170,7 +1169,7 @@ char waitDelay(int delay)
   tvThen.tv_usec = tvThen.tv_usec + delay * 1000;
 
   // Get the total time to wait
-  timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 + 
+  timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 +
     tvThen.tv_usec - tvNow.tv_usec;
 
   // Switch to keyboard scan mode if needed
@@ -1206,7 +1205,7 @@ char waitDelay(int delay)
 
     // Based on last wait and keypress delays get time left to wait
     gettimeofday(&tvNow, NULL);
-    timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 + 
+    timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 +
       tvThen.tv_usec - tvNow.tv_usec;
   }
 
@@ -1288,7 +1287,7 @@ char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
 
   // Get the total time to wait based on timer expiry
   gettimeofday(&tvNow, NULL);
-  timeDiff = (tvTimer->tv_sec - tvNow.tv_sec) * 1E6 + 
+  timeDiff = (tvTimer->tv_sec - tvNow.tv_sec) * 1E6 +
     tvTimer->tv_usec - tvNow.tv_usec + expiry * 1000;
 
   // See if timer has already expired
@@ -1320,7 +1319,7 @@ char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
     // Get next timer offset by adding expiry to current timer offset
     if (ch != 'q')
     {
-      // Add expiry to current timer offset 
+      // Add expiry to current timer offset
       tvTimer->tv_sec = tvTimer->tv_sec + expiry / 1000;
       tvTimer->tv_usec = tvTimer->tv_usec + (expiry % 1000) * 1000;
       if (tvTimer->tv_usec > 1E6)

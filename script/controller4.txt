@@ -29,3 +29,6 @@ lw 1 0x55
 # Show the stats
 sp
 
+# Reset and sync hardware with glcd software cursor to (0,0)
+lcr
+

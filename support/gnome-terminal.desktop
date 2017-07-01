@@ -4,7 +4,7 @@
 Name=Terminal
 Comment=Use the command line
 TryExec=gnome-terminal
-Exec=gnome-terminal --window-with-profile=Monochron --hide-menubar --geometry=258x66 -e "bash -c \\"tty > ~/.mchron; bash\\""
+Exec=gnome-terminal --window-with-profile=Monochron --hide-menubar --geometry=258x66 -e "bash -c \\"tty > ~/.mchron; echo -ne '\033]0\073Monochron (ncurses)\007'; bash\\""
 Icon=utilities-terminal
 Type=Application
 X-GNOME-DocPath=gnome-terminal/index.html

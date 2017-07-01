@@ -167,7 +167,7 @@ void digitalCycle(void)
         if (mcU8Util3 == 0)
           glcdControlWrite(0, GLCD_ON_CTRL | GLCD_ON_DISPLAY);
       }
-    
+
       // See if controller 1 needs to be turned off with 3% chance per check
       if (mcU8Util4 == 0)
       {
@@ -252,7 +252,7 @@ static void digitalInit(u08 mode)
     glcdPutStr3(digiTimeXStart + 5 * 6 * digiTimeXScale + 2 * digiTimeXScale,
       digiTimeYStart, FONT_5X7N, ":", digiTimeXScale, digiTimeYScale,
       mcFgColor);
-  
+
 #ifdef DIGI_GLITCH
   // Reset lcd display and init the first glitch cycle
   glcdResetScreen();

@@ -125,7 +125,7 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
   while (i < argCount)
   {
     char c = *workPtr;
-    
+
     if (cmdArg[i].argType == ARG_CHAR)
     {
       // Scan a single character argument profile
@@ -137,7 +137,7 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
           cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
- 
+
       // Verify end-of-string
       if (c == '\0')
       {
@@ -189,7 +189,7 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
           cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
- 
+
       // Verify end-of-string
       if (c == '\0')
       {
@@ -253,7 +253,7 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
     else if (cmdArg[i].argType == ARG_WORD)
     {
       // Scan a character word argument profile
-      
+
       // Verify argument count overflow
       if (argCharIdx == ARG_TYPE_COUNT_MAX)
       {
@@ -261,7 +261,7 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
           cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
- 
+
       // Verify end-of-string
       if (c == '\0')
       {
@@ -348,7 +348,7 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
       return CMD_RET_ERROR;
     }
   }
-  
+
   // Successful scan
   *input = workPtr;
   return CMD_RET_OK;
@@ -512,7 +512,7 @@ static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue, int silent)
       // End of a validation word in validation list
       if (argValue[j] == '\0')
       {
-        // Input value and domain word are identical 
+        // Input value and domain word are identical
         wordFound = GLCD_TRUE;
       }
       else
@@ -848,7 +848,7 @@ void cmdInputCleanup(cmdInput_t *cmdInput)
   // Add last read to history cache when applicable
   if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
   {
-    if (cmdInput->input != NULL && (cmdInput->input)[0] != '\0' && 
+    if (cmdInput->input != NULL && (cmdInput->input)[0] != '\0' &&
         (cmdInput->input)[0] != '\n')
     {
       add_history(cmdInput->input);
@@ -947,7 +947,7 @@ void cmdInputInit(cmdInput_t *cmdInput)
 // Acquire a single command line by reading the input stream part by
 // part until a newline character is encountered indicating the
 // command end-of-line.
-// Note: The trailing newline character will NOT be copied to the 
+// Note: The trailing newline character will NOT be copied to the
 // resulting input buffer.
 //
 void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
@@ -955,7 +955,7 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
   // Add previous read to readline cache when applicable
   if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
   {
-    if (cmdInput->input != NULL && (cmdInput->input)[0] != '\0' && 
+    if (cmdInput->input != NULL && (cmdInput->input)[0] != '\0' &&
         (cmdInput->input)[0] != '\n')
     {
       add_history(cmdInput->input);

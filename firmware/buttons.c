@@ -34,7 +34,7 @@
 // implementing this scheme shows an average performance increase for glcd
 // graphics at around 11% (Emuchron v3.0, avr-gcc 4.8.1), while keeping the
 // same button UI experience. It is assumed that functional clock code will
-// show improved execution performance with identical numbers. 
+// show improved execution performance with identical numbers.
 //
 
 // The following defines are used to switch between a fast and slow ADC

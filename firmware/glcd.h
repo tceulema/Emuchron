@@ -87,7 +87,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
   u08 color);
 
 // Write a vertical string at pixel position [x,y]
-u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data, 
+u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
   u08 xScale, u08 yScale, u08 color);
 
 // Get the pixel width of a string

@@ -900,7 +900,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
             currYScale++;
             if (currYScale == yScale)
             {
-              // End of y scaling; continue with next font pixel 
+              // End of y scaling; continue with next font pixel
               currYScale = 0;
               fontBytePixel = (fontBytePixel >> 1);
               currFontPixel++;
@@ -1189,9 +1189,9 @@ void glcdWriteChar(unsigned char c, u08 color)
   }
 
   // Write a spacer line
-  if (color == GLCD_OFF) 
+  if (color == GLCD_OFF)
     glcdDataWrite(0xff);
-  else 
+  else
     glcdDataWrite(0x00);
 }
 
@@ -1262,7 +1262,7 @@ static u08 glcdCharWidthGet(char c, u08 *idxOffset)
     *idxOffset = 26;
   else
     *idxOffset = 0;
-  return pgm_read_byte(&Font5x5p[(c - 0x20 - *idxOffset) * 6]);
+  return pgm_read_byte(&Font5x5p[(c - 0x20 - *idxOffset) * 5]) >> 5;
 }
 
 //
@@ -1278,7 +1278,7 @@ static u08 glcdFontByteGet(u08 color)
   {
     // Get the font byte
     if (fontId == FONT_5X5P)
-      fontByte = pgm_read_byte(&Font5x5p[fontCharIdx]);
+      fontByte = (pgm_read_byte(&Font5x5p[fontCharIdx]) & 0x1f);
     else
       fontByte = pgm_read_byte(&Font5x7[fontCharIdx]);
   }
@@ -1307,7 +1307,7 @@ static u16 glcdFontIdxGet(unsigned char c)
   if (fontId == FONT_5X5P)
   {
     fontWidth = glcdCharWidthGet(c, &idxOffset);
-    return (c - 0x20 - idxOffset) * 6 + 1;
+    return (c - 0x20 - idxOffset) * 5;
   }
   else // font == FONT_5X7NP
   {

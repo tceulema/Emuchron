@@ -66,7 +66,7 @@
 // Use this for packed structures
 // (this is seldom necessary on an 8-bit architecture like AVR,
 // but can assist in code portability to AVR)
-#define GNUC_PACKED		__attribute__((packed)) 
+#define GNUC_PACKED		__attribute__((packed))
 
 // Port address helpers
 #define DDR(x)			((x)-1)    // Address of data direction register of port x

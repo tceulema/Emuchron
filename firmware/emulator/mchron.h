@@ -25,6 +25,7 @@ int doHelpExpr(cmdLine_t *cmdLine);
 int doHelpMsg(cmdLine_t *cmdLine);
 int doLcdBacklightSet(cmdLine_t *cmdLine);
 int doLcdCursorSet(cmdLine_t *cmdLine);
+int doLcdCursorReset(cmdLine_t *cmdLine);
 int doLcdDisplaySet(cmdLine_t *cmdLine);
 int doLcdErase(cmdLine_t *cmdLine);
 int doLcdInverse(cmdLine_t *cmdLine);
@@ -57,10 +58,10 @@ int doWaitTimerStart(cmdLine_t *cmdLine);
 int doExit(cmdLine_t *cmdLine);
 
 // Program counter control block handler prototypes
+int doIf(cmdLine_t **cmdProgCounter);
 int doIfElse(cmdLine_t **cmdProgCounter);
 int doIfElseIf(cmdLine_t **cmdProgCounter);
 int doIfEnd(cmdLine_t **cmdProgCounter);
-int doIfThen(cmdLine_t **cmdProgCounter);
 int doRepeatFor(cmdLine_t **cmdProgCounter);
 int doRepeatNext(cmdLine_t **cmdProgCounter);
 #endif

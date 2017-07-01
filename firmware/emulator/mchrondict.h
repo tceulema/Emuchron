@@ -310,8 +310,8 @@ cmdArg_t argHelpMsg[] =
 cmdArg_t argIfElseIf[] =
 { { ARG_WORD,    "condition",   &argInfoCondition },
   { ARG_END,     "",            NULL } };
-// Argument profile for if-then
-cmdArg_t argIfThen[] =
+// Argument profile for if
+cmdArg_t argIf[] =
 { { ARG_WORD,    "condition",   &argInfoCondition },
   { ARG_END,     "",            NULL } };
 
@@ -514,19 +514,20 @@ cmdCommand_t cmdGroupExecute[] =
 cmdCommand_t cmdGroupHelp[] =
 { { "h",   PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doHelp),           "show help" },
   { "hc",  PC_CONTINUE,     CMDARGS(argHelpCmd),     CMDHANDLER(doHelpCmd),        "show command details" },
-  { "he",  PC_CONTINUE,     CMDARGS(argHelpExpr),    CMDHANDLER(doHelpExpr),       "show result of expression" },
+  { "he",  PC_CONTINUE,     CMDARGS(argHelpExpr),    CMDHANDLER(doHelpExpr),       "show expression result" },
   { "hm",  PC_CONTINUE,     CMDARGS(argHelpMsg),     CMDHANDLER(doHelpMsg),        "show help message" } };
 
 // All commands for command group 'i' (if)
 cmdCommand_t cmdGroupIf[] =
-{ { "iei", PC_IF_ELSE_IF,   CMDARGS(argIfElseIf),    PCCTRLHANDLER(doIfElseIf),    "else if" },
-  { "iel", PC_IF_ELSE,      CMDARGS(argEnd),         PCCTRLHANDLER(doIfElse),      "else" },
-  { "ien", PC_IF_END,       CMDARGS(argEnd),         PCCTRLHANDLER(doIfEnd),       "end" },
-  { "iif", PC_IF_THEN,      CMDARGS(argIfThen),      PCCTRLHANDLER(doIfThen),      "if" } };
+{ { "iei", PC_IF_ELSE_IF,   CMDARGS(argIfElseIf),    PCCTRLHANDLER(doIfElseIf),    "if else if" },
+  { "iel", PC_IF_ELSE,      CMDARGS(argEnd),         PCCTRLHANDLER(doIfElse),      "if else" },
+  { "ien", PC_IF_END,       CMDARGS(argEnd),         PCCTRLHANDLER(doIfEnd),       "if end" },
+  { "iif", PC_IF,           CMDARGS(argIf),          PCCTRLHANDLER(doIf),          "if" } };
 
 // All commands for command group 'l' (lcd)
 cmdCommand_t cmdGroupLcd[] =
 { { "lbs", PC_CONTINUE,     CMDARGS(argLcdBLSet),    CMDHANDLER(doLcdBacklightSet),"set lcd backlight brightness" },
+  { "lcr", PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdCursorReset), "reset controller lcd cursors" },
   { "lcs", PC_CONTINUE,     CMDARGS(argLcdCursSet),  CMDHANDLER(doLcdCursorSet),   "set controller lcd cursor" },
   { "lds", PC_CONTINUE,     CMDARGS(argLcdDispSet),  CMDHANDLER(doLcdDisplaySet),  "switch controller lcd display on/off" },
   { "le",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdErase),       "erase lcd display" },

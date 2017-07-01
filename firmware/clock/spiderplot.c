@@ -102,7 +102,7 @@ void spotSpiderPlotCycle(void)
   // If not, then the plot remains untouched and we don't have to (re)paint
   // anything. Repainting (=remove and paint) an unchanged plot can be seen
   // on the LCD by the lines faintly dis/reappearing; we want to avoid that.
-  if (mcClockNewTS != mcClockOldTS && mcClockNewTM == mcClockOldTM && 
+  if (mcClockNewTS != mcClockOldTS && mcClockNewTM == mcClockOldTM &&
     mcClockNewTH == mcClockOldTH && mcClockInit == GLCD_FALSE)
   {
     if ((u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
@@ -115,7 +115,7 @@ void spotSpiderPlotCycle(void)
   // Repaint all spiderplot connector and axis lines and the inner circles
 
   // First remove the 'old' connector and axis lines
-  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, SPDR_AXIS_MIN, mcClockOldTS, 
+  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, SPDR_AXIS_MIN, mcClockOldTS,
     mcClockOldTM, mcBgColor);
   spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, SPDR_AXIS_HOUR, mcClockOldTM,
     mcClockOldTH, mcBgColor);
@@ -123,7 +123,7 @@ void spotSpiderPlotCycle(void)
     mcClockOldTS, mcBgColor);
 
   // Then draw the 'new' connector and axis lines
-  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, SPDR_AXIS_MIN, mcClockNewTS, 
+  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, SPDR_AXIS_MIN, mcClockNewTS,
     mcClockNewTM, mcFgColor);
   spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, SPDR_AXIS_HOUR, mcClockNewTM,
     mcClockNewTH, mcFgColor);
@@ -168,7 +168,7 @@ void spotSpiderPlotInit(u08 mode)
 //
 // Draw a connector line between two axis and an axis line in a Spotfire
 // QuintusVisuals Spider Plot. The color parameter will either remove or add
-// lines. 
+// lines.
 //
 static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
   u08 valEnd, u08 color)

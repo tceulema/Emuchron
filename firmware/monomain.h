@@ -61,7 +61,7 @@
 // enough for our Monochron application for many years. However, by relocating
 // the eeprom addresses using address offset EE_OFFSET for the configurable
 // Monochron items we can create a new batch of 100k reset/write cycles. An
-// atmega328p has 1KB of eeprom, so we have plenty of relocation space.
+// atmega328p has 1 KB of eeprom, so we have plenty of relocation space.
 // To check the integrity of the eeprom we look for a specific initialization
 // value EE_INITIALIZED at address EE_INIT. When not found, Monochron will
 // reset the eeprom with default values from eepInit[] [monomain.c].
@@ -71,7 +71,7 @@
 #define EE_OFFSET	0
 #define EE_INITIALIZED	0xC3
 
-// The configuration items below are stored in eeprom. An atmega328p has 1KB
+// The configuration items below are stored in eeprom. An atmega328p has 1 KB
 // of eeprom available.
 // Instructions for adding a new entry/entries:
 // 1 - Add new define(s) at bottom of the list.
@@ -122,9 +122,14 @@ uint8_t rtcTimeRead(void);
 void rtcTimeWrite(uint8_t sec, uint8_t min, uint8_t hour, uint8_t day,
   uint8_t mon, uint8_t year);
 
+#ifdef EMULIN
+// Function prototypes for Emuchron renamed functions and interrupt handlers
+int monoMain(void);
+void monoTimer(void);
+#endif
+
 // Miscellaneous
 void eepInit(void);
 void beep(uint16_t freq, uint8_t duration);
 uint8_t bcdEncode(uint8_t x);
-
 #endif

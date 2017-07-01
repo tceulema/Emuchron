@@ -60,7 +60,7 @@ extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
-// The following variables drive the configuration menu 
+// The following variables drive the configuration menu
 extern volatile uint8_t cfgScreenMutex;
 extern volatile uint8_t cfgTickerActivity;
 
@@ -69,7 +69,7 @@ extern volatile uint8_t btnPressed;
 extern volatile uint8_t btnTickerHold;
 extern volatile uint8_t btnTickerConv;
 
-// The following variables drive the realtime clock 
+// The following variables drive the realtime clock
 volatile rtcDateTime_t rtcDateTime;
 volatile rtcDateTime_t rtcDateTimeNext;
 volatile uint8_t rtcTimeEvent = GLCD_FALSE;
@@ -82,7 +82,7 @@ uint16_t almTickerSnooze = 0;
 static uint8_t almStopRequest = GLCD_FALSE;
 volatile uint8_t almSwitchOn = GLCD_FALSE;
 
-// The following variables drive the clock animation and display state 
+// The following variables drive the clock animation and display state
 static volatile uint8_t animTickerCycle;
 volatile uint8_t animDisplayMode = SHOW_TIME;
 
@@ -148,7 +148,7 @@ int main(void)
 
   // Check if we were reset
   MCUSR = 0;
-  
+
   // Just in case we were reset inside of the glcd init function
   // which would happen if the lcd is not plugged in. The end result
   // of that is it will beep, pause, for as long as there is no lcd
@@ -175,17 +175,13 @@ int main(void)
   mcFgColor = (mcBgColor == GLCD_OFF ? GLCD_ON : GLCD_OFF);
   almAlarmSelect = eeprom_read_byte((uint8_t *)EE_ALARM_SELECT) % 4;
   almTimeGet(almAlarmSelect, &mcAlarmH, &mcAlarmM);
-  
+
   // Init buttons
   DEBUGP("*** Buttons");
   btnInit();
 
   // Init based on alarm switch
   DEBUGP("*** Alarmstate");
-  almSwitchOn = GLCD_FALSE;
-  almAlarming = GLCD_FALSE;
-  almTickerSnooze = 0;
-  almTickerAlarm = 0;
   almStateSet();
 
   // Setup 1-ms timer on timer0
@@ -268,7 +264,7 @@ int main(void)
           DEBUGP("Set button dflt to +");
         }
       }
- 
+
       // Check the + button and default Set button action
       if ((btnPressed & BTN_PLUS) || actionDefault == GLCD_TRUE)
       {
@@ -325,7 +321,7 @@ SIGNAL(TIMER0_COMPA_vect)
   // Countdown timer for main loop animation (every 75 msec)
   if (animTickerCycle > 0)
     animTickerCycle--;
-  // Countdown timer for detecting press-hold of + button 
+  // Countdown timer for detecting press-hold of + button
   if (btnTickerHold > 0)
     btnTickerHold--;
   // Countdown timer for next ADC button conversion
@@ -399,7 +395,7 @@ SIGNAL(TIMER0_COMPA_vect)
       sndTickerTone = SND_TICK_TONE_MS;
       if (TCCR1B == 0)
       {
-        // End of silent period: next one will do audio 
+        // End of silent period: next one will do audio
         TCCR1A = 0;
         TCCR1B = _BV(WGM12) | _BV(CS10); // CTC with fastest timer
         TIMSK1 = _BV(TOIE1) | _BV(OCIE1A);
@@ -452,7 +448,7 @@ SIGNAL(TIMER0_COMPA_vect)
 // time dividers.
 //
 #ifdef EMULIN
-void monoTimer (void)
+void monoTimer(void)
 #else
 SIGNAL(TIMER2_OVF_vect)
 #endif
@@ -477,7 +473,7 @@ SIGNAL(TIMER2_OVF_vect)
   }
 
   // This occurs at approx 5.7Hz, 8.5Hz or 13.6Hz.
-  // For this refer to defs of TIMER2_RETURN_x in monomain.h.
+  // For this refer to defs of TIMER2_RETURN_x above.
   uint8_t lastSec = rtcDateTime.timeSec;
 
   //DEBUGP("* RTC");
@@ -649,7 +645,7 @@ void almStateSet(void)
 #endif
         // Turn off piezo
         PIEZO_PORT &= ~_BV(PIEZO);
-      } 
+      }
     }
   }
   else
@@ -671,7 +667,7 @@ void almStateSet(void)
 #else
       sndAlarmTone = 0;
 #endif
-    }   
+    }
   }
 }
 
@@ -759,13 +755,13 @@ void beep(uint16_t freq, uint8_t duration)
 #else
   uint8_t i = duration;
 
-  // Start the beep 
-  TCCR1A = 0; 
+  // Start the beep
+  TCCR1A = 0;
   TCCR1B = _BV(WGM12) | _BV(CS10); // CTC with fastest timer
   TIMSK1 = _BV(TOIE1) | _BV(OCIE1A);
   OCR1A = (F_CPU / freq) / 2;
 
-  // Wait time 
+  // Wait time
   while (i >= 25)
   {
     _delay_ms(25);
@@ -872,7 +868,7 @@ void rtcMchronTimeInit(void)
   DEBUGP("Clear time event");
   rtcDateTimeNext.timeSec = 60;
   rtcTimeEvent = GLCD_FALSE;
-  // And finally wait for a new registered time event (<70 msec)
+  // And finally wait for a new registered time event in next time scan cycle
   while (rtcTimeEvent == GLCD_FALSE);
 #else
   // As the emulator event loop is not in a separate thread nor is
@@ -880,8 +876,7 @@ void rtcMchronTimeInit(void)
   DEBUGP("Clear time event");
   rtcTimeEvent = GLCD_FALSE;
   rtcDateTimeNext.timeSec = 60;
-  while (rtcTimeEvent == GLCD_FALSE)
-    monoTimer();
+  monoTimer();
 #endif
   mcClockTimeEvent = GLCD_TRUE;
 }
@@ -937,7 +932,7 @@ uint8_t rtcTimeRead(void)
 {
   uint8_t regaddr = 0, r;
   uint8_t clockdata[8];
-  
+
   // Get the time from the RTC
   cli();
   r = i2cMasterSendNI(0xD0, 1, &regaddr);
@@ -954,14 +949,14 @@ uint8_t rtcTimeRead(void)
   if (clockdata[2] & _BV(6))
   {
     // "12 hr" mode
-    rtcDateTime.timeHour = ((clockdata[2] >> 5) & 0x1) * 12 + 
+    rtcDateTime.timeHour = ((clockdata[2] >> 5) & 0x1) * 12 +
       bcdDecode(clockdata[2], 0x1);
   }
   else
   {
     // "24 hr" mode
     rtcDateTime.timeHour = bcdDecode(clockdata[2], 0x3);
-  }  
+  }
   rtcDateTime.dateDay = bcdDecode(clockdata[4], 0x3);
   rtcDateTime.dateMon = bcdDecode(clockdata[5], 0x1);
   rtcDateTime.dateYear = bcdDecode(clockdata[6], 0xF);

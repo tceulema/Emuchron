@@ -12,7 +12,7 @@
 #define BRRL_192 52    // for 16MHZ
 #elif (F_CPU == 8000000)
 #define BRRL_9600 52
-#define BRRL_192 26    
+#define BRRL_192 26
 #endif
 
 // Debug printing functions - handy!

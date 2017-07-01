@@ -140,7 +140,9 @@ void puzzleCycle(void)
   {
     // Switch back from help page to clock
     animClockDraw(DRAW_INIT_FULL);
-  } 
+    animClockDraw(DRAW_CYCLE);
+    return;
+  }
   else if (mcU8Util2 == PUZZLE_MODE_HELP)
   {
     // We're in help mode so no screen updates, but decrease
@@ -151,7 +153,7 @@ void puzzleCycle(void)
 
       mcU8Util1--;
       animValToStr(mcU8Util1, counter);
-      glcdPutStr2(120,  1, FONT_5X5P, counter, mcFgColor);
+      glcdPutStr2(120, 1, FONT_5X5P, counter, mcFgColor);
     }
     return;
   }

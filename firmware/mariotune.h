@@ -47,7 +47,7 @@
 // in the firmware.
 // All in all, by cutting out the data redundancy, we save an additional ~225
 // bytes on the image size, free to be used by clock code.
-// 
+//
 // Note: Each byte in MarioTones[] must have a corresponding byte in MarioBeats[].
 //
 const unsigned char __attribute__ ((progmem)) MarioTones[] =

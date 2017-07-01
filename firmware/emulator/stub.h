@@ -68,7 +68,7 @@
 // Misc stub stuff
 #define _BV(x) 			(0x01 << (x))
 #define pgm_read_byte(x) 	((u08)(*(x)))
-#define asm			__asm__ 
+#define asm			__asm__
 
 // Eeprom stubs
 uint8_t stubEepRead(uint8_t *eprombyte);
@@ -91,10 +91,6 @@ u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data);
 void stubPutString(char *x, char *format);
 void stubUartPutChar(char x);
 void stubUartPutDec(int x, char *format);
-
-// Entry points for stubbed functionality in monomain.c [firmware]
-int monoMain(void);
-void monoTimer(void);
 
 // Misc functions that are stubbed empty
 void buttonsInit();

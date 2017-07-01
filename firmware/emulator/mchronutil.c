@@ -110,7 +110,7 @@ int emuArgcArgvGet(int argc, char *argv[])
   emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.winClose = emuWinClose;
 
   // Do archaic command line processing to obtain the lcd output device(s),
-  // lcd output configs and debug logfile 
+  // lcd output configs and debug logfile
   while (argCount < argc)
   {
     if (strncmp(argv[argCount], "-d", 4) == 0)
@@ -406,7 +406,7 @@ u08 emuColorGet(char colorId)
 // Provide some feedback and generate a coredump file (when enabled).
 // Note: A graceful environment shutdown is taken care of by the SIGABRT
 // signal handler, invoked by abort().
-// Note: In order to get a coredump file it requires to run shell command 
+// Note: In order to get a coredump file it requires to run shell command
 // "ulimit -c unlimited" once in the mchron shell.
 //
 void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
@@ -465,8 +465,8 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
     waitKeypress(GLCD_FALSE);
   }
 
-  // Cleanup command line read interface, forcing the readline history (when
-  // active) to be flushed in the history file
+  // Cleanup command line read interface, forcing the readline history to be
+  // flushed in the history file
   cmdInputCleanup(&cmdInput);
 
   // Force coredump
@@ -575,7 +575,7 @@ int emuLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
     retVal = (*cmdCommand->cmdHandler)(cmdLine);
   }
   else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR ||
-           cmdCommand->cmdPcCtrlType == PC_IF_THEN)
+           cmdCommand->cmdPcCtrlType == PC_IF)
   {
     // The user has entered a program control block start command at
     // command prompt level.
@@ -624,7 +624,7 @@ int emuLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
 // We have all command lines and control blocks available in linked lists.
 // The control block list has been checked on its integrity, meaning that
 // all pointers between command lines and control blocks are present and
-// validated so we don't need to worry about that. 
+// validated so we don't need to worry about that.
 // Start at the top of the list and work our way down until we find a
 // runtime error or end up at the end of the list.
 // We may encounter program control blocks that will influence the program
@@ -697,7 +697,7 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
       // Error/interrupt occured in current level
       printf(CMD_STACK_TRACE);
       // Report current stack level and cascade to upper level
-      printf("%d:%s:%d:%s\n", fileExecDepth, source, cmdProgCounter->lineNum,
+      printf(CMD_STACK_FMT, fileExecDepth, source, cmdProgCounter->lineNum,
         cmdProgCounter->input);
       retVal = CMD_RET_RECOVER;
       break;
@@ -706,7 +706,7 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
     {
       // Error/interrupt occured at lower level.
       // Report current stack level and cascade to upper level.
-      printf("%d:%s:%d:%s\n", fileExecDepth, source, cmdProgCounter->lineNum,
+      printf(CMD_STACK_FMT, fileExecDepth, source, cmdProgCounter->lineNum,
         cmdProgCounter->input);
       break;
     }
@@ -863,7 +863,7 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
 //
 // Function: emuSigSetup
 //
-// Signal handler setup that attaches a handler to dedicated signal(s).  
+// Signal handler setup that attaches a handler to dedicated signal(s).
 //
 void emuSigSetup(void)
 {

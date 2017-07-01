@@ -81,13 +81,13 @@ static const float mosRandSeed = 3.9147258617;
 static u16 mosRandVal = 0xA5C3;
 
 // Init data for the hr/min/sec mosquite time elements
-static timeElement_t elementSecInit = 
+static timeElement_t elementSecInit =
 {
   MOS_SEC_START_DELAY, MOS_SEC_X_START, MOS_TIME_Y_START, MOS_SEC_X_WIDTH,
   (float)MOS_SEC_X_START, (float)MOS_TIME_Y_START, 0, 0, MOS_SEC_TXT_X_OFFSET,
   animSec
 };
-static timeElement_t elementMinInit = 
+static timeElement_t elementMinInit =
 {
   MOS_MIN_START_DELAY, MOS_MIN_X_START, MOS_TIME_Y_START, MOS_MIN_X_WIDTH,
   (float)MOS_MIN_X_START, (float)MOS_TIME_Y_START, 0, 0, MOS_MIN_TXT_X_OFFSET,
@@ -174,7 +174,8 @@ void mosquitoCycle(void)
 
   // Redraw all time elements regardless whether changed or not to
   // countereffect distorted elements that are overlapped by others
-  if ((mcCycleCounter & 1) == 1 || mcClockTimeEvent == GLCD_TRUE)
+  if ((mcCycleCounter & 1) == 1 || mcClockTimeEvent == GLCD_TRUE ||
+      mcClockInit == GLCD_TRUE)
   {
     mosquitoElementDraw(&elementSec, mcClockNewTS);
     mosquitoElementDraw(&elementMin, mcClockNewTM);
@@ -233,7 +234,7 @@ static void mosquitoElementDirectionSet(timeElement_t *element)
   mosRandVal = mcCycleCounter * mosRandSeed + mosRandBase;
 
   // Get an angle while preventing too shallow/steep values
-  angle = mosRandVal % (90 - MOS_DIRECTION_ANGLE_MIN * 2) + 
+  angle = mosRandVal % (90 - MOS_DIRECTION_ANGLE_MIN * 2) +
     MOS_DIRECTION_ANGLE_MIN;
 
   // New direction for the time element by putting angle in a quadrant
@@ -257,13 +258,13 @@ static void mosquitoElementDraw(timeElement_t *element, u08 value)
 
   // Draw element value
   glcdPutStr2(element->posX, element->posY, FONT_5X7N, msg, mcFgColor);
-  // Draw border around element value 
+  // Draw border around element value
   glcdRectangle(element->posX - 1, element->posY - 1, 13, 9, mcBgColor);
 
   // Draw element text
   pxDone = glcdPutStr2(element->posX + element->textOffset,
     element->posY + MOS_TXT_Y_OFFSET, FONT_5X5P, element->text, mcFgColor);
-  // Draw border around element text 
+  // Draw border around element text
   glcdRectangle(element->posX + element->textOffset - 1,
     element->posY + MOS_TXT_Y_OFFSET - 1, pxDone + 1, 7, mcBgColor);
 }

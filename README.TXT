@@ -1,5 +1,5 @@
 Emuchron is a lightweight Monochron (http://www.adafruit.com/product/204)
-emulator for Debian Linux 7 and 8.
+emulator for Debian Linux 7, 8 and 9.
 It features a test and debugging platform for Monochron clocks and high level
 glcd graphics functions, and a software framework for clock plugins.
 

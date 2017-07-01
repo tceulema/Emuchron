@@ -142,7 +142,7 @@ void spotBarUpdate(u08 x, u08 y, u08 maxVal, u08 maxHeight, u08 width,
   u08 oldBarHeight;
   u08 newBarHeight;
   char barValue[3];
-  
+
   // Get height of old bar and new bar
   oldBarHeight = (u08)((maxHeight / (float)maxVal) * oldVal + 0.5);
   newBarHeight = (u08)((maxHeight / (float)maxVal) * newVal + 0.5);

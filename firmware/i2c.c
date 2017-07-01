@@ -74,7 +74,7 @@ void i2cSetBitrate(u16 bitrate)
   #endif
   */
 
-  // Calculate bitrate division  
+  // Calculate bitrate division
   //bitrate_div = (F_CPU / 32) / bitrate;
   //outb(TWBR, bitrate_div);
   TWBR = 32;
@@ -299,7 +299,7 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
     // Send device address with write
     i2cSendByte(deviceAddr & 0xFE);
     i2cWaitForComplete();
-    
+
     // Send data
     while (sendlength)
     {
@@ -335,7 +335,7 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
     i2cWaitForComplete();
     *receivedata++ = i2cGetReceivedByte();
   }
-  
+
   // Transmit stop condition.
   // Leave with TWEA on for slave receiving.
   i2cSendStop();
@@ -363,7 +363,7 @@ SIGNAL(TWI_vect)
     // send device address
     i2cSendByte(I2cDeviceAddrRW);
     break;
-  
+
   // Master Transmitter & Receiver status codes
   case TW_MT_SLA_ACK:			// 0x18: Slave address acknowledged
   case TW_MT_DATA_ACK:			// 0x28: Data acknowledged

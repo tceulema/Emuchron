@@ -45,10 +45,10 @@ extern volatile uint8_t rtcTimeEvent;
 // In a Monochron clock its contents are considered stable.
 
 // Previous and new date/time (also ref mcClockTimeEvent)
-volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
-volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
+volatile uint8_t mcClockOldTS = 0, mcClockOldTM = 0, mcClockOldTH = 0;
+volatile uint8_t mcClockNewTS = 0, mcClockNewTM = 0, mcClockNewTH = 0;
+volatile uint8_t mcClockOldDD = 0, mcClockOldDM = 0, mcClockOldDY = 0;
+volatile uint8_t mcClockNewDD = 0, mcClockNewDM = 0, mcClockNewDY = 0;
 
 // Indicates whether real time clock has changed since last check
 volatile uint8_t mcClockTimeEvent = GLCD_FALSE;
@@ -184,7 +184,7 @@ void animAlarmAreaUpdate(u08 x, u08 y, u08 type)
     }
     else
     {
-      // Remove alarm time that is potentially inverse 
+      // Remove alarm time that is potentially inverse
       glcdFillRectangle(x - 1, y - 1, 19, 7, mcBgColor);
       almDisplayState = GLCD_FALSE;
 
@@ -273,7 +273,7 @@ static void animAlarmSwitchCheck(void)
 //
 // Wrapper function for clocks to react to the Set and/or Plus button
 // (when supported).
-// Returns GLCD_TRUE when a button handler is configured for the clock. 
+// Returns GLCD_TRUE when a button handler is configured for the clock.
 //
 u08 animClockButton(u08 pressedButton)
 {
@@ -331,14 +331,13 @@ void animClockDraw(u08 mode)
     {
       if (mode == DRAW_INIT_FULL)
       {
-        // Full init: force alarm area to update, clear the screen and set old
-        // date/time to something harmless to undraw stuff, being the current
-        // time
+        // Full init: force alarm area to update and clear the screen
         mcAlarmSwitch = ALARM_SWITCH_NONE;
         glcdClearScreen(mcBgColor);
-        animDateTimeCopy();
       }
+
       // Init the clock
+      animDateTimeCopy();
       mcClockInit = GLCD_TRUE;
       (*clockDriver->init)(mode);
     }
@@ -348,7 +347,7 @@ void animClockDraw(u08 mode)
     DEBUGP("Bad clock in animClockDraw()");
   }
 
-  // Clear a time event only when set
+  // Clear a time event when set
   if (mcClockTimeEvent == GLCD_TRUE)
   {
     DEBUGP("Clear time event");

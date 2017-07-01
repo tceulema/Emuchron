@@ -30,6 +30,8 @@
 #define GLCD_CONTROLLER_YPIXELS	64
 #define GLCD_NUM_CONTROLLERS \
   ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
+#define GLCD_CONTROLLER_XPIXBITS 6
+#define GLCD_CONTROLLER_YPIXMASK 0x3F
 #define GLCD_FALSE		0
 #define GLCD_TRUE		1
 #define GLCD_OFF		0
@@ -37,7 +39,7 @@
 
 // We use a frame around our lcd display, being 1 pixel wide on each
 // side. So, the number of GLUT pixels in our display is a bit larger
-// than the number of GLCD pixels. 
+// than the number of GLCD pixels.
 #define GLUT_XPIXELS		(GLCD_XPIXELS + 2)
 #define GLUT_YPIXELS		(GLCD_YPIXELS + 2)
 
@@ -52,6 +54,9 @@
 
 // The lcd frame brightness
 #define GLUT_FRAME_BRIGHTNESS	0.5
+
+// The thread loop sleep duration (msec)
+#define GLUT_THREAD_SLEEP_MS	33
 
 // The lcd message queue commands
 #define GLUT_CMD_EXIT		0
@@ -95,16 +100,18 @@ typedef struct _lcdGlutCtrl_t
 {
   unsigned char display;	// Indicates if controller display is active
   unsigned char startLine;	// Indicates the data display line offset
+  int winPixMajority;		// Black vs. white pixels in controller image
+  unsigned char drawInit;	// Whether we need to draw white background
 } lcdGlutCtrl_t;
 
 // The glut controller windows data
 static lcdGlutCtrl_t lcdGlutCtrl[GLCD_NUM_CONTROLLERS];
 
-// A private copy of the window image from which we draw our glut window 
+// A private copy of the window image from which we draw our glut window
 static unsigned char lcdGlutImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 
 // The glut window thread we create that opens and manages the OpenGL/Glut
-// window and processes messages in the lcd message queue 
+// window and processes messages in the lcd message queue
 static pthread_t threadGlut;
 static int deviceActive = GLCD_FALSE;
 
@@ -125,20 +132,18 @@ static int doFlush = GLCD_TRUE;
 // The init parameters
 static lcdGlutInitArgs_t lcdGlutInitArgs;
 
-// The (dummy) message we use upon creating the glut thread 
+// The (dummy) message we use upon creating the glut thread
 static char *createMsg = "Monochron (glut)";
 
 // The brightness of the pixels we draw
 static float winBrightness = 1.0L;
 
-// The number of black vs white pixels.
-// <0 more black than white pixels
-// =0 evently spread
-// >0 more white than black pixels
-static int winPixMajority = -GLCD_XPIXELS * GLCD_YPIXELS / 2;
-
 // Statistics counters on glut and the lcd message queue
 static lcdGlutStats_t lcdGlutStats;
+
+// Window keyboard hit timestamp and key counter
+static struct timeval tvWinKbLastHit;
+static int winKbKeyCount;
 
 // Local function prototypes
 static void lcdGlutDelay(int x);
@@ -236,6 +241,9 @@ int lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
   if (deviceActive == GLCD_TRUE)
     return 0;
 
+  // Reset the glut statistics
+  lcdGlutStatsReset();
+
   // Copy initial glut window geometry and position
   lcdGlutInitArgs = *lcdGlutInitArgsSet;
 
@@ -256,9 +264,38 @@ int lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
 //
 static void lcdGlutKeyboard(unsigned char key, int x, int y)
 {
-  int k,l;
+  unsigned char controller;
+  unsigned char k;
+  unsigned char l;
+  struct timeval tvNow;
+  suseconds_t timeDiff;
+
+  // Do not blink at every keyboard hit. When someone press-holds a key the
+  // blinking will prevent regular updates from being drawn. Not good.
+  // Only blink when a certain time has elapsed since the last blink or when
+  // a consecutive number of previous keypresses were ignored for blinking.
+  gettimeofday(&tvNow, NULL);
+  timeDiff = (tvNow.tv_sec - tvWinKbLastHit.tv_sec) * 1E6 +
+    tvNow.tv_usec - tvWinKbLastHit.tv_usec;
+  if (timeDiff / 1000 <= GLUT_THREAD_SLEEP_MS + 3)
+  {
+    // Not enough time has elapsed to warrant a blink
+    gettimeofday(&tvWinKbLastHit, NULL);
+    winKbKeyCount++;
+
+    // Keep ignoring up to a number of consecutive ignored keypresses
+    if (winKbKeyCount < 15)
+      return;
+  }
+
+  // Either enough time between blinks has elapsed or enough consecutive
+  // keypresses were ignored. Hence, we'll blink.
+  winKbKeyCount = 0;
 
   // Invert display in buffer
+  for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
+    lcdGlutCtrl[controller].winPixMajority =
+      -lcdGlutCtrl[controller].winPixMajority;
   for (k = 0; k < GLCD_XPIXELS; k++)
     for (l = 0; l < GLCD_YPIXELS / 8; l++)
       lcdGlutImage[k][l] = ~(lcdGlutImage[k][l]);
@@ -271,6 +308,9 @@ static void lcdGlutKeyboard(unsigned char key, int x, int y)
   lcdGlutDelay(100);
 
   // And invert back to original
+  for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
+    lcdGlutCtrl[controller].winPixMajority =
+      -lcdGlutCtrl[controller].winPixMajority;
   for (k = 0; k < GLCD_XPIXELS; k++)
     for (l = 0; l < GLCD_YPIXELS / 8; l++)
       lcdGlutImage[k][l] = ~(lcdGlutImage[k][l]);
@@ -278,9 +318,12 @@ static void lcdGlutKeyboard(unsigned char key, int x, int y)
   // Redraw buffer and flush it
   lcdGlutRender();
   glutSwapBuffers();
-  
+
   // Prevent useless reflush in main loop
   doFlush = GLCD_FALSE;
+
+  // Set time offset for next blink
+  gettimeofday(&tvWinKbLastHit, NULL);
 }
 
 //
@@ -290,18 +333,19 @@ static void lcdGlutKeyboard(unsigned char key, int x, int y)
 //
 static void *lcdGlutMain(void *ptr)
 {
-  unsigned char i;
+  unsigned char controller;
   char *myArgv[1];
   int myArgc = 1;
 
-  // Init our window image copy to blank screen
+  // Init our image display and controller related data
   memset(lcdGlutImage, 0, sizeof(lcdGlutImage));
-
-  // Init our controller related data
-  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+  for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
   {
-    lcdGlutCtrl[i].display = GLCD_FALSE;
-    lcdGlutCtrl[i].startLine = 0;
+    lcdGlutCtrl[controller].display = GLCD_FALSE;
+    lcdGlutCtrl[controller].startLine = 0;
+    lcdGlutCtrl[controller].winPixMajority =
+      -GLCD_CONTROLLER_XPIXELS * GLCD_CONTROLLER_YPIXELS / 2;
+    lcdGlutCtrl[controller].drawInit = GLCD_FALSE;
   }
 
   // Init our glut environment
@@ -316,33 +360,36 @@ static void *lcdGlutMain(void *ptr)
   glutCloseFunc(lcdGlutInitArgs.winClose);
 
   // Statistics
+  pthread_mutex_lock(&mutexStats);
   gettimeofday(&lcdGlutStats.timeStart, NULL);
-  
+  pthread_mutex_unlock(&mutexStats);
+  gettimeofday(&tvWinKbLastHit, NULL);
+  winKbKeyCount = 0;
+
   // Main glut process loop until we signal shutdown
   while (doExit == GLCD_FALSE)
   {
-    // Process glut system events.
-    // Note: As lcdGlutRender() may get called in the glut loop
-    // event we need to lock our statistics.
+    // Statistics
     pthread_mutex_lock(&mutexStats);
     lcdGlutStats.ticks++;
-    glutMainLoopEvent();
     pthread_mutex_unlock(&mutexStats);
 
-    // Process our application message queue
-    lcdGlutMsgQueueProcess();
+    // Process glut system events such as window resize, overlapping window
+    // movements and window keypresses. They may invoke a buffer redraw.
+    glutMainLoopEvent();
 
-    // Render in case anything has changed
+    // Process our application message queue and redraw when needed
+    lcdGlutMsgQueueProcess();
     if (doFlush == GLCD_TRUE)
     {
-       lcdGlutRender();
-       glutSwapBuffers();
-       doFlush = GLCD_FALSE;
+      lcdGlutRender();
+      glutSwapBuffers();
+      doFlush = GLCD_FALSE;
     }
 
     // Go to sleep to achieve low CPU usage combined with a refresh
     // rate at max ~30 fps
-    lcdGlutDelay(33);
+    lcdGlutDelay(GLUT_THREAD_SLEEP_MS);
   }
 
   // We are about to exit the glut thread. Disable the close callback as it
@@ -406,9 +453,10 @@ static void lcdGlutMsgQueueAdd(unsigned char cmd, unsigned char arg1,
 static void lcdGlutMsgQueueProcess(void)
 {
   void *freePtr;
-  lcdGlutMsg_t *glutMsg = queueStart;
+  lcdGlutMsg_t *glutMsg;
   unsigned char lcdByte;
   unsigned char msgByte;
+  unsigned char controller;
   unsigned char pixel = 0;
   int queueLength = 0;
 
@@ -417,6 +465,7 @@ static void lcdGlutMsgQueueProcess(void)
   pthread_mutex_lock(&mutexStats);
 
   // Statistics
+  glutMsg = queueStart;
   if (glutMsg != NULL)
     lcdGlutStats.queueEvents++;
 
@@ -432,6 +481,7 @@ static void lcdGlutMsgQueueProcess(void)
     {
       // Draw monochron pixels in window. The controller has decided
       // that the new data differs from the current lcd data.
+      controller = glutMsg->arg2 >> GLCD_CONTROLLER_XPIXBITS;
       doFlush = GLCD_TRUE;
       msgByte = glutMsg->arg1;
       lcdByte = lcdGlutImage[glutMsg->arg2][glutMsg->arg3];
@@ -447,9 +497,9 @@ static void lcdGlutMsgQueueProcess(void)
         {
           lcdGlutStats.bitCnf++;
           if ((msgByte & 0x1) == GLCD_ON)
-            winPixMajority++;
+            lcdGlutCtrl[controller].winPixMajority++;
           else
-            winPixMajority--;
+            lcdGlutCtrl[controller].winPixMajority--;
         }
         lcdByte = lcdByte >> 1;
         msgByte = msgByte >> 1;
@@ -517,33 +567,36 @@ static void lcdGlutRender(void)
   unsigned char x,y;
   unsigned char line;
   unsigned char lcdByte;
-  unsigned char pixel, pixValDraw;
+  unsigned char pixel;
+  unsigned char pixValDraw;
   unsigned char byteValIgnore;
   unsigned char controller;
-  unsigned char on = GLCD_TRUE;
   float posX, posY;
+  float minX, maxX;
   float viewAspectRatio;
   float brightnessDraw;
 
   // Statistics
+  pthread_mutex_lock(&mutexStats);
   lcdGlutStats.redraws++;
+  pthread_mutex_unlock(&mutexStats);
 
   // Clear window buffer
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 
   // We need to set the projection of our display to maintain the
-  // glut lcd display aspect ratio of (almost) 2:1 
+  // glut lcd display aspect ratio of (almost) 2:1
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
-  
+
   // Set the projection orthogonal
   viewAspectRatio =
     (float)glutGet(GLUT_WINDOW_WIDTH) / (float)glutGet(GLUT_WINDOW_HEIGHT);
   if (viewAspectRatio < GLUT_ASPECTRATIO)
   {
     // Use less space on the y-axis
-    glOrtho(-1, 1, -(1 / (viewAspectRatio / GLUT_ASPECTRATIO)), 
+    glOrtho(-1, 1, -(1 / (viewAspectRatio / GLUT_ASPECTRATIO)),
       (1 / (viewAspectRatio / GLUT_ASPECTRATIO)), -1, 1);
   }
   else
@@ -553,46 +606,54 @@ static void lcdGlutRender(void)
       viewAspectRatio / GLUT_ASPECTRATIO, -1, 1, -1, 1);
   }
 
-  // We're going to draw our window.
-  // We started with a fully cleared (=black) black window.
+  // We're going to draw our window that is fully cleared, which is
+  // a black background
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
 
-  // Check if at least one of the controllers is switched off
+  // Find out which controllers have a majority of white pixels to draw
   for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
   {
-    if (lcdGlutCtrl[controller].display == GLCD_FALSE)
-    {
-      on = GLCD_FALSE;
-      break;
-    }
+    if (lcdGlutCtrl[controller].display == GLCD_TRUE &&
+        lcdGlutCtrl[controller].winPixMajority >= 0)
+      lcdGlutCtrl[controller].drawInit = GLCD_TRUE;
+    else
+      lcdGlutCtrl[controller].drawInit = GLCD_FALSE;
   }
 
-  // Determine whether we draw white on black or black on white
-  if (winPixMajority < 0 || on == GLCD_FALSE)
+  // Check the controller areas that must be initialized as white (with a
+  // minority black pixels)
+  if (lcdGlutCtrl[0].drawInit == GLCD_TRUE &&
+      lcdGlutCtrl[1].drawInit == GLCD_TRUE)
   {
-    // Majority of pixels is black so configure to draw a minority
-    // number of white pixels
-    pixValDraw = GLCD_ON;
-    byteValIgnore = 0x0;
-    brightnessDraw = winBrightness;
+    // Both controller areas must be initialized white
+    minX = -1 + GLUT_PIX_X_SIZE;
+    maxX = 1 - GLUT_PIX_X_SIZE;
   }
-  else
+  else if (lcdGlutCtrl[0].drawInit == GLCD_TRUE)
   {
-    // Majority of pixels is white so configure to draw a minority
-    // number of black pixels. For this we start off with a white
-    // Monochron display (using a single draw only!) and then draw
-    // the minority number of black pixels.
+    // Only controller 0 area must be initialized white
+    minX = -1 + GLUT_PIX_X_SIZE;
+    maxX = 0;
+  }
+  else if (lcdGlutCtrl[1].drawInit == GLCD_TRUE)
+  {
+    // Only controller 1 area must be initialized white
+    minX = 0;
+    maxX = 1 - GLUT_PIX_X_SIZE;
+  }
+
+  // Init the controller area(s) with a minority black pixels as white
+  if (lcdGlutCtrl[0].drawInit == GLCD_TRUE ||
+      lcdGlutCtrl[1].drawInit == GLCD_TRUE)
+  {
     glBegin(GL_QUADS);
       glColor3f(winBrightness, winBrightness, winBrightness);
-      glVertex2f(-1 + GLUT_PIX_X_SIZE, -1 + GLUT_PIX_Y_SIZE);
-      glVertex2f( 1 - GLUT_PIX_X_SIZE, -1 + GLUT_PIX_Y_SIZE);
-      glVertex2f( 1 - GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
-      glVertex2f(-1 + GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
+      glVertex2f(minX, -1 + GLUT_PIX_Y_SIZE);
+      glVertex2f(maxX, -1 + GLUT_PIX_Y_SIZE);
+      glVertex2f(maxX,  1 - GLUT_PIX_Y_SIZE);
+      glVertex2f(minX,  1 - GLUT_PIX_Y_SIZE);
     glEnd();
-    pixValDraw = GLCD_OFF;
-    byteValIgnore = 0xff;
-    brightnessDraw = 0;
   }
 
   // Draw display border in frame at 0.5 pixel from each border
@@ -605,90 +666,107 @@ static void lcdGlutRender(void)
     glVertex2f( 1 - GLUT_PIX_X_SIZE / 2,-1 + GLUT_PIX_Y_SIZE / 2);
   glEnd();
 
-  // The Monochron background and window frame are drawn and the
-  // parameters for drawing either black or white pixels are set.
-  // Now render the lcd pixels in our beautiful Monochron display
-  // using the display image from our local lcd buffer.
+  // The Monochron background and window frame are drawn and the parameters
+  // for drawing either black or white pixels are set.
+  // Now render the minority lcd pixels in our beautiful Monochron display
+  // using the display image buffer.
   // Begin at left of x axis and work our way to the right.
   posX = -1L + GLUT_PIX_X_SIZE;
-  for (x = 0; x < GLCD_XPIXELS; x++)
+  for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
   {
-    // Set controller belonging to the x column
-    controller = x / GLCD_CONTROLLER_XPIXELS;
-
-    // Begin painting at the y axis using the vertical offset. When we
-    // reach the bottom on the glut window continue at the top for the
-    // remaining pixels
-    line = (GLCD_CONTROLLER_YPIXELS - lcdGlutCtrl[controller].startLine) %
-      GLCD_CONTROLLER_YPIXELS;
-    posY = 1L - GLUT_PIX_Y_SIZE - line * GLUT_PIX_Y_SIZE;
-    for (y = 0; y < GLCD_YPIXELS / 8; y++)
+    // Skip controller draw area when the controller is switched off as there
+    // is nothing to draw
+    if (lcdGlutCtrl[controller].display == GLCD_FALSE)
     {
-      // Get lcd byte to process
-      if (lcdGlutCtrl[controller].display == GLCD_FALSE)
-      {
-        // The controller is switched off
-        lcdByte = 0;
-      }
-      else
-      {
-        // Get data from lcd buffer with startline offset
-        lcdByte = lcdGlutImage[x][y];
-      }
+      posX = posX + GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
+      continue;
+    }
 
-      if (lcdByte == byteValIgnore)
+    // Set draw parameters based on area background color
+    if (lcdGlutCtrl[controller].drawInit == GLCD_TRUE)
+    {
+      // Draw black pixels in a white background
+      pixValDraw = GLCD_OFF;
+      byteValIgnore = 0xff;
+      brightnessDraw = 0;
+    }
+    else
+    {
+      // Draw white pixels in a black background
+      pixValDraw = GLCD_ON;
+      byteValIgnore = 0x0;
+      brightnessDraw = winBrightness;
+    }
+
+    // Move from left to right
+    for (x = 0; x < GLCD_CONTROLLER_XPIXELS; x++)
+    {
+      // Begin painting at the y axis using the vertical offset. When we
+      // reach the bottom on the glut window continue at the top for the
+      // remaining pixels.
+      line = (GLCD_CONTROLLER_YPIXELS - lcdGlutCtrl[controller].startLine) &
+        GLCD_CONTROLLER_YPIXMASK;
+      posY = 1L - GLUT_PIX_Y_SIZE - line * GLUT_PIX_Y_SIZE;
+      for (y = 0; y < GLCD_CONTROLLER_YPIXELS / 8; y++)
       {
-        // This lcd byte does not contain any pixels to draw.
-        // Shift y position for next 8 pixels.
-        line = line + 8;
-        if (line >= GLCD_CONTROLLER_YPIXELS)
+        // Get data from image buffer with startline offset
+        lcdByte =
+          lcdGlutImage[x + (controller << GLCD_CONTROLLER_XPIXBITS)][y];
+
+        if (lcdByte == byteValIgnore)
         {
-          // Due to startline offset we will continue at a
-          // new offset from the top
-          line = line - GLCD_CONTROLLER_YPIXELS;
-          posY = 1L - GLUT_PIX_Y_SIZE - line * GLUT_PIX_Y_SIZE;
-        }
-        else
-        {
-          posY = posY - 8 * GLUT_PIX_Y_SIZE;
-        }
-      }
-      else
-      {
-        // Process each bit in lcd byte
-        for (pixel = 0; pixel < 8; pixel++)
-        {
-          // Draw a pixel only when it is the draw color
-          if ((lcdByte & 0x1) == pixValDraw)
+          // This lcd byte does not contain any pixels to draw.
+          // Shift y position for next 8 pixels.
+          line = line + 8;
+          if (line >= GLCD_CONTROLLER_YPIXELS)
           {
-            // Draw a rectangle for the pixel
-            glBegin(GL_QUADS);
-              glColor3f(brightnessDraw, brightnessDraw, brightnessDraw);
-              glVertex2f(posX, posY - GLUT_PIX_Y_SIZE);
-              glVertex2f(posX + GLUT_PIX_X_SIZE, posY - GLUT_PIX_Y_SIZE);
-              glVertex2f(posX + GLUT_PIX_X_SIZE, posY);
-              glVertex2f(posX, posY);
-            glEnd();
-          }
-          // Shift y position for next pixel
-          line++;
-          if (line == GLCD_CONTROLLER_YPIXELS)
-          {
-            // Due to startline offset we will continue at the top
-            line = 0;
-            posY = 1L - GLUT_PIX_Y_SIZE;
+            // Due to startline offset we will continue at a
+            // new offset from the top
+            line = line - GLCD_CONTROLLER_YPIXELS;
+            posY = 1L - GLUT_PIX_Y_SIZE - line * GLUT_PIX_Y_SIZE;
           }
           else
           {
-            posY = posY - GLUT_PIX_Y_SIZE;
+            posY = posY - 8 * GLUT_PIX_Y_SIZE;
           }
-          // Shift to next pixel
-          lcdByte = (lcdByte >> 1);
+        }
+        else
+        {
+          // Process each bit in lcd byte
+          for (pixel = 0; pixel < 8; pixel++)
+          {
+            // Draw a pixel only when it is the draw color
+            if ((lcdByte & 0x1) == pixValDraw)
+            {
+              // Draw a rectangle for the pixel
+              glBegin(GL_QUADS);
+                glColor3f(brightnessDraw, brightnessDraw, brightnessDraw);
+                glVertex2f(posX, posY - GLUT_PIX_Y_SIZE);
+                glVertex2f(posX + GLUT_PIX_X_SIZE, posY - GLUT_PIX_Y_SIZE);
+                glVertex2f(posX + GLUT_PIX_X_SIZE, posY);
+                glVertex2f(posX, posY);
+              glEnd();
+            }
+            // Shift y position for next pixel
+            line++;
+            if (line == GLCD_CONTROLLER_YPIXELS)
+            {
+              // Due to startline offset we will continue at the top
+              line = 0;
+              posY = 1L - GLUT_PIX_Y_SIZE;
+            }
+            else
+            {
+              posY = posY - GLUT_PIX_Y_SIZE;
+            }
+            // Shift to next pixel
+            lcdByte = (lcdByte >> 1);
+          }
         }
       }
+      // Shift x position for next set of vertical pixels
+      posX = posX + GLUT_PIX_X_SIZE;
     }
-    // Shift x position for next set of vertical pixels
-    posX = posX + GLUT_PIX_X_SIZE;
   }
 
   // Force window buffer flush
@@ -715,7 +793,7 @@ void lcdGlutStatsPrint(void)
 {
   struct timeval tv;
   double diffDivider;
-    
+
   // As this is a multi-threaded interface we need to have exclusive
   // access to the counters
   pthread_mutex_lock(&mutexStats);

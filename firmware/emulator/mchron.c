@@ -49,7 +49,7 @@
 
 // Convert a double to other type with decent nearest whole number rounding.
 // Use these macros to convert a scanned numeric command argument (that is
-// of type double) into a type fit for post-processing in a command handler. 
+// of type double) into a type fit for post-processing in a command handler.
 #define TO_INT(d)	((int)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_U08(d)	((u08)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_UINT8_T(d)	((uint8_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
@@ -60,6 +60,7 @@ extern volatile uint8_t animDisplayMode;
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
+extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
@@ -69,6 +70,10 @@ extern volatile uint8_t mcCycleCounter;
 extern clockDriver_t *mcClockPool;
 extern clockDriver_t monochron[];
 extern volatile uint8_t rtcTimeEvent;
+extern volatile uint8_t almSwitchOn;
+extern volatile uint8_t almAlarming;
+extern int16_t almTickerAlarm;
+extern uint16_t almTickerSnooze;
 
 // The variables that store the processed command line arguments
 extern char argChar[];
@@ -224,7 +229,7 @@ int main(int argc, char *argv[])
     printf("ncurses tty = %s\n",
       emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty);
   printf("\n");
-  
+
   // Init the clock pool supported in mchron command line mode
   mcClockPool = emuMonochron;
 
@@ -297,8 +302,8 @@ int main(int argc, char *argv[])
   // and lcd device(s)
   alarmSoundStop();
   ctrlCleanup();
-  
-  // Stop debug output 
+
+  // Stop debug output
   DEBUGP("**** logging stopped");
   emuLogfileClose();
 
@@ -645,7 +650,7 @@ int doExecute(cmdLine_t *cmdLine)
   cmdPcCtrl_t *cmdPcCtrlRoot = NULL;
   int retVal = CMD_RET_OK;
 
-  // Verify too deep nested 'e' commands (prevent potential recursive call) 
+  // Verify too deep nested 'e' commands (prevent potential recursive call)
   if (fileExecDepth >= CMD_FILE_DEPTH_MAX)
   {
     printf("stack level exceeded by last 'e' command (max=%d).\n",
@@ -692,7 +697,7 @@ int doExecute(cmdLine_t *cmdLine)
   // Final stack trace element for error/interrupt that occured at
   // lower level
   if (retVal == CMD_RET_RECOVER && listExecDepth == 0)
-    printf("%d:%s:-:%s\n", fileExecDepth, __progname, cmdLine->input);
+    printf(CMD_STACK_ROOT_FMT, fileExecDepth, __progname, cmdLine->input);
 
   // Restore original command echo state
   echoCmd = myEchoCmd;
@@ -720,7 +725,7 @@ int doExit(cmdLine_t *cmdLine)
     invokeExit = GLCD_TRUE;
     retVal = CMD_RET_EXIT;
   }
-  
+
   return retVal;
 }
 
@@ -800,6 +805,54 @@ int doHelpMsg(cmdLine_t *cmdLine)
 }
 
 //
+// Function: doIf
+//
+// Initiate an if and determine where to continue
+//
+int doIf(cmdLine_t **cmdProgCounter)
+{
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
+  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
+  char *input = cmdLine->input;
+  int retVal;
+
+  // Init the control block structure when needed
+  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
+  {
+    // Scan the command line for the if-then arguments
+    cmdArgInit(&input);
+    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+      GLCD_FALSE);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+
+    // Copy the condition expression for the if-then
+    cmdPcCtrlChild->cbArg1 = cmdPcCtrlArgCreate(argWord[1]);
+    cmdPcCtrlChild->initialized = GLCD_TRUE;
+  }
+
+  // Evaluate the condition expression
+  EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
+
+  // Decide where to go depending on the condition result
+  if (exprValue != 0)
+  {
+    // The if-then block is active and continue on next line
+    cmdPcCtrlChild->active = GLCD_TRUE;
+    *cmdProgCounter = (*cmdProgCounter)->next;
+  }
+  else
+  {
+    // Jump to if-else-if, if-else or if-end block
+    *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+  }
+
+  return CMD_RET_OK;
+}
+
+//
 // Function: doIfElse
 //
 // The start of an if-else block
@@ -813,6 +866,7 @@ int doIfElse(cmdLine_t **cmdProgCounter)
   char *input = cmdLine->input;
   int retVal;
 
+  // Init the control block structure when needed
   if (cmdPcCtrlChild->initialized == GLCD_FALSE)
   {
     // Scan the command line for the if-else parameters
@@ -857,6 +911,7 @@ int doIfElseIf(cmdLine_t **cmdProgCounter)
   char *input = cmdLine->input;
   int retVal;
 
+  // Init the control block structure when needed
   if (cmdPcCtrlChild->initialized == GLCD_FALSE)
   {
     // Scan the command line for the if-else-if arguments
@@ -883,7 +938,7 @@ int doIfElseIf(cmdLine_t **cmdProgCounter)
   }
   else
   {
-    // Evaluate the condition expression 
+    // Evaluate the condition expression
     EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
 
     // Decide where to go depending on the condition result
@@ -916,64 +971,22 @@ int doIfEnd(cmdLine_t **cmdProgCounter)
   char *input = cmdLine->input;
   int retVal;
 
-  // Scan the command line for the if-end parameters
-  cmdArgInit(&input);
-  cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-  retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-    GLCD_FALSE);
-  if (retVal != CMD_RET_OK)
-    return retVal;
-
-  // Deactivate current control block and continue on next line
-  cmdPcCtrlParent->active = GLCD_FALSE;
-  *cmdProgCounter = (*cmdProgCounter)->next;
-
-  return CMD_RET_OK;
-}
-
-//
-// Function: doIfThen
-//
-// Initiate an if-then and determine where to continue
-//
-int doIfThen(cmdLine_t **cmdProgCounter)
-{
-  cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
-  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
-  char *input = cmdLine->input;
-  int retVal;
-
-  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
+  // Init the control block structure when needed
+  if (cmdPcCtrlParent->initialized == GLCD_FALSE)
   {
-    // Scan the command line for the if-then arguments
+    // Scan the command line for the if-end parameters
     cmdArgInit(&input);
     cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
     retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
       GLCD_FALSE);
     if (retVal != CMD_RET_OK)
       return retVal;
-
-    // Copy the condition expression for the if-then
-    cmdPcCtrlChild->cbArg1 = cmdPcCtrlArgCreate(argWord[1]);
-    cmdPcCtrlChild->initialized = GLCD_TRUE;
+    cmdPcCtrlParent->initialized = GLCD_TRUE;
   }
 
-  // Evaluate the condition expression 
-  EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
-
-  // Decide where to go depending on the condition result
-  if (exprValue != 0)
-  {
-    // The if-then block is active and continue on next line
-    cmdPcCtrlChild->active = GLCD_TRUE;
-    *cmdProgCounter = (*cmdProgCounter)->next;
-  }
-  else
-  {
-    // Jump to if-else-if, if-else or if-end block
-    *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
-  }
+  // Deactivate current control block and continue on next line
+  cmdPcCtrlParent->active = GLCD_FALSE;
+  *cmdProgCounter = (*cmdProgCounter)->next;
 
   return CMD_RET_OK;
 }
@@ -990,6 +1003,23 @@ int doLcdBacklightSet(cmdLine_t *cmdLine)
   emuBacklight = TO_U08(argDouble[0]);
   ctrlLcdBacklightSet(emuBacklight);
   ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdCursorReset
+//
+// Reset controller lcd cursors and sync with software cursor to (0,0)
+//
+int doLcdCursorReset(cmdLine_t *cmdLine)
+{
+  // Reset the controller hardware cursors to (0,0) and by doing so sync
+  // the y location with the glcd administered cursor y location.
+  glcdSetAddress(64, 7);
+  glcdSetAddress(64, 0);
+  glcdSetAddress(0, 7);
+  glcdSetAddress(0, 0);
 
   return CMD_RET_OK;
 }
@@ -1201,29 +1231,31 @@ int doMonochron(cmdLine_t *cmdLine)
     kbModeSet(KB_MODE_SCAN);
 
   // Set essential Monochron startup data
+  mcClockOldTS = mcClockOldTM = mcClockOldTH = 0;
+  mcClockNewTS = mcClockNewTM = mcClockNewTH = 0;
+  mcClockOldDD = mcClockOldDM = mcClockOldDY = 0;
+  mcClockNewDD = mcClockNewDM = mcClockNewDY = 0;
   mcClockPool = monochron;
   mcMchronClock = 0;
   mcClockTimeEvent = GLCD_FALSE;
   mcAlarmSwitch = ALARM_SWITCH_NONE;
   animDisplayMode = SHOW_TIME;
+  almSwitchOn = GLCD_FALSE;
+  almAlarming = GLCD_FALSE;
+  almTickerAlarm = 0;
+  almTickerSnooze = 0;
 
   // Clear the screen so we won't see any flickering upon
   // changing the backlight later on
   glcdClearScreen(GLCD_OFF);
 
-  // Upon request force the eeprom to init and, based on that, set the
-  // backlight of the lcd stub device
+  // Upon request force the eeprom to init
   if (argChar[1] == 'r')
-  {
     stubEepReset();
-    ctrlLcdBacklightSet(OCR2A_VALUE);
-  }
-  else
-  {
-    // No init needed so set the backlight as stored in the eeprom
-    myBacklight = eeprom_read_byte((uint8_t *)EE_BRIGHT) >> OCR2B_BITSHIFT;
-    ctrlLcdBacklightSet(myBacklight);
-  }
+
+  // Set the backlight as stored in the eeprom
+  myBacklight = eeprom_read_byte((uint8_t *)EE_BRIGHT) >> OCR2B_BITSHIFT;
+  ctrlLcdBacklightSet(myBacklight);
 
   // Init stub event handler used in Monochron
   stubEventInit(startMode, stubHelpMonochron);
@@ -1548,13 +1580,18 @@ int doRepeatNext(cmdLine_t **cmdProgCounter)
   char *input = cmdLine->input;
   int retVal;
 
-  // Scan and validate the repeat next command line
-  cmdArgInit(&input);
-  cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-  retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-    GLCD_FALSE);
-  if (retVal != CMD_RET_OK)
-    return retVal;
+  // Init the control block structure when needed
+  if (cmdPcCtrlParent->initialized == GLCD_FALSE)
+  {
+    // Scan and validate the repeat next command line
+    cmdArgInit(&input);
+    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+      GLCD_FALSE);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+    cmdPcCtrlParent->initialized = GLCD_TRUE;
+  }
 
   // Decide where to go depending on whether the loop is still active
   if (cmdPcCtrlParent->active == GLCD_TRUE)
@@ -1583,10 +1620,10 @@ int doStatsPrint(cmdLine_t *cmdLine)
 
   // Print stub statistics
   stubStatsPrint();
-  
+
   // Print glcd interface and lcd performance statistics
   ctrlStatsPrint(CTRL_STATS_FULL);
-  
+
   return CMD_RET_OK;
 }
 
@@ -1605,14 +1642,14 @@ int doStatsReset(cmdLine_t *cmdLine)
 
   if (echoCmd == CMD_ECHO_YES)
     printf("statistics reset\n");
-  
+
   return CMD_RET_OK;
 }
 
 //
 // Function: doTimeFlush
 //
-// Sync with and then report and update clock with date/time/alarm 
+// Sync with and then report and update clock with date/time/alarm
 //
 int doTimeFlush(cmdLine_t *cmdLine)
 {
@@ -1635,7 +1672,7 @@ int doTimeFlush(cmdLine_t *cmdLine)
 //
 // Function: doTimePrint
 //
-// Report current date/time/alarm 
+// Report current date/time/alarm
 //
 int doTimePrint(cmdLine_t *cmdLine)
 {

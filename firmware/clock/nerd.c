@@ -131,7 +131,7 @@ static void nerdBaseClockUpdate(uint8_t clock)
   char numberStr[13];
   uint8_t digitOffset = 0;
   nerdLocation_t thisClock = nerdLocation[clock];
-  
+
   // Hour
   if (mcClockOldTH != mcClockNewTH || mcClockInit == GLCD_TRUE)
   {
@@ -161,7 +161,7 @@ static void nerdBaseClockUpdate(uint8_t clock)
       glcdPutStr2(thisClock.locXTS + digitOffset * 4,
         thisClock.locYHms, FONT_5X5P, numberStr + digitOffset, mcFgColor);
   }
-  
+
   // Day
   if (mcClockOldDD != mcClockNewDD || mcClockInit == GLCD_TRUE)
   {
@@ -203,9 +203,9 @@ static void nerdBaseClockUpdate(uint8_t clock)
 // - The function returns an index in the new value text string for the
 //   first character that deviates from the previous sting value, so we
 //   don't have to print the entire string to the LCD.
-// - In case the clock has to init itelf, the function returns value 0.  
+// - In case the clock has to init itelf, the function returns value 0.
 // - In case the new string value is identical to the old value the
-//   function returns value 255.  
+//   function returns value 255.
 //
 static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
   uint16_t oldVal, char *numberStr)
@@ -220,19 +220,19 @@ static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
 
   // We're mostly going to use shift and and/or operations to calculate
   // our stuff so we need a bitmask. Depending on the number base we'll
-  // have different mask lengths. 
+  // have different mask lengths.
   if (base == 2)
     maskLen = 1;
   else if (base == 8)
     maskLen = 3;
   else
     maskLen = 4;
-    
+
   // Set the initial mask position in the number value
   maskPos = maskLen * digits;
   mask = (base - 1) << (maskLen * (digits - 1));
 
-  // Generate the requested length of characters 
+  // Generate the requested length of characters
   for (i = 0; i < digits; i++)
   {
     // Get the digit value for both the old and new value
@@ -251,10 +251,10 @@ static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
     else if (digitNew < 16)
       numberStr[i] = (char)(digitNew - 10 + 'a');
 
-    // Get remainder value for the old and new value 
+    // Get remainder value for the old and new value
     newVal = (newVal & ~mask);
     oldVal = (oldVal & ~mask);
-    
+
     // And move to next digit
     mask = (mask >> maskLen);
     maskPos = maskPos - maskLen;
@@ -267,7 +267,7 @@ static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
   // that the entire string is to be reported
   if (mcClockInit == GLCD_TRUE)
     compareLoc = 0;
-  
+
   return compareLoc;
 }
 

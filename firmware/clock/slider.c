@@ -217,7 +217,7 @@ void sliderInit(u08 mode)
   sliderElementInit(SLIDER_RIGHT_X_START, SLIDER_DAY_Y_START, 3, animDay);
   sliderElementInit(SLIDER_RIGHT_X_START, SLIDER_MON_Y_START, 1, animMonth);
   sliderElementInit(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START, 9, animYear);
-  
+
   // Init alarm blink state
   mcU8Util1 = GLCD_FALSE;
 }

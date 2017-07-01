@@ -225,7 +225,7 @@ void qrMaskTry(unsigned char mask)
   // Apply the mask
   applymask(mask);
 
-  // Get black-white imbalance and see if mask is (for now) the best 
+  // Get black-white imbalance and see if mask is (for now) the best
   badness = badcheck();
   if (badness < mindem)
   {
@@ -483,7 +483,7 @@ static void fillframe(void)
   }
 }
 
-// Masking 
+// Masking
 static void applymask(unsigned char m)
 {
   unsigned char x, y, r3x, r3y;

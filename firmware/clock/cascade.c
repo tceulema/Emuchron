@@ -61,9 +61,9 @@ void spotCascadeCycle(void)
       CASC_VALUE_Y_OFFSET, FILL_BLANK);
 
   // Verify changes in delta min to sec
-  if (mcClockNewTM != mcClockOldTM || mcClockNewTS != mcClockOldTS || 
+  if (mcClockNewTM != mcClockOldTM || mcClockNewTS != mcClockOldTS ||
       mcClockInit == GLCD_TRUE)
-    spotCascadeDeltaUpdate(CASC_MIN_X_START + CASC_DELTA_X_OFFSET, 
+    spotCascadeDeltaUpdate(CASC_MIN_X_START + CASC_DELTA_X_OFFSET,
       mcClockOldTM, mcClockNewTM, mcClockOldTS, mcClockNewTS);
 
   // Verify changes in min
@@ -75,7 +75,7 @@ void spotCascadeCycle(void)
   // Verify changes in delta hour to min
   if (mcClockNewTH != mcClockOldTH || mcClockNewTM != mcClockOldTM ||
       mcClockInit == GLCD_TRUE)
-    spotCascadeDeltaUpdate(CASC_HOUR_X_START + CASC_DELTA_X_OFFSET, 
+    spotCascadeDeltaUpdate(CASC_HOUR_X_START + CASC_DELTA_X_OFFSET,
       mcClockOldTH, mcClockNewTH, mcClockOldTM, mcClockNewTM);
 
   // Verify changes in hour

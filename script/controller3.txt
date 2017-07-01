@@ -27,3 +27,7 @@ rf ctrl=0 ctrl<2 ctrl=ctrl+1
     rn
   rn
 rn
+
+# Reset and sync hardware with glcd software cursor to (0,0)
+lcr
+

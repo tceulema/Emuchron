@@ -59,26 +59,27 @@ Commands:
               echo: 'e' = echo commands, 'i' = inherit, 's' = silent
               filename: full filepath or relative to startup folder mchron
   'h'   - Help
-  'hc'  - Help command
+  'hc'  - Show command details
           Argument: <command>
               command: mchron command or '*' for all commands
-  'he'  - Help expression
+  'he'  - Show expression result
           Argument: <number>
               number: expression
-  'hm'  - Help message
+  'hm'  - Show help message
           Argument: <message>
               message: ascii text
-  'iei' - If else if then
+  'iei' - If else if
           Argument: <condition>
               condition: expression determining block execution
   'iel' - If else
   'ien' - If end
-  'iif' - If then
+  'iif' - If
           Argument: <condition>
               condition: expression determining block execution
   'lbs' - Set lcd backlight brightness
           Argument: <backlight>
               backlight: 0..16 (0 = dim .. 16 = bright)
+  'lcr' - Reset controller lcd cursors
   'lcs' - Set controller lcd cursor
           Arguments: <controller> <x> <yline> 
               controller: 0, 1

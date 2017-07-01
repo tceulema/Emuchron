@@ -44,7 +44,7 @@
 //#define GLCD_CTRL_RESET 		PC4
 //#define GLCD_CTRL_RESET_PORT		PORTC
 //#define GLCD_CTRL_RESET_DDR		DDRC
-// (*) NOTE: additional controller chip selects are optional and 
+// (*) NOTE: additional controller chip selects are optional and
 // will be automatically used per each step in 64 pixels of display size
 // Example: Display with 128 horizontal pixels uses 2 controllers
 #endif

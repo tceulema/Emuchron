@@ -20,7 +20,7 @@
 // In contrast with Monochron, in the emulator at the root level in a module,
 // a 'q' keypress will exit the test suite and returns to the mchron caller
 // function. In most cases this will be the mchron command prompt.
-// 
+//
 // The code also runs in the Emuchron emulator, but as the emulator runs on
 // most likely an Intel/AMD class cpu, its speed performance results are
 // irrelevant. However, information related to commands and bytes sent to and
@@ -96,61 +96,34 @@
 #include "perftest.h"
 #include "analog.h"
 
-// Loop values for individual tests. These loop values are set such that a
-// test, built for Emuchron v1.3 using avr-gcc 4.3.5 (Debian 6), runs on
-// Monochron hardware in about 2 minutes.
-/*#define PERF_CIRCLE2_1	125
-#define PERF_CIRCLE2_2		162
-#define PERF_DOT_1		30
-#define PERF_DOT_2		39
-#define PERF_LINE_1		1
-#define PERF_LINE_2		8
-#define PERF_FILLCIRCLE2_1	92
-#define PERF_FILLCIRCLE2_2	300
-#define PERF_FILLRECTANGLE2_1	455
-#define PERF_FILLRECTANGLE2_2	2900
-#define PERF_FILLRECTANGLE2_3	1985
-#define PERF_FILLRECTANGLE2_4	1953
-#define PERF_PUTSTR3_1		410
-#define PERF_PUTSTR3_2		968
-#define PERF_PUTSTR3_3		380
-#define PERF_PUTSTR3_4		910
-#define PERF_PUTSTR3_5		727
-#define PERF_PUTSTR3V_1		648
-#define PERF_PUTSTR3V_2		1354
-#define PERF_PUTSTR3V_3		824
-#define PERF_PUTSTR3V_4		1508*/
-
 // Refer to appendix B in Emuchron_Manual.pdf [support].
-// Draw performance for most glcd functions has improved considerably since
-// Emuchron v1.3, the first time when performance tests were run, let alone
-// since Emuchron v1.0. For some tests the run time in v2.1 has become too low
-// to make a proper evaluation of test time results.
-// Therefore, for Emuchron v2.1 the test loop values are reset in such a way
-// that a test, built for Emuchron v2.1 using avr-gcc 4.3.5 (Debian 6), runs on
+// Since v2.1, due to improved draw performance, optimizations in tests, and a
+// different compiler, a test loop value recalibration is warranted.
+// For Emuchron v3.1 the test loop values are recalibrated in such a way that a
+// test, built for Emuchron v3.1 using avr-gcc 4.8.1 (Debian 8), runs on
 // Monochron hardware in about 2 minutes.
-#define PERF_CIRCLE2_1		214
-#define PERF_CIRCLE2_2		500
-#define PERF_DOT_1		59
-#define PERF_DOT_2		72
-#define PERF_LINE_1		3
-#define PERF_LINE_2		26
-#define PERF_FILLCIRCLE2_1	276
-#define PERF_FILLCIRCLE2_2	912
-#define PERF_FILLRECTANGLE2_1	1139
-#define PERF_FILLRECTANGLE2_2	5898
-#define PERF_FILLRECTANGLE2_3	3593
-#define PERF_FILLRECTANGLE2_4	3510
-#define PERF_PUTSTR3_1		1109
-#define PERF_PUTSTR3_2		2142
-#define PERF_PUTSTR3_3		1025
-#define PERF_PUTSTR3_4		2142
-#define PERF_PUTSTR3_5		2017
-#define PERF_PUTSTR3V_1		857
-#define PERF_PUTSTR3V_2		2043
-#define PERF_PUTSTR3V_3		1027
-#define PERF_PUTSTR3V_4		2336
-#define PERF_PUTSTR_1		5130
+#define PERF_CIRCLE2_1		407
+#define PERF_CIRCLE2_2		807
+#define PERF_DOT_1		64
+#define PERF_DOT_2		77
+#define PERF_LINE_1		11500
+#define PERF_LINE_2		28
+#define PERF_FILLCIRCLE2_1	299
+#define PERF_FILLCIRCLE2_2	1006
+#define PERF_FILLRECTANGLE2_1	1292
+#define PERF_FILLRECTANGLE2_2	6680
+#define PERF_FILLRECTANGLE2_3	4033
+#define PERF_FILLRECTANGLE2_4	3945
+#define PERF_PUTSTR3_1		1246
+#define PERF_PUTSTR3_2		2405
+#define PERF_PUTSTR3_3		1152
+#define PERF_PUTSTR3_4		2406
+#define PERF_PUTSTR3_5		2265
+#define PERF_PUTSTR3V_1		850
+#define PERF_PUTSTR3V_2		2062
+#define PERF_PUTSTR3V_3		985
+#define PERF_PUTSTR3V_4		2400
+#define PERF_PUTSTR_1		6010
 
 // Defines on button press action flavors
 #define PERF_WAIT_CONTINUE	0
@@ -190,6 +163,7 @@ extern volatile uint8_t mcBgColor, mcFgColor;
 
 // The internal RTC clock time and button press indicators
 extern volatile rtcDateTime_t rtcDateTimeNext;
+extern volatile uint8_t rtcTimeEvent;
 extern volatile uint8_t btnPressed;
 
 // Generic test utility function prototypes
@@ -202,7 +176,8 @@ static u08 perfTestEnd(u08 interruptTest);
 static u08 perfTestInit(char *label, u08 testId);
 static void perfTestTimeInit(void);
 static u08 perfTestTimeNext(void);
-static void perfTextCreate(u08 length, char *value);
+static void perfTextInit(u08 length);
+static void perfTextToggle(void);
 
 // The actual performance test function prototypes
 static u08 perfTestCircle2(void);
@@ -217,8 +192,13 @@ static u08 perfTestPutStr(void);
 // Runtime environment for the performance test
 static testStats_t testStats;
 
-// Text string for glcdPutStr/glcdPutStr3/glcdPutStr3v tests
-static char textLine[33];
+// Text strings for glcdPutStr/glcdPutStr3/glcdPutStr3v tests
+static char textLineA[33];
+static char textLineY[33];
+static char *textLine;
+
+// Time counter for glcdLine-01
+static u16 secCount;
 
 //
 // Function: perfCycle
@@ -582,32 +562,29 @@ static u08 perfTestLine(void)
     // Draw lines using the analog clock layout
     interruptTest = GLCD_FALSE;
     perfTestBegin();
-    for (i = 0; i < PERF_LINE_1; i++)
+    do
     {
       // Paint all generated seconds using lines in analog clock
-      while (perfTestTimeNext() == GLCD_FALSE)
-      {
-        analogCycle();
+      analogCycle();
 #ifdef EMULIN
-        ctrlLcdFlush();
+      ctrlLcdFlush();
 #endif
-        // Do statistics
-        testStats.elementsDrawn = testStats.elementsDrawn + 3;
+      // Do statistics
+      testStats.elementsDrawn = testStats.elementsDrawn + 3;
 
-        // Check for keypress interrupt
-        button = perfButtonGet();
-        if (button != 0)
-        {
-          interruptTest = GLCD_TRUE;
-          break;
-        }
-        mcClockInit = GLCD_FALSE;
-        mcUpdAlarmSwitch = GLCD_FALSE;
+      // Check for keypress interrupt
+      button = perfButtonGet();
+      if (button != 0)
+      {
+        interruptTest = GLCD_TRUE;
+        break;
       }
+      mcClockInit = GLCD_FALSE;
+      mcUpdAlarmSwitch = GLCD_FALSE;
 
       // Do statistics
       testStats.loopsDone++;
-    }
+    } while (perfTestTimeNext() == GLCD_FALSE);
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
@@ -1016,7 +993,6 @@ static u08 perfTestPutStr3(void)
   u08 interruptTest;
   int i;
   u08 y;
-  char text = '\0';
 
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdPutStr3");
@@ -1035,12 +1011,10 @@ static u08 perfTestPutStr3(void)
 
     // Fill screen text strings crossing y-pixel bytes
     interruptTest = GLCD_FALSE;
+    perfTextInit(21);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_1; i++)
     {
-      // Generate text string
-      perfTextCreate(21, &text);
-
       // Paint strings
       for (y = 3; y < GLCD_YPIXELS - 8; y = y + 8)
       {
@@ -1053,6 +1027,9 @@ static u08 perfTestPutStr3(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 7;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1077,12 +1054,10 @@ static u08 perfTestPutStr3(void)
 
     // Fill screen text strings crossing y-pixel bytes
     interruptTest = GLCD_FALSE;
+    perfTextInit(7);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_2; i++)
     {
-      // Generate text string
-      perfTextCreate(7, &text);
-
       // Paint strings
       for (y = 0; y < GLCD_YPIXELS - 21; y = y + 21)
       {
@@ -1095,6 +1070,9 @@ static u08 perfTestPutStr3(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 3;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1118,12 +1096,10 @@ static u08 perfTestPutStr3(void)
 
     // Fill screen text strings crossing y-pixel bytes
     interruptTest = GLCD_FALSE;
+    perfTextInit(31);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_3; i++)
     {
-      // Generate text string
-      perfTextCreate(31, &text);
-
       // Paint strings
       for (y = 1; y < GLCD_YPIXELS - 6; y = y + 6)
       {
@@ -1136,6 +1112,9 @@ static u08 perfTestPutStr3(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 10;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1160,12 +1139,10 @@ static u08 perfTestPutStr3(void)
 
     // Fill screen text strings crossing y-pixel bytes
     interruptTest = GLCD_FALSE;
+    perfTextInit(10);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_4; i++)
     {
-      // Generate text string
-      perfTextCreate(10, &text);
-
       // Paint strings
       for (y = 1; y < GLCD_YPIXELS - 15; y = y + 15)
       {
@@ -1178,6 +1155,9 @@ static u08 perfTestPutStr3(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 4;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1202,12 +1182,10 @@ static u08 perfTestPutStr3(void)
 
     // Fill screen text strings that fit in a y-pixel byte
     interruptTest = GLCD_FALSE;
+    perfTextInit(21);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_5; i++)
     {
-      // Generate text string
-      perfTextCreate(21, &text);
-
       // Paint strings
       for (y = 0; y <= GLCD_YPIXELS - 8; y = y + 8)
       {
@@ -1220,6 +1198,9 @@ static u08 perfTestPutStr3(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 7;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1248,7 +1229,6 @@ static u08 perfTestPutStr3v(void)
   u08 interruptTest;
   int i;
   u08 x;
-  char text = '\0';
 
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdPutStr3v");
@@ -1267,12 +1247,10 @@ static u08 perfTestPutStr3v(void)
 
     // Fill screen text strings crossing y-pixel bytes
     interruptTest = GLCD_FALSE;
+    perfTextInit(15);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3V_1; i++)
     {
-      // Generate text string
-      perfTextCreate(15, &text);
-
       // Paint strings
       for (x = 1; x < GLCD_XPIXELS - 6; x = x + 6)
       {
@@ -1286,6 +1264,9 @@ static u08 perfTestPutStr3v(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 21;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1310,12 +1291,10 @@ static u08 perfTestPutStr3v(void)
 
     // Fill screen text strings crossing y-pixel bytes
     interruptTest = GLCD_FALSE;
+    perfTextInit(5);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3V_2; i++)
     {
-      // Generate text string
-      perfTextCreate(5, &text);
-
       // Paint strings
       for (x = 1; x < GLCD_XPIXELS - 21; x = x + 21)
       {
@@ -1329,6 +1308,9 @@ static u08 perfTestPutStr3v(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 6;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1353,12 +1335,10 @@ static u08 perfTestPutStr3v(void)
 
     // Fill screen text strings crossing y-pixel bytes
     interruptTest = GLCD_FALSE;
+    perfTextInit(10);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3V_3; i++)
     {
-      // Generate text string
-      perfTextCreate(10, &text);
-
       // Paint strings
       for (x = 7; x < GLCD_XPIXELS; x = x + 9)
       {
@@ -1372,6 +1352,9 @@ static u08 perfTestPutStr3v(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 14;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1396,12 +1379,10 @@ static u08 perfTestPutStr3v(void)
 
     // Fill screen with text strings crossing y-pixel bytes
     interruptTest = GLCD_FALSE;
+    perfTextInit(7);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3V_4; i++)
     {
-      // Generate text string
-      perfTextCreate(7, &text);
-
       // Paint strings
       for (x = 17; x < GLCD_XPIXELS; x = x + 18)
       {
@@ -1415,6 +1396,9 @@ static u08 perfTestPutStr3v(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 7;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1443,7 +1427,6 @@ static u08 perfTestPutStr(void)
   u08 interruptTest;
   int i;
   u08 y;
-  char text = '\0';
 
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdPutStr");
@@ -1461,12 +1444,10 @@ static u08 perfTestPutStr(void)
 
     // Fill screen text strings
     interruptTest = GLCD_FALSE;
+    perfTextInit(21);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR_1; i++)
     {
-      // Generate text string
-      perfTextCreate(21, &text);
-
       // Paint strings
       for (y = 0; y < GLCD_CONTROLLER_YPAGES; y++)
       {
@@ -1480,6 +1461,9 @@ static u08 perfTestPutStr(void)
       // Do statistics
       testStats.loopsDone++;
       testStats.elementsDrawn = testStats.elementsDrawn + 8;
+
+      // Toggle text string
+      perfTextToggle();
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1555,9 +1539,9 @@ static u08 perfButtonWait(u08 type)
     ch = ch - 'A' + 'a';
   if (ch == '+')
     button = BTN_PLUS;
-  else if (ch == 's')    
+  else if (ch == 's')
     button = BTN_SET;
-  else if (ch == 'm')    
+  else if (ch == 'm')
     button = BTN_MENU;
   else if (ch == 'q')
     button = 'q';
@@ -1640,8 +1624,21 @@ static void perfTestBegin(void)
   testStats.loopsDone = 0;
   testStats.elementsDrawn = 0;
 
-  // Mark test start time
+  // Resync time after which we'll wait for the next second to occur
+  // for a more consistent duration measurement
   rtcMchronTimeInit();
+  rtcTimeEvent = GLCD_FALSE;
+#ifndef EMULIN
+  while (rtcTimeEvent == GLCD_FALSE);
+#else
+  while (rtcTimeEvent == GLCD_FALSE)
+  {
+    stubDelay(25);
+    monoTimer();
+  }
+#endif
+
+  // Mark test start time
   testStats.startSec = rtcDateTimeNext.timeSec;
   testStats.startMin = rtcDateTimeNext.timeMin;
   testStats.startHour = rtcDateTimeNext.timeHour;
@@ -1760,16 +1757,17 @@ static u08 perfTestInit(char *label, u08 testId)
 static void perfTestTimeInit(void)
 {
   mcClockOldTS = mcClockNewTS = mcClockOldTM = mcClockNewTM = 0;
-  mcClockOldTH = mcClockNewTH = 1;
+  mcClockOldTH = mcClockNewTH = 0;
   mcClockOldDD = mcClockNewDD = mcClockOldDM = mcClockNewDM = 1;
   mcClockOldDY = mcClockNewDY = 15;
+  secCount = PERF_LINE_1;
   mcAlarming = GLCD_FALSE;
 }
 
 //
 // Function: perfTestTimeNext
 //
-// Get next timestamp up to 23 minutes after start
+// Get next timestamp up to 1 hour after start
 //
 static u08 perfTestTimeNext(void)
 {
@@ -1779,6 +1777,10 @@ static u08 perfTestTimeNext(void)
   mcClockOldDD = mcClockNewDD;
   mcClockOldDM = mcClockNewDM;
   mcClockOldDY = mcClockNewDY;
+
+  secCount--;
+  if (secCount == 0)
+    return GLCD_TRUE;
 
   if (mcClockNewTS != 59)
   {
@@ -1793,41 +1795,50 @@ static u08 perfTestTimeNext(void)
   }
   else
   {
-    // End of hour duration
+    // Next hour
     mcClockNewTS = 0;
     mcClockNewTM = 0;
-    mcClockNewTH = 1;
-    return GLCD_TRUE;
+    mcClockNewTH++;
   }
 
   return GLCD_FALSE;
 }
 
 //
-// Function: perfTextCreate
+// Function: perfTextInit
 //
-// Create a text string of either 'P' or 'Y' characters.
+// Create text strings with 'A' and 'Y' characters.
 // These characters are chosen as in the 5x5p font they both have width 3,
 // which is more or less average.
+// Also set the first text string to be used in a perf test.
 //
-static void perfTextCreate(u08 length, char *value)
+static void perfTextInit(u08 length)
 {
   u08 i;
-  char text = *value;
 
-  // Init first value
-  if (text == '\0')
-    text = 'A';
-
-  // Generate string of certain length
+  // Generate 'A' and 'Y' strings of requested length
   for (i = 0; i < length; i++)
-    textLine[i] = text;
-  textLine[i] = '\0';
+  {
+    textLineA[i] = 'A';
+    textLineY[i] = 'Y';
+  }
+  textLineA[i] = '\0';
+  textLineY[i] = '\0';
 
-  // Set character for next string to generate
-  if (text == 'A')
-    *value = 'Y';
+  // Initialise the first string to be used in a test
+  textLine = textLineA;
+}
+
+//
+// Function: perfTextToggle
+//
+// Toggle the text string to be used in a perf test.
+//
+static void perfTextToggle(void)
+{
+  if (textLine == textLineA)
+    textLine = textLineY;
   else
-    *value = 'A';
+    textLine = textLineA;
 }
 

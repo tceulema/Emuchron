@@ -267,7 +267,7 @@ static void glcdControlSelect(u08 controller)
   // many controllers are actually in the display
 
   // Unselect all controllers
-  cbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);	
+  cbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
 #ifdef GLCD_CTRL_CS1
   cbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
 #endif
@@ -582,17 +582,17 @@ void glcdNextAddress(void)
   // - Go to x+1 in current controller on current y line.
   //   This is done automatically in the controller after the 2nd sequential
   //   read or after every write operation.
-  // - At end of controller 0, move to x=0 in controller 1 on current y line.
-  //   Explicitly set controller 1 cursor.
-  // - Reset to x=0 in controller 0 on current y line.
-  //   Explicitly set controller 0 cursor.
+  // - At end of controller, move to x=0 in next controller on current y line.
+  //   To do: Set cursor in next controller.
+  // - At end of display line, move to x=0 in controller 0 on current y line.
+  //   To do: Set cursor in controller 0.
 
   if (glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS - 1)
   {
     // We're at the end of an lcd line; init cursor on controller 0 on
     // current line
     glcdSetXAddress(0);
-  }  
+  }
   else
   {
     // Next x

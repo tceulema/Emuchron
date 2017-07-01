@@ -11,7 +11,7 @@ hm --- press 'q' to quit ---
 cs 11
 lbs 16
 wts
-rf repeat=0 true repeat=(repeat==4?0:repeat+1)
+rf repeat=0 true repeat=(repeat+1)%5
   rf line=1 line<=64 line=line+1
     iif repeat==1
       lss 64-line line%64

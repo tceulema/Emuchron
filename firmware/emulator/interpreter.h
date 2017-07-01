@@ -12,7 +12,7 @@
 #define PC_CONTINUE		0
 #define PC_REPEAT_FOR		1
 #define PC_REPEAT_NEXT		2
-#define PC_IF_THEN		3
+#define PC_IF			3
 #define PC_IF_ELSE_IF		4
 #define PC_IF_ELSE		5
 #define PC_IF_END		6
@@ -59,8 +59,10 @@
 // The max number of mchron command line arguments per argument type
 #define ARG_TYPE_COUNT_MAX	10
 
-// Generic stack trace header
+// Generic stack trace header and line
 #define CMD_STACK_TRACE		"--- stack trace ---\n"
+#define CMD_STACK_FMT		"%d:%s:%d:%s\n"
+#define CMD_STACK_ROOT_FMT	"%d:%s:-:%s\n"
 
 // Definition of a structure holding a single command line, originating from
 // the command line prompt or from a command file
@@ -80,7 +82,7 @@ typedef struct _cmdPcCtrl_t
 {
   int cmdPcCtrlType;			// The program counter control block type
   int initialized;			// Are control block arguments initialized
-  int active;				// Is current block the active code block	
+  int active;				// Is current block the active code block
   char *cbArg1;				// Malloc-ed control block argument 1
   char *cbArg2;				// Malloc-ed control block argument 2
   char *cbArg3;				// Malloc-ed control block argument 3
@@ -104,7 +106,7 @@ typedef struct _cmdInput_t
 typedef struct _cmdArgDomain_t
 {
   int argDomainType;			// Argument domain type
-  char *argTextList;			// Char/word argument value list 
+  char *argTextList;			// Char/word argument value list
   double argNumMin;			// Numeric argument min value
   double argNumMax;			// Numeric argument max value
   char *argDomainInfo;			// Additional domain info

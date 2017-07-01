@@ -363,7 +363,7 @@ static void qrDraw(void)
   // Process all lcd y byte rows
   while (y < WD * 2)
   {
-    // Get the lcd y byte row and determine what bit pixels to fill 
+    // Get the lcd y byte row and determine what bit pixels to fill
     yByte = (y + QR_Y_START) / 8;
     bitPosStart = (y + QR_Y_START) % 8;
     if (WD * QR_PIX_FACTOR - y < 8)
@@ -392,7 +392,7 @@ static void qrDraw(void)
     {
       template = 0;
     }
-    
+
     // Avoid areas that do not need to be redrawn for the QR
     if (yByte < 2)
     {
@@ -412,7 +412,7 @@ static void qrDraw(void)
       xStart = 0;
       xEnd = WD * QR_PIX_FACTOR;
     }
-    
+
     // Write consecutive lcd bytes starting from this point
     glcdSetAddress(xStart + QR_X_START, yByte);
 
@@ -430,7 +430,7 @@ static void qrDraw(void)
       {
         // A QR defaults to black on white: QR value 0 means white
         // and value 1 means black. This is the inverse of Monochron
-        // colors where 0=Off=black and 1=On=white. 
+        // colors where 0=Off=black and 1=On=white.
         // The QR template bits are set to 0, so only when we see a
         // white QR dot we need to set the bit in the lcd byte.
         if (QRBIT((x >> 1),(yPos >> 1)) == 0)

@@ -93,7 +93,7 @@ static void analogInit(u08 mode);
 // Arrays holding the [x,y] positions of the three arrow points
 // for the hour and minute arrows and the seconds needle
 // arr[0+1] = x,y arrow endpoint
-// arr[2+3] = x,y arrow leg endpoint 1 
+// arr[2+3] = x,y arrow leg endpoint 1
 // arr[4+5] = x,y arrow leg endpoint 2
 static s08 posSec[6];
 static s08 posMin[6];
@@ -249,7 +249,7 @@ void analogCycle(void)
   }
 
   // Redraw hour arrow only if needed
-  if (hourElementChanged  == GLCD_TRUE|| mcClockInit == GLCD_TRUE)
+  if (hourElementChanged == GLCD_TRUE || mcClockInit == GLCD_TRUE)
   {
     // Remove the old hour arrow, sync with new position and redraw
     analogElementDraw(posHour, mcBgColor);
@@ -387,9 +387,9 @@ static u08 analogElementCalc(s08 position[], s08 positionNew[], float radial,
   positionNew[4] = (s08)(sin(radial - radialOffset) * legRadius) + ANA_X_START;
   positionNew[5] = (s08)(-cos(radial - radialOffset) * legRadius) + ANA_Y_START;
 
-  // Provide info if the needle or arrow has changed position  
+  // Provide info if the needle or arrow has changed position
   for (i = 0; i < legsCheck; i++)
-  {    
+  {
     if (position[i] != positionNew[i])
       return GLCD_TRUE;
   }
@@ -425,7 +425,7 @@ static void analogElementSync(s08 position[], s08 positionNew[])
   u08 i;
   u08 posLimit;
 
-  // For the seconds needle we don't want to copy leg info 
+  // For the seconds needle we don't want to copy leg info
   if (position[2] == ANA_X_START && position[3] == ANA_Y_START)
     posLimit = 2;
   else
@@ -451,7 +451,7 @@ static void analogInit(u08 mode)
     // Draw static clock layout
     glcdCircle2(ANA_X_START, ANA_Y_START, ANA_RADIUS, CIRCLE_FULL, mcFgColor);
     glcdDot(ANA_X_START, ANA_Y_START, mcFgColor);
-    
+
     // Paint 5-minute and 15 minute markers in clock
     for (i = 0; i < 12; i++)
     {

@@ -341,7 +341,7 @@ static void cfgMenuMainShow(char *line1, char *line2)
 
   glcdSetAddress(MENU_INDENT, 1);
   glcdPutStrFg("Alarm:         Setup");
-  
+
   glcdSetAddress(MENU_INDENT, 2);
   glcdPutStrFg("Time:       ");
   cfgMenuTimeShow();
@@ -355,7 +355,7 @@ static void cfgMenuMainShow(char *line1, char *line2)
   glcdPutStrFg("Backlight:        ");
   glcdPrintNumberFg(OCR2B >> OCR2B_BITSHIFT);
 #endif
-  
+
   cfgPrintInstruct1(line1, line2);
   glcdFillRectangle2(126, 48, 2, 16, ALIGN_TOP, FILL_FULL, mcBgColor);
 
@@ -875,7 +875,7 @@ static void cfgSetDate(void)
   cfgScreenMutex = GLCD_TRUE;
   cfgPrintArrow(27);
   cfgScreenMutex = GLCD_FALSE;
-  
+
   while (1)
   {
     if (cfgEventPre() == GLCD_TRUE)
@@ -1019,12 +1019,12 @@ static void cfgSetTime(void)
   uint8_t newMin = rtcDateTime.timeMin;
   uint8_t newSec = rtcDateTime.timeSec;
 
-  // Time updates are locked while in this function 
+  // Time updates are locked while in this function
   cfgScreenMutex = GLCD_TRUE;
 
   // Put a small arrow next to 'Time'
   cfgPrintArrow(19);
- 
+
   while (1)
   {
     if (cfgEventPre() == GLCD_TRUE)

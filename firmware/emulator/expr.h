@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'expr.h'
-// Title    : Expression evaluator defs as created in flex/bison 
+// Title    : Expression evaluator defs as created in flex/bison
 //*****************************************************************************
 
 #ifndef EXPR_H

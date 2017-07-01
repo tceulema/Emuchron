@@ -46,7 +46,7 @@
 
 // Structure defining the clock_init/clock_cycle/pressed_button methods
 // for a single clock. For a clock the init and cycle methods are required
-// whereas the button method is optional.  
+// whereas the button method is optional.
 typedef struct _clockDriver_t
 {
   uint8_t clockId;	// Clock Id

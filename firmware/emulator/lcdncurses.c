@@ -30,6 +30,8 @@
 #define GLCD_CONTROLLER_YPIXELS	64
 #define GLCD_NUM_CONTROLLERS \
   ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
+#define GLCD_CONTROLLER_XPIXBITS 6
+#define GLCD_CONTROLLER_XPIXMASK 0x3F
 #define GLCD_FALSE		0
 #define GLCD_TRUE		1
 #define GLCD_OFF		0
@@ -60,9 +62,9 @@ typedef struct _lcdNcurCtrl_t
 } lcdNcurCtrl_t;
 
 // The ncurses controller windows data
-lcdNcurCtrl_t lcdNcurCtrl[GLCD_NUM_CONTROLLERS];
+static lcdNcurCtrl_t lcdNcurCtrl[GLCD_NUM_CONTROLLERS];
 
-// A private copy of the window image from which we draw our ncurses window 
+// A private copy of the window image from which we draw our ncurses window
 static unsigned char lcdNcurImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 
 // The init parameters
@@ -213,8 +215,8 @@ void lcdNcurCleanup(void)
 void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data)
 {
   unsigned char pixel = 0;
-  unsigned char controller = x / GLCD_CONTROLLER_XPIXELS;
-  int posX = (x - controller * GLCD_CONTROLLER_XPIXELS) * 2;
+  unsigned char controller = x >> GLCD_CONTROLLER_XPIXBITS;
+  int posX = (x & GLCD_CONTROLLER_XPIXMASK) * 2;
   int posY = y * 8;
   unsigned char lcdByte = lcdNcurImage[x][y];
 
@@ -227,7 +229,7 @@ void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data)
   // Statistics
   lcdNcurStats.byteReq++;
 
-  // Sync internal window image and force window buffer flush 
+  // Sync internal window image and force window buffer flush
   lcdNcurImage[x][y] = data;
   lcdNcurCtrl[controller].flush = GLCD_TRUE;
 
@@ -324,7 +326,7 @@ void lcdNcurFlush(void)
   struct stat buffer;
 
   // Check the ncurses tty if the previous check was in a
-  // preceding second 
+  // preceding second
   gettimeofday(&tvNow, NULL);
   if (tvNow.tv_sec > tvThen.tv_sec)
   {
@@ -434,8 +436,8 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   }
 
   // Setup backlight grey-tone schemes. By default we'll use the full color
-  // scheme. When ncurses backlight is requested from the command line we
-  // allow switching between the grey-tones.
+  // scheme. When ncurses backlight support is active we allow switching
+  // between the grey-tones.
 
   // Define black color
   init_color(COLOR_BLACK, 0, 0, 0);
@@ -589,7 +591,7 @@ void lcdNcurStartLineSet(unsigned char controller, unsigned char startLine)
   scrollok(lcdNcurCtrl[controller].winCtrl, FALSE);
   lcdNcurRedraw(controller, fillStart, rows);
 }
-  
+
 //
 // Function: lcdNcurStatsPrint
 //

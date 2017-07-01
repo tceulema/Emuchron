@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'global.h'
-// Title    : AVRlib project global include 
+// Title    : AVRlib project global include
 //*****************************************************************************
 
 #ifndef GLOBAL_H

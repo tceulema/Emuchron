@@ -39,7 +39,7 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine);
 // Complete a single command line and, if needed, add or find a program
 // counter control block and associate it with the command line.
 // Return values:
-// -1 : invalid command 
+// -1 : invalid command
 //  0 : success
 // >0 : starting line number of block in which command cannot be matched
 //
@@ -49,8 +49,12 @@ static int cmdLineComplete(cmdPcCtrl_t **cmdPcCtrlLast, cmdPcCtrl_t **cmdPcCtrlR
   int retVal;
   int lineNumErr = 0;
   cmdCommand_t *cmdCommand;
+  char *input;
 
-  // Process the command name scan result
+  // Scan the command name in this command line
+  input = cmdLineLast->input;
+  cmdArgInit(&input);
+  cmdArgScan(argCmd, 1, &input, GLCD_TRUE);
   if (argWord[0] == NULL)
   {
     // Most likely an empty/whitespace line, which is not an error.
@@ -112,7 +116,7 @@ static int cmdLineComplete(cmdPcCtrl_t **cmdPcCtrlLast, cmdPcCtrl_t **cmdPcCtrlR
         *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
           cmdLineLast);
     }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF_THEN)
+    else if (cmdCommand->cmdPcCtrlType == PC_IF)
     {
       // Create new control block and link it to the if-then command
       *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
@@ -214,7 +218,6 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   cmdPcCtrl_t *searchPcCtrl = NULL;	// Active cmdPcCtrl in search efforts
   int lineNum = 1;
   int lineNumErr = 0;
-  char *input = NULL;
   cmdInput_t cmdInput;
 
   // Init the pointers to the command line and the control block lists
@@ -239,24 +242,15 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   // Add each line in the command file in a command linked list
   while (cmdInput.input != NULL)
   {
-    // Set work pointer
-    input = cmdInput.input;
-
-    // Create new command line and add it to the linked list
+    // Create new command line, add it to the linked list, and fill in
+    // its functional payload
     cmdLineLast = cmdLineCreate(cmdLineLast, cmdLineRoot);
-
-    // Fill in functional payload of the list element
     cmdLineLast->lineNum = lineNum;
-    cmdLineLast->input = malloc(strlen(input) + 1);
-    strcpy(cmdLineLast->input, (const char *)input);
+    cmdLineLast->input = malloc(strlen(cmdInput.input) + 1);
+    strcpy(cmdLineLast->input, cmdInput.input);
 
-    // Scan the command name in this line
-    cmdArgInit(&input);
-    cmdArgScan(argCmd, 1, &input, GLCD_TRUE);
-
-    // Process the command name scan result that includes validating
-    // the command name (but not its arguments), retrieving the command
-    // dictionary and matching control blocks
+    // Scan and validate the command name (but not its arguments) as well as
+    // validating matching control blocks
     lineNumErr = cmdLineComplete(&cmdPcCtrlLast, cmdPcCtrlRoot, cmdLineLast);
     if (lineNumErr != 0)
       break;
@@ -266,7 +260,7 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
     cmdInputRead("", &cmdInput);
   }
 
-  // File content is loaded in linked list or error occurred while parsing 
+  // File content is loaded in linked list or error occurred while parsing
   cmdInputCleanup(&cmdInput);
   fclose(fp);
 
@@ -276,7 +270,7 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
     printf("parse: command unmatched in block starting at line %d\n",
       lineNumErr);
     printf(CMD_STACK_TRACE);
-    printf("%d:%s:%d:%s\n", fileExecDepth, fileName, lineNum,
+    printf(CMD_STACK_FMT, fileExecDepth, fileName, lineNum,
       cmdLineLast->input);
     return CMD_RET_ERROR;
   }
@@ -284,7 +278,7 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   {
     printf("parse: invalid command\n");
     printf(CMD_STACK_TRACE);
-    printf("%d:%s:%d:%s\n", fileExecDepth, fileName, lineNum,
+    printf(CMD_STACK_FMT, fileExecDepth, fileName, lineNum,
       cmdLineLast->input);
     return CMD_RET_ERROR;
   }
@@ -300,7 +294,7 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
       printf("parse: command unmatched in block starting at line %d\n",
         searchPcCtrl->cmdLineParent->lineNum);
       printf(CMD_STACK_TRACE);
-      printf("%d:%s:%d:%s\n", fileExecDepth, fileName,
+      printf(CMD_STACK_FMT, fileExecDepth, fileName,
         searchPcCtrl->cmdLineParent->lineNum,
         searchPcCtrl->cmdLineParent->input);
       return CMD_RET_ERROR;
@@ -332,7 +326,6 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   int lineNum = 1;
   int lineNumDigits;
   int lineNumErr = 0;
-  char *input = NULL;
 
   // Init return pointers
   *cmdLineRoot = NULL;
@@ -352,23 +345,15 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   // command is entered.
   while (GLCD_TRUE)
   {
-    // Create new command line and add it to the linked list
-    // by administering lots of pointers
+    // Create new command line, add it to the linked list, and fill in
+    // its functional payload
     cmdLineLast = cmdLineCreate(cmdLineLast, cmdLineRoot);
-
-    // Fill in functional payload of the list element
     cmdLineLast->lineNum = lineNum;
     cmdLineLast->input = malloc(strlen(cmdInput->input) + 1);
-    strcpy(cmdLineLast->input, (const char *)cmdInput->input);
+    strcpy(cmdLineLast->input, cmdInput->input);
 
-    // Scan the command name in this line
-    input = cmdLineLast->input;
-    cmdArgInit(&input);
-    cmdArgScan(argCmd, 1, &input, GLCD_TRUE);
-
-    // Process the command name scan result that includes validating
-    // the command name (but not its arguments) and matching control
-    // blocks
+    // Scan and validate the command name (but not its arguments) as well as
+    // validating matching control blocks
     lineNumErr = cmdLineComplete(&cmdPcCtrlLast, cmdPcCtrlRoot, cmdLineLast);
     if (lineNumErr != 0)
       break;
@@ -377,7 +362,7 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
     if (cmdLineLast->cmdCommand != NULL)
     {
       if (cmdLineLast->cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR ||
-          cmdLineLast->cmdCommand->cmdPcCtrlType == PC_IF_THEN)
+          cmdLineLast->cmdCommand->cmdPcCtrlType == PC_IF)
         pcCtrlCount++;
       else if (cmdLineLast->cmdCommand->cmdPcCtrlType == PC_REPEAT_NEXT ||
           cmdLineLast->cmdCommand->cmdPcCtrlType == PC_IF_END)
@@ -413,7 +398,7 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
     printf("parse: command unmatched in block starting at line %d\n",
       lineNumErr);
     printf(CMD_STACK_TRACE);
-    printf("%d:%s:%d:%s\n", fileExecDepth, __progname, lineNum,
+    printf(CMD_STACK_FMT, fileExecDepth, __progname, lineNum,
       cmdLineLast->input);
     return CMD_RET_ERROR;
   }
@@ -421,7 +406,7 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   {
     printf("parse: invalid command\n");
     printf(CMD_STACK_TRACE);
-    printf("%d:%s:%d:%s\n", fileExecDepth, __progname, lineNum,
+    printf(CMD_STACK_FMT, fileExecDepth, __progname, lineNum,
       cmdLineLast->input);
     return CMD_RET_ERROR;
   }
@@ -504,8 +489,9 @@ char *cmdPcCtrlArgCreate(char *argExpr)
 //
 // Find an unlinked control block and verify if it can match the control
 // block type of the current command line.
-// Returns 0 in case of success. In case of failure it returns the linenumber
-// marking the execution block in which no matching link could be found.
+// Return values:
+//  0 : success
+// >0 : starting line number of block in which command cannot be matched
 //
 static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
 {
@@ -521,15 +507,15 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
           searchPcCtrl->cmdPcCtrlType != PC_REPEAT_FOR)
         return searchPcCtrl->cmdLineParent->lineNum;
       else if (cmdLine->cmdCommand->cmdPcCtrlType == PC_IF_ELSE_IF &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF_THEN &&
+          searchPcCtrl->cmdPcCtrlType != PC_IF &&
           searchPcCtrl->cmdPcCtrlType != PC_IF_ELSE_IF)
         return searchPcCtrl->cmdLineParent->lineNum;
       else if (cmdLine->cmdCommand->cmdPcCtrlType == PC_IF_ELSE &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF_THEN &&
+          searchPcCtrl->cmdPcCtrlType != PC_IF &&
           searchPcCtrl->cmdPcCtrlType != PC_IF_ELSE_IF)
         return searchPcCtrl->cmdLineParent->lineNum;
       else if (cmdLine->cmdCommand->cmdPcCtrlType == PC_IF_END &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF_THEN &&
+          searchPcCtrl->cmdPcCtrlType != PC_IF &&
           searchPcCtrl->cmdPcCtrlType != PC_IF_ELSE_IF &&
           searchPcCtrl->cmdPcCtrlType != PC_IF_ELSE)
         return searchPcCtrl->cmdLineParent->lineNum;

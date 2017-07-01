@@ -65,7 +65,7 @@ char uart_getch(void)
 // the function block of these functions when it is not needed anyway will
 // save us quite a few bytes.
 // The compiler is smart enough to omit the generation of the function block
-// code based on the master debugging flag. I do admit this looks ugly. 
+// code based on the master debugging flag. I do admit this looks ugly.
 
 void ROM_putstring(const char *str, uint8_t nl)
 {
