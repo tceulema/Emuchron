@@ -126,13 +126,15 @@ void lcdNcurBacklight(unsigned char support)
     refresh = GLCD_TRUE;
   }
 
-  // Repaint all controller windows if needed
+  // Sync backlight and repaint all controller windows if needed
   if (refresh == GLCD_TRUE)
   {
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
     {
       wattron(lcdNcurCtrl[i].winCtrl, COLOR_PAIR(pairNew));
-      lcdNcurRedraw(i, 0, GLCD_YPIXELS);
+      // Only do actual repaint when controller display is enabled
+      if (lcdNcurCtrl[i].display == GLCD_TRUE)
+        lcdNcurRedraw(i, 0, GLCD_YPIXELS);
     }
   }
 }
@@ -158,11 +160,13 @@ void lcdNcurBacklightSet(unsigned char backlight)
   if (lcdUseBacklight == GLCD_FALSE)
     return;
 
-  // Repaint all controller windows with new brightness
+  // Sync backlight and repaint all controller windows
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
   {
     wattron(lcdNcurCtrl[i].winCtrl, COLOR_PAIR(pairNew));
-    lcdNcurRedraw(i, 0, GLCD_YPIXELS);
+    // Only do actual repaint when controller display is enabled
+    if (lcdNcurCtrl[i].display == GLCD_TRUE)
+      lcdNcurRedraw(i, 0, GLCD_YPIXELS);
   }
 }
 
