@@ -29,9 +29,9 @@
 *.elf
 core
 
-# Specific files to ignore
+# Specific files and folders to ignore
 /firmware/mchron
 /firmware/emulator/expr.tab.c
 /firmware/emulator/expr.tab.h
 /firmware/emulator/expr.yy.c
-
+/.vscode

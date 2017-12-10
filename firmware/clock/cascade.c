@@ -5,8 +5,7 @@
 
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -16,7 +15,7 @@
 #include "spotfire.h"
 #include "cascade.h"
 
-// Specifics for QV cascade
+// Specifics for cascade clock
 #define CASC_SEC_X_START	73
 #define CASC_MIN_X_START	43
 #define CASC_HOUR_X_START	13
@@ -30,10 +29,9 @@
 #define CASC_VALUE_Y_OFFSET	-8
 #define CASC_DELTA_VALUE_Y_OFFSET -6
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
@@ -44,7 +42,7 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
 //
 // Function: spotCascadeCycle
 //
-// Update the Spotfire QuintusVisuals Cascade and filter panel
+// Update the QuintusVisuals cascade and filter panel
 //
 void spotCascadeCycle(void)
 {
@@ -88,7 +86,7 @@ void spotCascadeCycle(void)
 //
 // Function: spotCascadeInit
 //
-// Initialize the LCD display for use as a Spotfire QuintusVisuals Cascade
+// Initialize the lcd display of a QuintusVisuals cascade
 //
 void spotCascadeInit(u08 mode)
 {
@@ -104,7 +102,7 @@ void spotCascadeInit(u08 mode)
 //
 // Function: spotCascadeDeltaUpdate
 //
-// Update a single QV cascade delta bar
+// Update a single QuintusVisuals cascade delta bar
 //
 static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
   u08 oldValRight, u08 newValRight)
@@ -258,4 +256,3 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
     }
   }
 }
-

@@ -7,7 +7,7 @@
 # Erase lcd display
 le
 
-# Set horizontal and vertical display size
+# Set variables for horizontal and vertical display size
 vs hor=127
 vs ver=63
 

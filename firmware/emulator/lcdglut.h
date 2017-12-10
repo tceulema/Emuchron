@@ -29,5 +29,6 @@ void lcdGlutStatsReset(void);
 void lcdGlutBacklightSet(unsigned char backlight);
 void lcdGlutDataWrite(unsigned char x, unsigned char y, unsigned char data);
 void lcdGlutDisplaySet(unsigned char controller, unsigned char display);
+void lcdGlutGraphicsSet(unsigned char bezel, unsigned char grid);
 void lcdGlutStartLineSet(unsigned char controller, unsigned char startline);
 #endif

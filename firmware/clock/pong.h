@@ -11,4 +11,3 @@ void pongButton(u08 pressedButton);
 void pongCycle(void);
 void pongInit(u08 mode);
 #endif
-

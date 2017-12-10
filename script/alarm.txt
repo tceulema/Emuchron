@@ -11,7 +11,7 @@
 # - Set the wait delay between alarm times using variable 'w'
 #
 # Usage example (with analog HM, minute step 1 and delay of 30 msec):
-# cs 3
+# cs 4
 # vs s=1
 # vs w=30
 # e s ../script/alarm.txt

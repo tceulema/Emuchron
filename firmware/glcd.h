@@ -92,5 +92,4 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
 
 // Get the pixel width of a string
 u08 glcdGetWidthStr(u08 font, char *data);
-
 #endif

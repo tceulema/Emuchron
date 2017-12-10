@@ -3,6 +3,7 @@
 // Title    : Lcd ncurses stub functionality for emuchron emulator
 //*****************************************************************************
 
+// Everything we need for running this thing in Linux
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,8 +39,16 @@
 #define GLCD_ON			1
 
 // Fixed ncurses xterm geometry requirements
-#define NCURSES_X_PIXELS 	258
-#define NCURSES_Y_PIXELS 	66
+#define NCUR_X_PIXELS 		258
+#define NCUR_Y_PIXELS 		66
+
+// The ncurses color index used for controllers and border windows background
+// and foreground colors
+#define NCUR_COLOR_WIN		128
+#define NCUR_COLOR_BORDER	129
+
+// Get ncurses brightness greyscale based on display backlight level 0..16
+#define NCUR_BRIGHTNESS(level)	(short)(1000 * (6 + (float)(level)) / 22)
 
 // This is me
 extern const char *__progname;
@@ -95,79 +104,31 @@ static void lcdNcurDrawModeSet(unsigned char controller, unsigned char color);
 static void lcdNcurRedraw(unsigned char controller, int startY, int rows);
 
 //
-// Function: lcdNcurBacklight
-//
-// Enable/disable ncurses backlight support
-//
-void lcdNcurBacklight(unsigned char support)
-{
-  int pairNew;
-  int refresh = GLCD_FALSE;
-  int i;
-
-  // No need to update when brightness support is unchanged
-  if (lcdUseBacklight == support)
-    return;
-
-  // Sync brightness support
-  lcdUseBacklight = support;
-
-  // Depending on support value repaint all controller windows
-  if (support == GLCD_FALSE && lcdBacklight != 16)
-  {
-    // When unsupported fall back to full brightness
-    pairNew = 1 + 16;
-    refresh = GLCD_TRUE;
-  }
-  else if (support == GLCD_TRUE && lcdBacklight != 16)
-  {
-    // When supported use the current backlight
-    pairNew = 1 + lcdBacklight;
-    refresh = GLCD_TRUE;
-  }
-
-  // Sync backlight and repaint all controller windows if needed
-  if (refresh == GLCD_TRUE)
-  {
-    for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-    {
-      wattron(lcdNcurCtrl[i].winCtrl, COLOR_PAIR(pairNew));
-      // Only do actual repaint when controller display is enabled
-      if (lcdNcurCtrl[i].display == GLCD_TRUE)
-        lcdNcurRedraw(i, 0, GLCD_YPIXELS);
-    }
-  }
-}
-
-//
 // Function: lcdNcurBacklightSet
 //
-// Set backlight in lcd display in ncurses window
+// Set backlight brightness
 //
 void lcdNcurBacklightSet(unsigned char backlight)
 {
-  int pairNew = 1 + backlight;
+  int brightness;
   int i;
 
-  // No need to update when brightness remains unchanged
+  // No need to update when backlight remains unchanged
   if (lcdBacklight == backlight)
     return;
 
-  // Sync brightness
+  // Sync backlight
   lcdBacklight = backlight;
 
   // See if update controller windows is required
   if (lcdUseBacklight == GLCD_FALSE)
     return;
 
-  // Sync backlight and repaint all controller windows
+  // Set new brightness in controller windows and flag update
+  brightness = NCUR_BRIGHTNESS(backlight);
+  init_color(NCUR_COLOR_WIN, brightness, brightness, brightness);
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-  {
-    wattron(lcdNcurCtrl[i].winCtrl, COLOR_PAIR(pairNew));
-    // Only do actual repaint when controller display is enabled
-    if (lcdNcurCtrl[i].display == GLCD_TRUE)
-      lcdNcurRedraw(i, 0, GLCD_YPIXELS);
-  }
+    lcdNcurCtrl[i].flush = GLCD_TRUE;
 }
 
 //
@@ -329,8 +290,7 @@ void lcdNcurFlush(void)
   int refreshDone = GLCD_FALSE;
   struct stat buffer;
 
-  // Check the ncurses tty if the previous check was in a
-  // preceding second
+  // Check the ncurses tty if the previous check was in a preceding second
   gettimeofday(&tvNow, NULL);
   if (tvNow.tv_sec > tvThen.tv_sec)
   {
@@ -361,13 +321,55 @@ void lcdNcurFlush(void)
 }
 
 //
+// Function: lcdNcurGraphicsSet
+//
+// Enable/disable variable backlight
+//
+void lcdNcurGraphicsSet(unsigned char backlight)
+{
+  int refresh = GLCD_FALSE;
+  int brightness;
+  int i;
+
+  // No need to update when brightness support is unchanged
+  if (lcdUseBacklight == backlight)
+    return;
+
+  // Sync brightness support
+  lcdUseBacklight = backlight;
+
+  // Depending on support value set new controller window brightness
+  if (backlight == GLCD_FALSE && lcdBacklight != 16)
+  {
+    // When unsupported fall back to full brightness
+    brightness = NCUR_BRIGHTNESS(16);
+    refresh = GLCD_TRUE;
+  }
+  else if (backlight == GLCD_TRUE && lcdBacklight != 16)
+  {
+    // When supported use the current backlight
+    brightness = NCUR_BRIGHTNESS(lcdBacklight);
+    refresh = GLCD_TRUE;
+  }
+
+  // Set new brightness in controller windows and flag update
+  if (refresh == GLCD_TRUE)
+  {
+    init_color(NCUR_COLOR_WIN, brightness, brightness, brightness);
+    for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+      lcdNcurCtrl[i].flush = GLCD_TRUE;
+  }
+}
+
+//
 // Function: lcdNcurInit
 //
 // Initialize the lcd display in ncurses window
 //
 int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
 {
-  int backlight;
+  int brightWin;
+  int brightBorder;
   int i;
   FILE *fp;
   struct winsize sizeTty;
@@ -393,12 +395,12 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   fp = fopen(lcdNcurInitArgs.tty, "r");
   if (ioctl(fileno(fp), TIOCGWINSZ, (char *)&sizeTty) >= 0)
   {
-    if (sizeTty.ws_col < NCURSES_X_PIXELS || sizeTty.ws_row < NCURSES_Y_PIXELS)
+    if (sizeTty.ws_col < NCUR_X_PIXELS || sizeTty.ws_row < NCUR_Y_PIXELS)
     {
       printf("%s: Destination ncurses tty size (%dx%d) is too small for use as\n",
         __progname, sizeTty.ws_col, sizeTty.ws_row);
       printf("mchron ncurses terminal (minimum size = %dx%d characters)\n",
-        NCURSES_X_PIXELS, NCURSES_Y_PIXELS);
+        NCUR_X_PIXELS, NCUR_Y_PIXELS);
       fclose(fp);
       return -1;
     }
@@ -410,6 +412,7 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
 
   // Make ncurses believe we're dealing with a 256 color terminal
   setenv("TERM", "xterm-256color", 1);
+
   // Open destination tty, assign to ncurses screen and allow using colors
   ttyFile = fopen(lcdNcurInitArgs.tty, "r+");
   ttyScreen = newterm("xterm-256color", ttyFile, ttyFile);
@@ -418,7 +421,7 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   // Try to set the size of the xterm tty. We do this because for some
   // reason gdb makes ncurses use the size of the mchron terminal window
   // as the actual size, which is pretty weird.
-  resize_term(NCURSES_Y_PIXELS, NCURSES_X_PIXELS);
+  resize_term(NCUR_Y_PIXELS, NCUR_X_PIXELS);
 
   // Set ncurses tty to not wait for Enter key and not echo characters
   cbreak();
@@ -428,7 +431,7 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   curs_set(0);
 
   // Create the outer border window and the controller section windows
-  winBorder = newwin(NCURSES_Y_PIXELS, NCURSES_X_PIXELS, 0, 0);
+  winBorder = newwin(NCUR_Y_PIXELS, NCUR_X_PIXELS, 0, 0);
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
   {
     lcdNcurCtrl[i].winCtrl = newwin(GLCD_YPIXELS,
@@ -439,28 +442,24 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
     lcdNcurCtrl[i].flush = GLCD_FALSE;
   }
 
-  // Setup backlight grey-tone schemes. By default we'll use the full color
-  // scheme. When ncurses backlight support is active we allow switching
-  // between the grey-tones.
-
-  // Define black color
+  // Define black background and greyscale foreground colors and link them in
+  // color pairs. Upon changing the lcd backlight, NCUR_COLOR_WIN will be
+  // redefined into a new greyscale.
+  // When changing a color in a color pair that is used in a window, ncurses
+  // will redraw the affected window contents upon refreshing, so we don't need
+  // to do this ourselves (which is very nice).
+  brightWin = NCUR_BRIGHTNESS(16);
+  brightBorder = NCUR_BRIGHTNESS(6);
   init_color(COLOR_BLACK, 0, 0, 0);
+  init_color(NCUR_COLOR_WIN, brightWin, brightWin, brightWin);
+  init_color(NCUR_COLOR_BORDER, brightBorder, brightBorder, brightBorder);
+  init_pair(1, NCUR_COLOR_WIN, COLOR_BLACK);
+  init_pair(2, NCUR_COLOR_BORDER, COLOR_BLACK);
 
-  // Define the 17 backlight grey-tone schemes from dim to full brightness.
-  // It will result in ncurses color pairs 1..17, mapped to brightness 0..16.
-  for (i = 1; i <= 17; i++)
-  {
-    backlight = (int)(1000 * (6 + (float)(i - 1)) / 22);
-    init_color(i + 127, backlight, backlight, backlight);
-    init_pair(i, i + 127, COLOR_BLACK);
-  }
-
-  // Init full brightness color to controller windows
-  wattron(lcdNcurCtrl[0].winCtrl, COLOR_PAIR(17));
-  wattron(lcdNcurCtrl[1].winCtrl, COLOR_PAIR(17));
-
-  // Assign medium brightness in the outer border window
-  wattron(winBorder, COLOR_PAIR(7));
+  // Assign color pair to controllers and border windows
+  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+    wattron(lcdNcurCtrl[i].winCtrl, COLOR_PAIR(1));
+  wattron(winBorder, COLOR_PAIR(2));
 
   // Draw and show a box in the outer border window
   box(winBorder, 0 , 0);
@@ -620,4 +619,3 @@ void lcdNcurStatsReset(void)
 {
   memset(&lcdNcurStats, 0, sizeof(lcdNcurStats_t));
 }
-

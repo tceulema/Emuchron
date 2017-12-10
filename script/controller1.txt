@@ -4,8 +4,12 @@
 # Purpose: Test the controller stub by combining changes in the
 #          controller startline and display registers.
 #
+# Note: After quiting this script reset the display and controller
+#       registers using command 'le' (erase lcd display)
+#
 
 # Clear display and show a static clock for 4 seconds
+hm --- press 'q' to quit ---
 le
 lds 1 1
 cs 4
@@ -22,26 +26,15 @@ vs countera=0
 vs counterb=0
 
 # random seed
-vs rb=pi^2*100000
-vs rs=5.317496278
+vs r=rand(0)
 
 # timer based display refresh
 wts
 
 rf null true null
   rf rn=0 rn<40 rn=rn+1
-    # Startline for controller 0 in range 0..63
-    vs rb=(rb*rs)%100000
-    vs ra=(rb+rn*75)%100000
-    vs ctrla=ra%64
-
-    # Startline for controller 1 in range 0..63
-    vs rb=(rb*rs)%100000
-    vs ra=(rb+rn*75)%100000
-    vs ctrlb=ra%64
-
     # Set startline for both controllers
-    lss ctrla ctrlb
+    lss rand()*64 rand()*64
     wte 75
     tf
 
@@ -51,9 +44,7 @@ rf null true null
       vs countera=countera-1
       vs ctrla=false
     iel
-      vs rb=(rb*rs)%100000
-      vs ra=(rb+rn*75)%100000
-      iif ra<3000
+      iif rand()<0.03
         vs ctrla=false
         vs countera=5
       iel
@@ -67,9 +58,7 @@ rf null true null
       vs counterb=counterb-1
       vs ctrlb=false
     iel
-      vs rb=(rb*rs)%100000
-      vs ra=(rb+rn*75)%100000
-      iif ra<3000
+      iif rand()<0.03
         vs ctrlb=false
         vs counterb=5
       iel

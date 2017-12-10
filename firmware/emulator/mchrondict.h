@@ -63,13 +63,9 @@ cmdArgDomain_t argNumCirclePattern =
 cmdArgDomain_t argNumClock =
 { DOM_NUM_MIN, "", 0, 0, "limited by clocks in emuMonochron[]" };
 
-// Rectangle fill pattern: max 5
-cmdArgDomain_t argNumRectFill =
+// Fill pattern: max 5
+cmdArgDomain_t argNumFillPattern =
 { DOM_NUM_MAX, "", 0, 5, "full, half, 3rd up, 3rd down, inverse, blank" };
-
-// Circle fill pattern: max 5, excluding 4
-cmdArgDomain_t argNumCircleFill =
-{ DOM_NUM_MAX, "", 0, 5, "full, half, 3rd up, 3rd down, <unsupported>, blank" };
 
 // Circle radius: max 31
 cmdArgDomain_t argNumRadius =
@@ -171,13 +167,17 @@ cmdArgDomain_t argNumHour =
 cmdArgDomain_t argNumMinSec =
 { DOM_NUM_MAX, "", 0, 59, NULL };
 
-// Variable name: [a-zA-Z_]* or '*'
-cmdArgDomain_t argVarName1 =
-{ DOM_VAR_NAME, "", 0, 0, "word of [a-zA-Z_] characters, '*' = all" };
-
 // Variable name: [a-zA-Z_]*
-cmdArgDomain_t argVarName2 =
+cmdArgDomain_t argVarName =
 { DOM_VAR_NAME, "", 0, 0, "word of [a-zA-Z_] characters" };
+
+// Variable name: [a-zA-Z_]* or '.'
+cmdArgDomain_t argVarNameAll =
+{ DOM_VAR_NAME_ALL, "", 0, 0, "word of [a-zA-Z_] characters, '.' = all" };
+
+// Variable name: regexp pattern
+cmdArgDomain_t argVarPattern =
+{ DOM_NULL_INFO, "", 0, 0, "variable name regexp pattern, '.' = all" };
 
 // Wait delay: max 1E6
 cmdArgDomain_t argNumDelay =
@@ -189,7 +189,7 @@ cmdArgDomain_t argNumExpiry =
 
 // Commmand: info
 cmdArgDomain_t argInfoCommand =
-{ DOM_NULL_INFO, "", 0, 0, "mchron command" };
+{ DOM_NULL_INFO, "", 0, 0, "command" };
 
 // Comments: info
 cmdArgDomain_t argInfoComments =
@@ -200,8 +200,8 @@ cmdArgDomain_t argInfoFileName =
 { DOM_NULL_INFO, "", 0, 0, "full path or relative to startup directory mchron" };
 
 // Help command: info
-cmdArgDomain_t argInfoHelpCmd =
-{ DOM_NULL_INFO, "", 0, 0, "mchron command, '*' = all" };
+cmdArgDomain_t argInfoPattern =
+{ DOM_NULL_INFO, "", 0, 0, "mchron command name regexp pattern, '.' = all" };
 
 // Number expression: info
 cmdArgDomain_t argInfoNumber =
@@ -295,7 +295,7 @@ cmdArg_t argExecute[] =
 // Command 'h*'
 // Argument profile for help command dictionary
 cmdArg_t argHelpCmd[] =
-{ { ARG_WORD,    "command",     &argInfoHelpCmd },
+{ { ARG_WORD,    "pattern",     &argInfoPattern },
   { ARG_END,     "",            NULL } };
 // Argument profile for help expression
 cmdArg_t argHelpExpr[] =
@@ -331,14 +331,19 @@ cmdArg_t argLcdDispSet[] =
 { { ARG_UNUM,    "controller-0",&argNumOffOn },
   { ARG_UNUM,    "controller-1",&argNumOffOn },
   { ARG_END,     "",            NULL } };
+// Argument profile for glut graphic options support
+cmdArg_t argLcdGlutGr[] =
+{ { ARG_UNUM,    "pixelbezel",  &argNumOffOn },
+  { ARG_UNUM,    "markerlines", &argNumOffOn },
+  { ARG_END,     "",            NULL } };
 // Argument profile for ncurses backlight support
-cmdArg_t argLcdNcurBL[] =
-{ { ARG_UNUM,    "support",     &argNumOffOn },
+cmdArg_t argLcdNcurGr[] =
+{ { ARG_UNUM,    "backlight",   &argNumOffOn },
   { ARG_END,     "",            NULL } };
 // Argument profile for controller lcd read
 cmdArg_t argLcdRead[] =
 { { ARG_UNUM,    "controller",  &argNumController },
-  { ARG_WORD,    "variable",    &argVarName2 },
+  { ARG_WORD,    "variable",    &argVarName },
   { ARG_END,     "",            NULL } };
 // Argument profile for controller lcd write
 cmdArg_t argLcdWrite[] =
@@ -383,7 +388,7 @@ cmdArg_t argPaintCFill[] =
   { ARG_UNUM,    "x",           &argNumPosX },
   { ARG_UNUM,    "y",           &argNumPosY },
   { ARG_UNUM,    "radius",      &argNumRadius },
-  { ARG_UNUM,    "pattern",     &argNumCircleFill },
+  { ARG_UNUM,    "pattern",     &argNumFillPattern },
   { ARG_END,     "",            NULL } };
 // Argument profile for paint dot
 cmdArg_t argPaintDot[] =
@@ -426,7 +431,7 @@ cmdArg_t argPaintRFill[] =
   { ARG_UNUM,    "xsize",       &argNumXSize },
   { ARG_UNUM,    "ysize",       &argNumYSize },
   { ARG_UNUM,    "align",       &argNumAlign },
-  { ARG_UNUM,    "pattern",     &argNumRectFill },
+  { ARG_UNUM,    "pattern",     &argNumFillPattern },
   { ARG_END,     "",            NULL } };
 
 // Command 'r*'
@@ -451,11 +456,11 @@ cmdArg_t argTimeSet[] =
 // Command 'v*'
 // Argument profile for variable print
 cmdArg_t argVarPrint[] =
-{ { ARG_WORD,    "variable",    &argVarName1 },
+{ { ARG_WORD,    "pattern",     &argVarPattern },
   { ARG_END,     "",            NULL } };
 // Argument profile for variable reset
 cmdArg_t argVarReset[] =
-{ { ARG_WORD,    "variable",    &argVarName1 },
+{ { ARG_WORD,    "variable",    &argVarNameAll },
   { ARG_END,     "",            NULL } };
 // Argument profile for variable value set
 cmdArg_t argVarSet[] =
@@ -478,8 +483,9 @@ cmdArg_t argExpiry[] =
 //
 // Dictionary build-up step 3: command group profiles
 //
-// NOTE: Commands in a command group profile MUST be in alphabetical
-// order in order to optimize the linear search method
+// NOTE: Commands in a command group profile MUST be kept in alphabetical
+// order to optimize the linear search method as well as proper printing in
+// alphabetical order using mchron command 'hc'.
 //
 
 // All commands for command group '#' (comments)
@@ -531,8 +537,9 @@ cmdCommand_t cmdGroupLcd[] =
   { "lcs", PC_CONTINUE,     CMDARGS(argLcdCursSet),  CMDHANDLER(doLcdCursorSet),   "set controller lcd cursor" },
   { "lds", PC_CONTINUE,     CMDARGS(argLcdDispSet),  CMDHANDLER(doLcdDisplaySet),  "switch controller lcd display on/off" },
   { "le",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdErase),       "erase lcd display" },
+  { "lgg", PC_CONTINUE,     CMDARGS(argLcdGlutGr),   CMDHANDLER(doLcdGlutGrSet),   "set glut graphics options" },
   { "li",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdInverse),     "inverse lcd display" },
-  { "lnb", PC_CONTINUE,     CMDARGS(argLcdNcurBL),   CMDHANDLER(doLcdNcurBLSet),   "set ncurses backlight support" },
+  { "lng", PC_CONTINUE,     CMDARGS(argLcdNcurGr),   CMDHANDLER(doLcdNcurGrSet),   "set ncurses graphics options" },
   { "lp",  PC_CONTINUE,     CMDARGS(argEnd),         CMDHANDLER(doLcdPrint),       "print controller state/registers" },
   { "lr",  PC_CONTINUE,     CMDARGS(argLcdRead),     CMDHANDLER(doLcdRead),        "read controller lcd data in variable" },
   { "lss", PC_CONTINUE,     CMDARGS(argLcdSLineSet), CMDHANDLER(doLcdStartLineSet),"set controller lcd start line" },

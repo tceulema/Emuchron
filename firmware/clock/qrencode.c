@@ -177,8 +177,8 @@ static unsigned char lastMask;
 // Local function prototypes
 static unsigned modnn(unsigned x);
 static void initrspoly(unsigned char *genpoly);
-static void appendrs(unsigned char *data, unsigned char dlen, unsigned char *ecbuf,
-  unsigned char eclen, unsigned char *genpoly);
+static void appendrs(unsigned char *data, unsigned char dlen,
+  unsigned char *ecbuf, unsigned char eclen, unsigned char *genpoly);
 static void stringtoqr(void);
 static unsigned char ismasked(unsigned char x, unsigned char y);
 static void fillframe(void);
@@ -276,16 +276,16 @@ static void initrspoly(unsigned char *genpoly)
   {
     genpoly[i + 1] = 1;
     for (j = i; j > 0; j--)
-      genpoly[j] =
-        genpoly[j] ? genpoly[j - 1] ^ gexp(modnn(glog(genpoly[j]) + i)) : genpoly[j - 1];
+      genpoly[j] = genpoly[j] ?
+        genpoly[j - 1] ^ gexp(modnn(glog(genpoly[j]) + i)) : genpoly[j - 1];
     genpoly[0] = gexp(modnn(glog(genpoly[0]) + i));
   }
   for (i = 0; i <= ECCBLKWID; i++)
     genpoly[i] = glog(genpoly[i]);  // Use logs for genpoly[]
 }
 
-static void appendrs(unsigned char *data, unsigned char dlen, unsigned char *ecbuf,
-  unsigned char eclen, unsigned char *genpoly)
+static void appendrs(unsigned char *data, unsigned char dlen,
+  unsigned char *ecbuf, unsigned char eclen, unsigned char *genpoly)
 {
   unsigned char i, j, fb;
 
@@ -614,7 +614,8 @@ static unsigned badruns(unsigned char length)
         // White around the black pattern? Not part of spec.
         (rlens[i - 3] == 0   // Beginning
           || i + 3 > length  // Wnd
-          || rlens[i - 3] * 3 >= rlens[i] * 4 || rlens[i + 3] * 3 >= rlens[i] * 4))
+          || rlens[i - 3] * 3 >= rlens[i] * 4
+          || rlens[i + 3] * 3 >= rlens[i] * 4))
     {
       runsbad += N3;
     }
@@ -720,4 +721,3 @@ static void addfmt(unsigned char masknum)
     }
   }
 }
-

@@ -4,19 +4,19 @@
 # Purpose: Test whether lots of nested repeat-for loops works.
 #          Consider this a performance test for the interpreter/CPU.
 #          Run this test a few times to average out the result duration.
-#          On a decent Intel machine this script takes about 10 secs to run.
+#          On a decent Intel VM machine this script takes about 19 secs to run.
 #
-# Result : x = 2^20 = 1048576
+# Result : x = 2^22 = 4194304
 #
 
 # Clear all variables and init loop counter
-vr *
+vr .
 vs x=0
 
 # Report start time
 tp
 
-# Nest 20 repeat-for loops where each loop runs twice
+# Nest 22 repeat-for loops where each loop runs twice
 rf aa=0 aa<=1 aa=aa+1
  rf ab=0 ab<=1 ab=ab+1
   rf ac=0 ac<=1 ac=ac+1
@@ -37,7 +37,11 @@ rf aa=0 aa<=1 aa=aa+1
                  rf ar=0 ar<=1 ar=ar+1
                   rf as=0 as<=1 as=as+1
                    rf at=0 at<=1 at=at+1
-                    vs x=x+1
+                    rf au=0 au<=1 au=au+1
+                     rf av=0 av<=1 av=av+1
+                      vs x=x+1
+                     rn
+                    rn
                    rn
                   rn
                  rn
@@ -61,6 +65,7 @@ rn
 
 # Report end time and show all variables from this script
 tp
-vp *
-vp x
+vp .
+hm Variable x:
+he x
 

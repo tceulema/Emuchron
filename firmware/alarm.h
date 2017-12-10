@@ -17,14 +17,13 @@
 #endif
 
 // Uncomment this if you want a Mario tune alarm instead of a two-tone alarm.
-// Note: This will cost you ~565 bytes of Monochron program and data space.
+// Note: This will cost you ~536 bytes of Monochron program and data space.
 #define MARIO
 
 #ifdef MARIO
 // Configure Mario melody alarm
 // The tune tempo
 #define MAR_TEMPO		99
-
 // The factors used to fit tone and beat values in an unsigned char data
 // type. The densed values are expanded using these very same factors.
 // DO NOT CHANGE THESE as they require a rebuild of respectively MarioTones[]
@@ -36,7 +35,5 @@
 #define ALARM_FREQ_1		4000
 #define ALARM_FREQ_2		3750
 #define SND_TICK_TONE_MS	325
-
 #endif
 #endif
-

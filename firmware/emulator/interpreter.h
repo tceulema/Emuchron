@@ -35,6 +35,7 @@
 #define DOM_NUM_MAX		4
 #define DOM_NUM_MIN		5
 #define DOM_VAR_NAME		6
+#define DOM_VAR_NAME_ALL	7
 
 // The command input read methods
 #define CMD_INPUT_READLINELIB	0

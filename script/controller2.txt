@@ -6,7 +6,7 @@
 #
 
 # Give help message
-hm --- press 'q' to quit --- 
+hm --- press 'q' to quit ---
 
 cs 11
 lbs 16

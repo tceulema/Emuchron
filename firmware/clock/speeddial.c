@@ -1,13 +1,12 @@
 //*****************************************************************************
 // Filename : 'speeddial.c'
-// Title    : Animation code for MONOCHRON speeddial clock
+// Title    : Animation code for MONOCHRON speed dial clock
 //*****************************************************************************
 
 #include <math.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -17,7 +16,7 @@
 #include "spotfire.h"
 #include "speeddial.h"
 
-// Specifics for QV speeddial
+// Specifics for speed dial clock
 // NDL = Needle
 #define SPEED_X_START		17
 #define SPEED_X_OFFSET_SIZE	33
@@ -30,10 +29,9 @@
 #define SPEED_NDL_RADIAL_START	(-0.75L * M_PI)
 #define SPEED_NDL_RADIAL_SIZE	(1.50L * M_PI)
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
@@ -44,7 +42,7 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal);
 //
 // Function: spotSpeedDialCycle
 //
-// Update the Spotfire QuintusVisuals Speed Dial and filter panel
+// Update the QuintusVisuals speed dial and filter panel
 //
 void spotSpeedDialCycle(void)
 {
@@ -56,8 +54,8 @@ void spotSpeedDialCycle(void)
 
   // Verify changes in sec
   if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-    spotSpeedNeedleUpdate(SPEED_X_START + 2 * SPEED_X_OFFSET_SIZE, mcClockOldTS,
-      mcClockNewTS);
+    spotSpeedNeedleUpdate(SPEED_X_START + 2 * SPEED_X_OFFSET_SIZE,
+      mcClockOldTS, mcClockNewTS);
 
   // Verify changes in min
   if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
@@ -72,7 +70,7 @@ void spotSpeedDialCycle(void)
 //
 // Function: spotSpeedDialInit
 //
-// Initialize the LCD display for use as a Spotfire QuintusVisuals Speed Dial
+// Initialize the lcd display of a QuintusVisuals speed dial
 //
 void spotSpeedDialInit(u08 mode)
 {
@@ -159,4 +157,3 @@ static void spotSpeedDialMarkerUpdate(u08 x, u08 marker)
   dy = (s08)(tmp * (SPEED_RADIUS - 2 + 0.4L));
   glcdDot(x + dx, SPEED_Y_START + dy, mcFgColor);
 }
-

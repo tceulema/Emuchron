@@ -12,7 +12,7 @@
 // 100KHz for slow speed
 // 400KHz for high speed
 
-#define I2C_DEBUG 1
+#define I2C_DEBUG 0
 
 // I2C state and address variables
 static volatile eI2cStateType I2cState;

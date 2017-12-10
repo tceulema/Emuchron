@@ -54,7 +54,7 @@
 
 // The following global variables are for use in any Monochron clock.
 // In a Monochron clock its contents are defined and stable.
-extern volatile uint8_t mcClockTimeEvent;
+extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
 extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcCycleCounter;
@@ -106,6 +106,7 @@ static uint8_t t2divider1 = 0;
 
 // Local function prototypes
 static void almSnoozeSet(void);
+static void almSoundReset(void);
 static uint8_t bcdDecode(uint8_t element, uint8_t nibbleMask);
 static void rtcFailure(uint8_t code, uint8_t id);
 
@@ -426,14 +427,7 @@ SIGNAL(TIMER0_COMPA_vect)
     // Turn off piezo
     PIEZO_PORT &= ~_BV(PIEZO);
     almTickerAlarm = 0;
-#ifdef MARIO
-    // On next audible alarm start at beginning of Mario tune
-    sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-    sndMarioIdx = sndMarioIdxEnd;
-    sndMarioPauze = GLCD_TRUE;
-#else
-    sndAlarmTone = 0;
-#endif
+    almSoundReset();
   }
 }
 #endif
@@ -501,13 +495,7 @@ SIGNAL(TIMER2_OVF_vect)
       {
         // Init alarm data at starting positions right before we
         // return from snooze
-#ifdef MARIO
-        sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-        sndMarioIdx = sndMarioIdxEnd;
-        sndMarioPauze = GLCD_TRUE;
-#else
-        sndAlarmTone = 0;
-#endif
+        almSoundReset();
         DEBUGP("Alarm -> Snooze timeout");
       }
       if (almTickerSnooze)
@@ -614,6 +602,25 @@ static void almSnoozeSet(void)
 }
 
 //
+// Function: almSoundReset
+//
+// Reset sound parameters for (next) audible alarm
+//
+static void almSoundReset(void)
+{
+#ifdef MARIO
+  // Set the mario play location to the end. On the next audible alarm the
+  // play logic will continue at the beginning of Mario tune.
+  sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
+  sndMarioIdx = sndMarioIdxEnd;
+  sndMarioPauze = GLCD_TRUE;
+#else
+  // On next audible alarm start at the first of the two-tone tones
+  sndAlarmTone = 0;
+#endif
+}
+
+//
 // Function: almStateSet
 //
 // Turn on/off the alarm based on the alarm switch position
@@ -635,16 +642,9 @@ void almStateSet(void)
         DEBUGP("Alarm -> Off");
         almAlarming = GLCD_FALSE;
         TCCR1B = 0;
-#ifdef MARIO
-        // On next audible alarm start at beginning of Mario tune
-        sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-        sndMarioIdx = sndMarioIdxEnd;
-        sndMarioPauze = GLCD_TRUE;
-#else
-        sndAlarmTone = 0;
-#endif
         // Turn off piezo
         PIEZO_PORT &= ~_BV(PIEZO);
+        almSoundReset();
       }
     }
   }
@@ -659,14 +659,7 @@ void almStateSet(void)
       // Reset snoozing and alarm
       almTickerSnooze = 0;
       almTickerAlarm = 0;
-#ifdef MARIO
-      // On next audible alarm start at beginning of Mario tune
-      sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
-      sndMarioIdx = sndMarioIdxEnd;
-      sndMarioPauze = GLCD_TRUE;
-#else
-      sndAlarmTone = 0;
-#endif
+      almSoundReset();
     }
   }
 }
@@ -860,6 +853,7 @@ uint8_t rtcLeapYear(uint16_t year)
 void rtcMchronTimeInit(void)
 {
   mcClockTimeEvent = GLCD_FALSE;
+  mcClockDateEvent = GLCD_FALSE;
 #ifndef EMULIN
   // First wait for a registered time event (that may pass immediately)
   while (rtcTimeEvent == GLCD_FALSE);
@@ -894,7 +888,7 @@ void rtcTimeInit(void)
   if (rtcTimeRead())
   {
     DEBUGP("Require reset RTC");
-    rtcTimeWrite(00, 00, 12, 1, 1, 17); // Noon Jan 1 2017
+    rtcTimeWrite(00, 00, 12, 1, 1, 18); // Noon Jan 1 2018
   }
 
   rtcTimeRead();
@@ -989,4 +983,3 @@ void rtcTimeWrite(uint8_t sec, uint8_t min, uint8_t hour, uint8_t day,
   if (r != 0)
     rtcFailure(r, 2);
 }
-

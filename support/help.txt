@@ -46,8 +46,9 @@ Commands:
               clock: 0 = [detach], 1 = example, 2 = analogHMS, 3 = analogHM,
                      4 = digitalHMS, 5 = digitalHM, 6 = mosquito, 7 = nerd,
                      8 = pong, 9 = puzzle, 10 = slider, 11 = cascade,
-                     12 = speed, 13 = spider, 14 = traffic, 15 = bigdigOne,
-                     16 = bigdigTwo, 17 = qrHMS, 18 = qrHM, 19 = perftest
+                     12 = speed, 13 = spider, 14 = thermometer, 15 = traffic,
+                     16 = bar, 17 = cross, 18 = line, 19 = pie, 20 = bigdigOne,
+                     21 = bigdigTwo, 22 = qrHMS, 23 = qrHM, 24 = perftest
   'dr'  - Reset clock date to system date
   'ds'  - Set date
           Arguments: <day> <month> <year>
@@ -60,8 +61,8 @@ Commands:
               filename: full filepath or relative to startup folder mchron
   'h'   - Help
   'hc'  - Show command details
-          Argument: <command>
-              command: mchron command or '*' for all commands
+          Argument: <pattern>
+              pattern: mchron command name regexp pattern, '.' = all
   'he'  - Show expression result
           Argument: <number>
               number: expression
@@ -90,10 +91,14 @@ Commands:
               controller-0: 0 = off, 1 = on
               controller-1: 0 = off, 1 = on
   'le'  - Erase lcd display
+  'lgg' - Set glut graphics options
+          Argument: <pixelbezel> <markerlines>
+              pixelbezel: 0 = off, 1 = on
+              markerlines: 0 = off, 1 = on
   'li'  - Inverse lcd display
-  'lnb' - Set ncurses backlight support
-          Argument: <support>
-              support: 0 = off, 1 = on
+  'lng' - Set ncurses graphics options
+          Argument: <backlight>
+              backlight: 0 = off, 1 = on
   'lp'  - Print controller state/registers
   'lr'  - Read controller lcd data in variable
           Arguments: <controller> <variable> 
@@ -128,7 +133,7 @@ Commands:
               color: 'f' = foreground, 'b' = background
               x: 0..127
               y: 0..63
-              radius: 1..31
+              radius: 0..31
               pattern: 0 = full line, 1 = half (even), 2 = half (uneven), 
                        3 = 3rd line
   'pcf' - Paint circle with fill pattern
@@ -136,9 +141,9 @@ Commands:
               color: 'f' = foreground, 'b' = background
               x: 0..127
               y: 0..63
-              radius: 1..31
+              radius: 0..32
               pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
-                       4 = <unsupported>, 5 = clear
+                       4 = inverse, 5 = clear
   'pd'  - Paint dot
           Arguments: <color> <x> <y>
               color: 'f' = foreground, 'b' = background
@@ -198,11 +203,11 @@ Commands:
               min: 0..59
               sec: 0..59
   'vp'  - Print value of variable(s)
-          Argument: <variable>
-              variable: word of [a-zA-Z_] characters, '*' = all
+          Argument: <pattern>
+              pattern: variable name regexp pattern, '.' = all
   'vr'  - Reset variable(s)
           Argument: <variable>
-              variable: word of [a-zA-Z_] characters, '*' = all
+              variable: word of [a-zA-Z_] characters, '.' = all
   'vs'  - Set value of variable 
           Argument: <assignment>
               assignment: <variable>=<expression>

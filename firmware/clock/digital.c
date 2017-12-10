@@ -6,8 +6,7 @@
 #include <math.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -20,17 +19,25 @@
 // Refer to digiPeriodSet() for setting glitch delay and duration.
 //#define DIGI_GLITCH
 
+// For the CRHON_DIGITAL_HM clock you can make the bottom dot ":" separator
+// blink on a per second basis. Set the blink bezel size between 0 (no bezel)
+// and 3 (thick bezel).
+// Uncomment if you want to enable a blinking separator in the CHRON_DIGITAL_HM
+// clock.
+#define DIGI_HM_BLINK
+#define DIGI_HM_BLINK_BEZEL	2
+
 // Specifics for digital clock
 #define DIGI_ALARM_X_START	2
 #define DIGI_ALARM_Y_START	57
 #define DIGI_DATE_X_START	18
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcClockTimeEvent;
+extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 #ifdef DIGI_GLITCH
 extern volatile uint8_t mcCycleCounter;
@@ -51,7 +58,7 @@ static const float digiRandSeed = 3.9147258617;
 static u16 digiRandVal = 0xA5C3;
 #endif
 
-// The following globals control the layout of the digital clock
+// These variables control the layout of the digital clock
 static u08 digiSecShow;
 static u08 digiTimeXScale, digiTimeYScale;
 static u08 digiTimeXStart, digiTimeYStart;
@@ -75,8 +82,7 @@ void digitalCycle(void)
   char clockInfo[9];
 
   // Update alarm info in clock
-  animAlarmAreaUpdate(DIGI_ALARM_X_START, DIGI_ALARM_Y_START,
-    ALARM_AREA_ALM_ONLY);
+  animADAreaUpdate(DIGI_ALARM_X_START, DIGI_ALARM_Y_START, AD_AREA_ALM_ONLY);
 
 #ifdef DIGI_GLITCH
   u08 i;
@@ -102,8 +108,7 @@ void digitalCycle(void)
   DEBUGP("Update Digital");
 
   // Verify changes in date
-  if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
-      mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
+  if (mcClockDateEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
   {
     glcdPutStr2(DIGI_DATE_X_START, digiDateYStart, FONT_5X7N,
       (char *)animDays[rtcDotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)],
@@ -128,6 +133,18 @@ void digitalCycle(void)
   if (digiSecShow == GLCD_TRUE &&
       (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE))
     digitalTimeValDraw(mcClockNewTS, 2);
+
+#ifdef DIGI_HM_BLINK
+  // For the CHRON_DIGITAL_HM clock make the bottom dot ":" separator blink
+  if (digiSecShow == GLCD_FALSE)
+  {
+    u08 color = mcFgColor;
+    if ((mcClockNewTS & 0x1) == 0)
+      color = mcBgColor;
+    glcdFillRectangle(60 + DIGI_HM_BLINK_BEZEL, 22 + DIGI_HM_BLINK_BEZEL,
+      8 - 2 * DIGI_HM_BLINK_BEZEL, 10 - 2 * DIGI_HM_BLINK_BEZEL, color);
+  }
+#endif
 
 #ifdef DIGI_GLITCH
   // Verify glitch parameters
@@ -156,7 +173,7 @@ void digitalCycle(void)
         if (payload < 3)
         {
           // Three seconds of left blank screen
-          glcdControlWrite(0, GLCD_ON_CTRL | 0);
+          glcdControlWrite(0, GLCD_ON_CTRL | GLCD_OFF_DISPLAY);
           mcU8Util3 = 3;
         }
       }
@@ -176,7 +193,7 @@ void digitalCycle(void)
         if (payload < 3)
         {
           // Three seconds of right blank screen
-          glcdControlWrite(1, GLCD_ON_CTRL | 0);
+          glcdControlWrite(1, GLCD_ON_CTRL | GLCD_OFF_DISPLAY);
           mcU8Util4 = 3;
         }
       }
@@ -315,4 +332,3 @@ static void digiRandGet(void)
   digiRandVal = mcCycleCounter * digiRandSeed + digiRandBase;
 }
 #endif
-

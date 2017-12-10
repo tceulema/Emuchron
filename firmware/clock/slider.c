@@ -5,8 +5,7 @@
 
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -35,6 +34,7 @@
 #define SLIDER_MARKER_WIDTH	3
 #define SLIDER_MARKER_HEIGHT	5
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -59,12 +59,13 @@ extern char animYear[];
 // Local function prototypes
 static void sliderAlarmAreaUpdate(void);
 static void sliderElementInit(u08 x, u08 y, u08 factor, char *label);
-static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal, u08 init);
+static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
+  u08 init);
 
 //
 // Function: sliderCycle
 //
-// Update the LCD display of a very simple slider clock
+// Update the lcd display of a very simple slider clock
 //
 void sliderCycle(void)
 {
@@ -79,29 +80,29 @@ void sliderCycle(void)
 
   // Verify changes in hour
   if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_HOUR_Y_START, mcClockOldTH,
-      mcClockNewTH, mcClockInit);
+    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_HOUR_Y_START,
+      mcClockOldTH, mcClockNewTH, mcClockInit);
   // Verify changes in min
   if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_MIN_Y_START, mcClockOldTM,
-      mcClockNewTM, mcClockInit);
+    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_MIN_Y_START,
+      mcClockOldTM, mcClockNewTM, mcClockInit);
   // Verify changes in sec
   if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_SEC_Y_START, mcClockOldTS,
-      mcClockNewTS, mcClockInit);
+    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_SEC_Y_START,
+      mcClockOldTS, mcClockNewTS, mcClockInit);
 
   // Verify changes in day
   if (mcClockNewDD != mcClockOldDD || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_DAY_Y_START, mcClockOldDD,
-      mcClockNewDD, mcClockInit);
+    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_DAY_Y_START,
+      mcClockOldDD, mcClockNewDD, mcClockInit);
   // Verify changes in month
   if (mcClockNewDM != mcClockOldDM || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_MON_Y_START, mcClockOldDM,
-      mcClockNewDM, mcClockInit);
+    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_MON_Y_START,
+      mcClockOldDM, mcClockNewDM, mcClockInit);
   // Verify changes in year
   if (mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START, mcClockOldDY,
-      mcClockNewDY, mcClockInit);
+    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START,
+      mcClockOldDY, mcClockNewDY, mcClockInit);
 }
 
 //
@@ -121,8 +122,8 @@ static void sliderElementInit(u08 x, u08 y, u08 factor, char *label)
   {
     // Draw marker on top row only if in range
     if (i <= factor)
-      glcdDot(markerX + SLIDER_MARKER_WIDTH / 2, markerY + SLIDER_MARKER_HEIGHT / 2,
-        mcFgColor);
+      glcdDot(markerX + SLIDER_MARKER_WIDTH / 2,
+        markerY + SLIDER_MARKER_HEIGHT / 2, mcFgColor);
     // Draw marker on bottom row
     glcdDot(markerX + SLIDER_MARKER_WIDTH / 2,
       markerY + SLIDER_MARKER_HEIGHT + 1 + SLIDER_MARKER_HEIGHT / 2,
@@ -186,7 +187,7 @@ static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
 //
 // Function: sliderInit
 //
-// Initialize the LCD display of a clock with slider value elements
+// Initialize the lcd display of a clock with slider value elements
 //
 void sliderInit(u08 mode)
 {
@@ -240,21 +241,23 @@ static void sliderAlarmAreaUpdate(void)
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {
       // Show alarm text and alarm time elements
-      sliderElementInit(SLIDER_LEFT_X_START, SLIDER_ALARM_Y_START, 2, animHour);
-      sliderElementInit(SLIDER_RIGHT_X_START, SLIDER_ALARM_Y_START, 5, animMin);
+      sliderElementInit(SLIDER_LEFT_X_START, SLIDER_ALARM_Y_START, 2,
+        animHour);
+      sliderElementInit(SLIDER_RIGHT_X_START, SLIDER_ALARM_Y_START, 5,
+        animMin);
 
       // Set the alarm element values
-      sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_ALARM_Y_START, mcAlarmH,
-        mcAlarmH, GLCD_TRUE);
-      sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_ALARM_Y_START, mcAlarmM,
-        mcAlarmM, GLCD_TRUE);
+      sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_ALARM_Y_START,
+        mcAlarmH, mcAlarmH, GLCD_TRUE);
+      sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_ALARM_Y_START,
+        mcAlarmM, mcAlarmM, GLCD_TRUE);
     }
     else
     {
       // Clear area (remove alarm time elements)
       glcdFillRectangle(SLIDER_LEFT_X_START - 1,
-        SLIDER_ALARM_Y_START + SLIDER_MARKER_Y_OFFSET, 128 - SLIDER_LEFT_X_START,
-        SLIDER_MARKER_HEIGHT * 2 + 1, mcBgColor);
+        SLIDER_ALARM_Y_START + SLIDER_MARKER_Y_OFFSET,
+        128 - SLIDER_LEFT_X_START, SLIDER_MARKER_HEIGHT * 2 + 1, mcBgColor);
       mcU8Util1 = GLCD_FALSE;
     }
   }
@@ -281,10 +284,9 @@ static void sliderAlarmAreaUpdate(void)
   // Inverse the alarm text if needed
   if (inverseAlarmArea == GLCD_TRUE)
   {
-    glcdFillRectangle2(SLIDER_LEFT_X_START - 1, SLIDER_ALARM_Y_START - 1, 17, 7,
-      ALIGN_AUTO, FILL_INVERSE, mcBgColor);
-    glcdFillRectangle2(SLIDER_RIGHT_X_START - 1, SLIDER_ALARM_Y_START - 1, 14, 7,
-      ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+    glcdFillRectangle2(SLIDER_LEFT_X_START - 1, SLIDER_ALARM_Y_START - 1, 17,
+      7, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+    glcdFillRectangle2(SLIDER_RIGHT_X_START - 1, SLIDER_ALARM_Y_START - 1, 14,
+      7, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
   }
 }
-

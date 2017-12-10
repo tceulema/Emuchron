@@ -161,4 +161,3 @@ void uart_putdw_dec(uint32_t dw)
     }
   }
 }
-

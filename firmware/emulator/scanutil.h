@@ -15,12 +15,10 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput);
 
 // mchron command dictionary functions
 int cmdDictCmdGet(char *cmd, cmdCommand_t **cmdCommand);
-int cmdDictCmdPrint(char *cmd);
-int cmdDictCmdPrintAll(void);
+int cmdDictPrint(char *pattern);
 
 // mchron command line argument scanning functions
 void cmdArgInit(char **input);
 int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent);
 int cmdArgValuePrint(double value, int detail);
 #endif
-

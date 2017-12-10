@@ -34,6 +34,7 @@
 #define GLCD_SET_PAGE		0xB8	// 10111XXX: set lcd page (X) address
 #define GLCD_SET_Y_ADDR		0x40	// 01YYYYYY: set lcd Y address
 
+#define GLCD_OFF_DISPLAY	0x00	// DB0: turn display off
 #define GLCD_ON_DISPLAY		0x01	// DB0: turn display on
 
 #define GLCD_STATUS_BUSY	0x80	// (1) -> Lcd is busy

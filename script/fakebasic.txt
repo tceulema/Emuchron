@@ -3,11 +3,11 @@
 #
 # Purpose: Totally fake a 1980's 0.5Mhz 8-bit processor Basic interpreter
 #
-# Note: hit 'q' to quit the faking.... 
+# Note: hit 'q' to quit the faking....
 #
 
 # Give help message
-hm --- press 'q' to quit --- 
+hm --- press 'q' to quit ---
 
 # Erase LCD display
 le

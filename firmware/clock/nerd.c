@@ -5,8 +5,7 @@
 
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -22,6 +21,7 @@
 #define NERD_CLOCK_OCTAL	1
 #define NERD_CLOCK_HEX		2
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -30,7 +30,7 @@ extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcFgColor;
 
-// Structure defining the LCD element locations for a single clock
+// Structure defining the lcd element locations for a single clock
 typedef struct _nerdLocation_t
 {
   uint8_t base;		// Base representation of numbers
@@ -38,16 +38,16 @@ typedef struct _nerdLocation_t
   uint8_t locXTH;	// Start x location of time h
   uint8_t digitsTH;	// Number of digits of time h
   uint8_t locXTM;	// Start x location of time m
-  uint8_t digitsTM;	// Number of digits of time h
+  uint8_t digitsTM;	// Number of digits of time m
   uint8_t locXTS;	// Start x location of time s
-  uint8_t digitsTS;	// Number of digits of time h
+  uint8_t digitsTS;	// Number of digits of time s
   uint8_t locYDmy;	// Start y location of d/m/y
   uint8_t locXDD;	// Start x location of date d
-  uint8_t digitsDD;	// Number of digits of time h
+  uint8_t digitsDD;	// Number of digits of date d
   uint8_t locXDM;	// Start x location of date m
-  uint8_t digitsDM;	// Number of digits of time h
+  uint8_t digitsDM;	// Number of digits of date m
   uint8_t locXDY;	// Start x location of date y
-  uint8_t digitsDY;	// Number of digits of time h
+  uint8_t digitsDY;	// Number of digits of date y
 } nerdLocation_t;
 
 // Location definitions for the binary, octal and hex clock elements
@@ -81,13 +81,12 @@ static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
 //
 // Function: nerdCycle
 //
-// Update the LCD display of a nerd clock
+// Update the lcd display of a nerd clock
 //
 void nerdCycle(void)
 {
   // Update alarm info in clock
-  animAlarmAreaUpdate(NERD_ALARM_X_START, NERD_ALARM_Y_START,
-    ALARM_AREA_ALM_ONLY);
+  animADAreaUpdate(NERD_ALARM_X_START, NERD_ALARM_Y_START, AD_AREA_ALM_ONLY);
 
   // Only if a time event or init is flagged we need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
@@ -104,7 +103,7 @@ void nerdCycle(void)
 //
 // Function: nerdInit
 //
-// Initialize the LCD display of a very nerdy clock
+// Initialize the lcd display of a very nerdy clock
 //
 void nerdInit(u08 mode)
 {
@@ -201,8 +200,8 @@ static void nerdBaseClockUpdate(uint8_t clock)
 // base with the requested string length (that can lead to prefix '0'
 // characters).
 // - The function returns an index in the new value text string for the
-//   first character that deviates from the previous sting value, so we
-//   don't have to print the entire string to the LCD.
+//   first character that deviates from the previous string value, so we
+//   don't have to print the entire string to the lcd.
 // - In case the clock has to init itelf, the function returns value 0.
 // - In case the new string value is identical to the old value the
 //   function returns value 255.
@@ -270,4 +269,3 @@ static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
 
   return compareLoc;
 }
-

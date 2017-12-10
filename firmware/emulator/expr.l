@@ -53,7 +53,8 @@ var [a-zA-Z_]+
 "abs"	{ return ABS; }
 "cos"	{ return COS; }
 "frac"	{ return FRAC; }
-"int"	{ return INT; }
+"int"	{ return INTEGER; }
+"rand"	{ return RAND; }
 "sin"	{ return SIN; }
 
 "("	{ return LEFT; }
@@ -64,7 +65,7 @@ var [a-zA-Z_]+
 
 "="	{ return IS; }
 
-{var}	{ yylval = (double)varIdGet(yytext);
+{var}	{ yylval = (double)varIdGet(yytext, GLCD_TRUE);
           if (yylval >= 0)
             return VARIABLE;
           varError = 2;
@@ -72,4 +73,3 @@ var [a-zA-Z_]+
 
 "\n"	{ return END; }
 .	{ return UNKNOWN; }
-

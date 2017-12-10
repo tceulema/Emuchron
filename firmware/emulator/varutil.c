@@ -8,10 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <regex.h>
 
 // Monochron and emuchron defines
 #include "../ks0108.h"
 #include "interpreter.h"
+#include "mchronutil.h"
 #include "scanutil.h"
 #include "varutil.h"
 
@@ -57,29 +59,29 @@ static int varValPrint(char *var, double value, int detail);
 //
 // Function: varClear
 //
-// Clear a named variable
+// Clear a variable
 //
-int varClear(char *argName, char *var)
+int varClear(int varId)
 {
-  int varId;
   int bucketId;
   int bucketListId;
   int i = 0;
+  int retVal = CMD_RET_OK;
   varVariable_t *delVar;
-
-  varId = varIdGet(var);
-  if (varId == -1)
-  {
-    printf("%s? internal bucket overflow\n", argName);
-    return CMD_RET_ERROR;
-  }
 
   // Get reference to variable
   bucketId = varId & VAR_BUCKETS_MASK;
   bucketListId = (varId >> VAR_BUCKETS_BITS);
+  if (bucketListId > varBucket[bucketId].count)
+    emuCoreDump(CD_VAR, __func__, bucketId, bucketListId,
+      varBucket[bucketId].count, 0);
   delVar = varBucket[bucketId].var;
   for (i = 0; i < bucketListId; i++)
     delVar = delVar->next;
+
+  // If the variable is inactive it is an error (but we'll remove anyway)
+  if (delVar->active == GLCD_FALSE)
+    retVal = CMD_RET_ERROR;
 
   // Remove variable from the list
   if (delVar->prev != NULL)
@@ -97,7 +99,7 @@ int varClear(char *argName, char *var)
   free(delVar->name);
   free(delVar);
 
-  return CMD_RET_OK;
+  return retVal;
 }
 
 //
@@ -105,14 +107,17 @@ int varClear(char *argName, char *var)
 //
 // Get the id of a named variable using its name. When the name is scanned by
 // the flex lexer it is guaranteed to consist of any combination of [a-zA-Z_]
-// characters. When used in commmand 'vp' or 'vr' the command handler function
-// is responsible for checking whether the var name consists of [a-zA-Z_] chars
-// or a '*' string.
+// characters. When used in commmands 'lr' and 'vr' the command line scanner
+// and command handler functions are responsible for checking whether the var
+// name consists of [a-zA-Z_] chars.
+// Argument create defines whether to create new id when the var name is not
+// found.
 // Return values:
 // >=0 : variable id (combination of bucket id and index in bucket)
-//  -1 : variable bucket overflow
+//  -1 : variable bucket overflow occurred while attempting to create new id
+//  -2 : variable not found and no new id is to be created
 //
-int varIdGet(char *var)
+int varIdGet(char *var, int create)
 {
   int bucketId;
   int bucketListId;
@@ -165,10 +170,16 @@ int varIdGet(char *var)
     }
   }
 
+  // Determine search result
   if (found == GLCD_TRUE)
   {
     // Var name found
     bucketListId = i;
+  }
+  else if (create == GLCD_FALSE)
+  {
+    // Var name not found
+    return -2;
   }
   else
   {
@@ -237,59 +248,67 @@ void varInit(void)
 //
 // Function: varPrint
 //
-// Print the value of a single or all named variables
+// Print the value of named variables using a regexp pattern (where '.' matches
+// every named variable)
 //
-int varPrint(char *argName, char *var)
+int varPrint(char *pattern, int silent)
 {
-  // Get and print the value of one or all variables
-  if (strcmp(var, "*") == 0)
+  const int spaceCountMax = 60;
+  regex_t regex;
+  int status = 0;
+  int spaceCount = 0;
+  int varInUse = 0;
+  int i;
+  int varIdx = 0;
+  int allSorted = GLCD_FALSE;
+
+  // Validate regexp pattern
+  if (regcomp(&regex, pattern, REG_EXTENDED | REG_NOSUB) != 0)
+    return CMD_RET_ERROR;
+
+  if (varCount != 0)
   {
-    const int spaceCountMax = 60;
-    int spaceCount = 0;
-    int varInUse = 0;
-    int i;
-    int varIdx = 0;
-    int allSorted = GLCD_FALSE;
+    // Get pointers to all variables and then sort them
+    varVariable_t *myVar;
+    varVariable_t *varSort[varCount];
 
-    if (varCount != 0)
+    for (i = 0; i < VAR_BUCKETS; i++)
     {
-      // Get pointers to all variables and then sort them
-      varVariable_t *myVar;
-      varVariable_t *varSort[varCount];
-
-      for (i = 0; i < VAR_BUCKETS; i++)
+      // Copy references to all bucket list members
+      myVar = varBucket[i].var;
+      while (myVar != NULL)
       {
-        // Copy references to all bucket list members
-        myVar = varBucket[i].var;
-        while (myVar != NULL)
+        varSort[varIdx] = myVar;
+        myVar = myVar->next;
+        varIdx++;
+      }
+    }
+
+    // Sort the array based on var name
+    while (allSorted == GLCD_FALSE)
+    {
+      allSorted = GLCD_TRUE;
+      for (i = 0; i < varIdx - 1; i++)
+      {
+        if (strcmp(varSort[i]->name, varSort[i + 1]->name) > 0)
         {
-          varSort[varIdx] = myVar;
-          myVar = myVar->next;
-          varIdx++;
+          myVar = varSort[i];
+          varSort[i] = varSort[i + 1];
+          varSort[i + 1] = myVar;
+          allSorted = GLCD_FALSE;
         }
       }
+      varIdx--;
+    }
 
-      // Sort the array based on var name
-      while (allSorted == GLCD_FALSE)
+    // Print the vars from the sorted array
+    for (i = 0; i < varCount; i++)
+    {
+      if (varSort[i]->active == GLCD_TRUE)
       {
-        allSorted = GLCD_TRUE;
-        for (i = 0; i < varIdx - 1; i++)
-        {
-          if (strcmp(varSort[i]->name, varSort[i + 1]->name) > 0)
-          {
-            myVar = varSort[i];
-            varSort[i] = varSort[i + 1];
-            varSort[i + 1] = myVar;
-            allSorted = GLCD_FALSE;
-          }
-        }
-        varIdx--;
-      }
-
-      // Print the vars from the sorted array
-      for (i = 0; i < varCount; i++)
-      {
-        if (varSort[i]->active == GLCD_TRUE)
+        // See if variable name matches regexp pattern
+        status = regexec(&regex, varSort[i]->name, (size_t)0, NULL, 0);
+        if (status == 0)
         {
           varInUse++;
           spaceCount = spaceCount +
@@ -307,36 +326,16 @@ int varPrint(char *argName, char *var)
         }
       }
     }
-
-    // End on newline if needed and provide variable summary
-    if (spaceCount != 0)
-      printf("\n");
-    printf("variables in use: %d\n", varInUse);
   }
-  else
-  {
-    // Get and print the value of a single variable, when active
-    int varId;
-    double varValue = 0;
-    int varError = 0;
 
-    // Get var id
-    varId = varIdGet(var);
-    if (varId == -1)
-    {
-      printf("%s? internal bucket overflow\n", argName);
-      return CMD_RET_ERROR;
-    }
-
-    // Get var value
-    varValue = varValGet(varId, &varError);
-    if (varError == 1)
-      return CMD_RET_ERROR;
-
-    // Print var value
-    varValPrint(var, varValue, GLCD_TRUE);
+  // End on newline if needed and provide variable summary
+  if (spaceCount != 0)
     printf("\n");
-  }
+  if (silent == GLCD_FALSE && varInUse != 1)
+    printf("registered variables: %d\n", varInUse);
+
+  // Cleanup regexp
+  regfree(&regex);
 
   return CMD_RET_OK;
 }
@@ -392,6 +391,9 @@ double varValGet(int varId, int *varError)
   // Get reference to variable
   bucketId = varId & VAR_BUCKETS_MASK;
   bucketListId = (varId >> VAR_BUCKETS_BITS);
+  if (bucketListId > varBucket[bucketId].count)
+    emuCoreDump(CD_VAR, __func__, bucketId, bucketListId,
+      varBucket[bucketId].count, 0);
   myVar = varBucket[bucketId].var;
   for (i = 0; i < bucketListId; i++)
     myVar = myVar->next;
@@ -444,6 +446,9 @@ double varValSet(int varId, double value)
     // Get reference to variable
     bucketId = varId & VAR_BUCKETS_MASK;
     bucketListId = (varId >> VAR_BUCKETS_BITS);
+    if (bucketListId > varBucket[bucketId].count)
+      emuCoreDump(CD_VAR, __func__, bucketId, bucketListId,
+        varBucket[bucketId].count, 0);
     myVar = varBucket[bucketId].var;
     for (i = 0; i < bucketListId; i++)
       myVar = myVar->next;
@@ -455,4 +460,3 @@ double varValSet(int varId, double value)
 
   return value;
 }
-

@@ -4,7 +4,6 @@
 //*****************************************************************************
 
 #ifndef EMULIN
-// AVR specific includes
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "util.h"
@@ -45,7 +44,7 @@ void glcdInit(u08 color)
 {
   // Initialize hardware and bring lcd out of reset
   glcdInitHW();
-  glcdReset(FALSE);
+  glcdReset(GLCD_FALSE);
 
   // Initialize each controller in the lcd by clearing the screen
   glcdClearScreen(color);
@@ -172,7 +171,7 @@ void glcdControlWrite(u08 controller, u08 data)
 #ifdef EMULIN
   // Check if controller is out of bounds (should never happen)
   if (controller >= GLCD_NUM_CONTROLLERS)
-    emuCoreDump(ORIGIN_GLCD, __func__, controller, 0, 0, data);
+    emuCoreDump(CD_GLCD, __func__, controller, 0, 0, data);
 
   // Execute the action in the controller
   ctrlExecute(CTRL_METHOD_COMMAND, controller, data);
@@ -319,7 +318,7 @@ void glcdDataWrite(u08 data)
   if (controller >= GLCD_NUM_CONTROLLERS ||
       glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
       glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
-    emuCoreDump(ORIGIN_GLCD, __func__, controller, glcdLcdCursor.lcdXAddr,
+    emuCoreDump(CD_GLCD, __func__, controller, glcdLcdCursor.lcdXAddr,
       glcdLcdCursor.lcdYAddr, data);
 
   // Write data to controller lcd buffer
@@ -381,7 +380,7 @@ u08 glcdDataRead(void)
   if (controller >= GLCD_NUM_CONTROLLERS ||
       glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
       glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
-    emuCoreDump(ORIGIN_GLCD, __func__, controller, glcdLcdCursor.lcdXAddr,
+    emuCoreDump(CD_GLCD, __func__, controller, glcdLcdCursor.lcdXAddr,
       glcdLcdCursor.lcdYAddr, 0);
 
   // Read data from controller lcd buffer
@@ -522,7 +521,7 @@ void glcdSetAddress(u08 xAddr, u08 yAddr)
   // Check if requested cursor is out of bounds (should never happen)
   ctrlLcdSetAddress++;
   if (xAddr >= GLCD_XPIXELS || (yAddr >> GLCD_CONTROLLER_YPAGEBITS) > 0)
-    emuCoreDump(ORIGIN_GLCD, __func__, 0, xAddr, yAddr, 0);
+    emuCoreDump(CD_GLCD, __func__, 0, xAddr, yAddr, 0);
 #endif
   // Set cursor x and y address.
   // The set address functions are setup such that we must set the x position

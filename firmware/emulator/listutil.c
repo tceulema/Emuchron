@@ -538,4 +538,3 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
   // Report error on line 1.
   return 1;
 }
-

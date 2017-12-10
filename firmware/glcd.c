@@ -4,7 +4,6 @@
 //*****************************************************************************
 
 #ifndef EMULIN
-// AVR specific includes
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include "util.h"
@@ -267,7 +266,6 @@ void glcdDot(u08 x, u08 y, u08 color)
 // Function: glcdFillCircle2
 //
 // Draw a filled circle centered at px[xCenter,yCenter] with radius in px
-// Note: fillType FILL_INVERSE is NOT supported
 //
 void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
   u08 color)
@@ -294,23 +292,23 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
       {
         if (firstDraw == GLCD_TRUE)
           drawSize = 2 * drawSize;
-        glcdFillRectangle2(xCenter - x, yCenter - y, drawSize + 1, y * 2,
+        glcdFillRectangle2(xCenter - x, yCenter - y, drawSize + 1, y * 2 + 1,
           ALIGN_AUTO, fillType, color);
         if (x != 0)
-          glcdFillRectangle2(xCenter + y, yCenter - x, 1, x * 2, ALIGN_AUTO,
-            fillType, color);
+          glcdFillRectangle2(xCenter + y, yCenter - x, 1, x * 2 + 1,
+            ALIGN_AUTO, fillType, color);
       }
     }
     if (x != 0)
     {
       if (tswitch >= 0 && firstDraw == GLCD_FALSE)
         glcdFillRectangle2(xCenter + x - drawSize, yCenter - y, drawSize + 1,
-          y * 2, ALIGN_AUTO, fillType, color);
+          y * 2 + 1, ALIGN_AUTO, fillType, color);
       if (tswitch >= 0)
       {
         if (x != y)
           drawSize = 0;
-        glcdFillRectangle2(xCenter - y, yCenter - x, drawSize + 1, x * 2,
+        glcdFillRectangle2(xCenter - y, yCenter - x, drawSize + 1, x * 2 + 1,
           ALIGN_AUTO, fillType, color);
       }
     }
@@ -348,9 +346,10 @@ void glcdFillRectangle(u08 x, u08 y, u08 a, u08 b, u08 color)
 // Draw filled rectangle at px[x,y] with size px[a,b].
 //
 // align (note: used for filltypes HALF & THIRDUP/DOWN only):
-// ALIGN_TOP     - Paint top left pixel of box
-// ALIGN_BOTTOM  - Paint bottom left pixel of box
-// ALIGN_AUTO    - Paint top left pixel of box relative to virtually painted px[0,0]
+// ALIGN_TOP      - Paint top left pixel of box
+// ALIGN_BOTTOM   - Paint bottom left pixel of box
+// ALIGN_AUTO     - Paint top left pixel of box relative to virtually painted
+//                  px[0,0]
 //
 // fillType:
 // FILL_FULL      - Fully filled
@@ -364,7 +363,8 @@ void glcdFillRectangle(u08 x, u08 y, u08 a, u08 b, u08 color)
 // display width up to 128 pixels. Our Monochron display happens to be 128
 // pixels wide.
 //
-void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType, u08 color)
+void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
+  u08 color)
 {
   u08 h, i;
   s08 virX = 0;
@@ -553,7 +553,7 @@ u08 glcdGetWidthStr(u08 font, char *data)
   u08 x,y;
 
   // We have a number of y byte pixel rows
-  for (y = 0; y < (GLCD_YPIXELS / 8); y++)
+  for (y = 0; y < GLCD_CONTROLLER_YPAGES; y++)
   {
     // Buffer all 128 (GLCD_XPIXELS) bytes for the y-byte pixel row
     glcdBufferRead(0, y, GLCD_XPIXELS);
@@ -684,7 +684,7 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
       glcdSetAddress(firstWrite, yLine);
     for (i = startX; i <= endX; i++)
     {
-      if (firstWrite >= 0 && i >= firstWrite)
+      if (i >= (u08)firstWrite)
         glcdDataWrite(glcdBuffer[i]);
       glcdBuffer[i] = 0;
     }
@@ -1160,11 +1160,12 @@ void glcdRectangle(u08 x, u08 y, u08 w, u08 h, u08 color)
   if (w > 2)
   {
     glcdFillRectangle2(x + 1, y, w - 2, 1, ALIGN_AUTO, FILL_FULL, color);
-    glcdFillRectangle2(x + 1, y + h - 1, w - 2, 1, ALIGN_AUTO, FILL_FULL,
-      color);
+    if (h > 1)
+      glcdFillRectangle2(x + 1, y + h - 1, w - 2, 1, ALIGN_AUTO, FILL_FULL,
+        color);
   }
   glcdFillRectangle2(x, y, 1, h, ALIGN_AUTO, FILL_FULL, color);
-  if (w > 1 || h > 1)
+  if (w > 1)
     glcdFillRectangle2(x + w - 1, y, 1, h, ALIGN_AUTO, FILL_FULL, color);
 }
 
@@ -1216,9 +1217,10 @@ static void glcdBufferRead(u08 x, u08 yByte, u08 len)
   u08 i;
 
 #ifdef EMULIN
-  // Check for buffer read overflow request
-  if (len > GLCD_XPIXELS)
-    emuCoreDump(ORIGIN_GLCD, __func__, 0, x, yByte, len);
+  // Check for buffer read overflow request as well as attempting to read
+  // beyond the end of the horizontal display size
+  if ((int)x + len > GLCD_XPIXELS)
+    emuCoreDump(CD_GLCD, __func__, 0, x, yByte, len);
 #endif
 
   // Set cursor on first byte to read
@@ -1315,4 +1317,3 @@ static u16 glcdFontIdxGet(unsigned char c)
     return (c - 0x20) * 5;
   }
 }
-

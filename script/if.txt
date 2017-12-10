@@ -38,5 +38,5 @@ rf x=0 x<8 x=x+1
       vs y=7
     ien
   ien
-  vp y
+  vp ^y$
 rn

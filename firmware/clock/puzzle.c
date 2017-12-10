@@ -5,8 +5,7 @@
 
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -38,13 +37,14 @@
 #define PUZZLE_HELP_RIGHT_X	70
 #define PUZZLE_HELP_TEXT_OFFSET	11
 
-// Structure defining the graphics properties of a clock bulk
+// Structure defining the graphics properties of a clock bulb
 typedef struct _bulbDriver_t
 {
   u08 colorCode;	// Draw color: 0 = foreground, 1 = background
   u08 fillType;		// Circle fill type
 } bulbDriver_t;
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -52,16 +52,18 @@ extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
+// Display timer for help page
+extern volatile uint8_t mcU8Util1;
+// Display mode for clock
+extern volatile uint8_t mcU8Util2;
+
+// Common text labels
 extern char animHour[];
 extern char animMin[];
 extern char animSec[];
 extern char animDay[];
 extern char animMonth[];
 extern char animYear[];
-// Display timer for help page
-extern volatile uint8_t mcU8Util1;
-// Display mode for clock
-extern volatile uint8_t mcU8Util2;
 
 // Arrays with help page left/right panel text strings
 static char *puzzleHelpMsgsLeft[] =
@@ -131,7 +133,7 @@ void puzzleButton(u08 pressedButton)
 //
 // Function: puzzleCycle
 //
-// Update the LCD display of a puzzle clock
+// Update the lcd display of a puzzle clock
 //
 void puzzleCycle(void)
 {
@@ -159,8 +161,8 @@ void puzzleCycle(void)
   }
 
   // Update alarm info in clock
-  animAlarmAreaUpdate(PUZZLE_ALARM_X_START, PUZZLE_ALARM_Y_START,
-    ALARM_AREA_ALM_ONLY);
+  animADAreaUpdate(PUZZLE_ALARM_X_START, PUZZLE_ALARM_Y_START,
+    AD_AREA_ALM_ONLY);
 
   // Only if a time event or init is flagged we need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
@@ -189,7 +191,7 @@ void puzzleCycle(void)
 //
 // Function: puzzleInit
 //
-// Initialize the LCD display of puzzle clock
+// Initialize the lcd display of puzzle clock
 //
 void puzzleInit(u08 mode)
 {
@@ -360,4 +362,3 @@ static void puzzleHelp(void)
     glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 8 + i * 7, FONT_5X5P,
       puzzleHelpMsgsRight[i], mcFgColor);
 }
-

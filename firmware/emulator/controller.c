@@ -3,8 +3,11 @@
 // Title    : Lcd controller stub functionality for emuchron emulator
 //*****************************************************************************
 
+// Everything we need for running this thing in Linux
 #include <stdio.h>
 #include <string.h>
+
+// Monochron and emuchron defines
 #include "../monomain.h"
 #include "../ks0108.h"
 #include "mchronutil.h"
@@ -412,7 +415,7 @@ u08 ctrlExecute(u08 method, u08 controller, u08 data)
   else
   {
     // Invalid action method
-    emuCoreDump(ORIGIN_CTRL, __func__, method, 0, 0, 0);
+    emuCoreDump(CD_CTRL, __func__, method, 0, 0, 0);
   }
 
   // Dump controller request
@@ -583,7 +586,7 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
   else
   {
     // Invalid command
-    emuCoreDump(ORIGIN_CTRL, __func__, data, 0, 0, 0);
+    emuCoreDump(CD_CTRL, __func__, data, 0, 0, 0);
     // We will not get here (dummy return)
     return 0;
   }
@@ -680,14 +683,25 @@ void ctrlLcdFlush(void)
 }
 
 //
-// Function: ctrlLcdNcurBLSet
+// Function: ctrlLcdGlutGrSet
 //
-// Enable/disable ncurses backlight support
+// Enable/disable glut graphics options
 //
-void ctrlLcdNcurBLSet(u08 support)
+void ctrlLcdGlutGrSet(u08 bezel, u08 grid)
+{
+  if (useGlut == GLCD_TRUE)
+    lcdGlutGraphicsSet((unsigned char)bezel, (unsigned char)grid);
+}
+
+//
+// Function: ctrlLcdNcurGrSet
+//
+// Enable/disable ncurses graphics options
+//
+void ctrlLcdNcurGrSet(u08 backlight)
 {
   if (useNcurses == GLCD_TRUE)
-    lcdNcurBacklight((unsigned char)support);
+    lcdNcurGraphicsSet((unsigned char)backlight);
 }
 
 //
@@ -820,4 +834,3 @@ void ctrlStatsReset(int type)
       lcdNcurStatsReset();
   }
 }
-

@@ -5,7 +5,7 @@
 #
 
 # Give help message
-hm --- press 'q' to quit --- 
+hm --- press 'q' to quit ---
 
 # Erase lcd display and paint the function name
 le

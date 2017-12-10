@@ -6,8 +6,7 @@
 #include <math.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -43,7 +42,6 @@
 #define ANA_ALARM_HOUR_RADIUS		(ANA_ALARM_RADIUS - 2)
 #define ANA_DATE_X_START		2
 #define ANA_DATE_Y_START		57
-#define ANA_DATE_X_SIZE			23
 
 // Determine the second indicator shape.
 // 0 = Needle
@@ -60,6 +58,7 @@
 // 1 = Whenever the (x,y) position of the arrow tip changes
 #define ANA_MIN_MOVE		1
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -79,8 +78,6 @@ extern volatile uint8_t mcU8Util1;
 extern volatile uint8_t mcU8Util2;
 // Indicator whether to show the second needle/arrow
 extern volatile uint8_t mcU8Util3;
-
-extern char *animMonths[12];
 
 // Local function prototypes
 static void analogAlarmAreaUpdate(void);
@@ -102,7 +99,7 @@ static s08 posHour[6];
 //
 // Function: analogCycle
 //
-// Update the LCD display of a very simple analog clock
+// Update the lcd display of a very simple analog clock
 //
 void analogCycle(void)
 {
@@ -138,24 +135,7 @@ void analogCycle(void)
   u08 hourElementChanged = GLCD_FALSE;
 
   // Verify changes in date
-  if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
-      mcClockInit == GLCD_TRUE)
-  {
-    u08 pxDone;
-    char msg[4];
-
-    // Show new date and clean up potential remnants
-    pxDone = glcdPutStr2(ANA_DATE_X_START, ANA_DATE_Y_START, FONT_5X5P,
-      (char *)animMonths[mcClockNewDM - 1], mcFgColor) + ANA_DATE_X_START;
-    msg[0] = ' ';
-    animValToStr(mcClockNewDD, &msg[1]);
-    pxDone = pxDone +
-      glcdPutStr2(pxDone, ANA_DATE_Y_START, FONT_5X5P, msg, mcFgColor) -
-      ANA_DATE_X_START;
-    if (pxDone <= ANA_DATE_X_SIZE)
-      glcdFillRectangle(ANA_DATE_X_START + pxDone, ANA_DATE_Y_START,
-        ANA_DATE_X_SIZE - pxDone + 1, FILL_BLANK, mcBgColor);
-  }
+  animADAreaUpdate(ANA_DATE_X_START, ANA_DATE_Y_START, AD_AREA_DATE_ONLY);
 
   // Calculate (potential) changes in seconds needle
   if (mcU8Util3 == GLCD_TRUE)
@@ -274,7 +254,7 @@ void analogCycle(void)
 //
 // Function: analogHmInit
 //
-// Initialize the LCD display of a very simple analog clock with
+// Initialize the lcd display of a very simple analog clock with
 // Hour and Minutes arrow
 //
 void analogHmInit(u08 mode)
@@ -286,7 +266,7 @@ void analogHmInit(u08 mode)
 //
 // Function: analogHmsInit
 //
-// Initialize the LCD display of a very simple analog clock with
+// Initialize the lcd display of a very simple analog clock with
 // Hour and Minutes arrow and Seconds needle
 //
 void analogHmsInit(u08 mode)
@@ -438,7 +418,7 @@ static void analogElementSync(s08 position[], s08 positionNew[])
 //
 // Function: analogInit
 //
-// Initialize the LCD display of an analog clock
+// Initialize the lcd display of an analog clock
 //
 static void analogInit(u08 mode)
 {
@@ -504,4 +484,3 @@ static void analogInit(u08 mode)
     glcdDot(ANA_X_START, ANA_Y_START, mcFgColor);
   }
 }
-

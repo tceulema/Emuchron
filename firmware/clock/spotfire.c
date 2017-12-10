@@ -1,13 +1,12 @@
 //*****************************************************************************
 // Filename : 'spotfire.c'
-// Title    : Generic drawing code for MONOCHRON spotfire clocks
+// Title    : Generic drawing code for MONOCHRON spotfire/quintusvisuals clocks
 //*****************************************************************************
 
 #include <stdlib.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -53,12 +52,12 @@ typedef struct
   char *msg2;		// Optional message added after first
 } menuBarDriver_t;
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
+extern volatile uint8_t mcClockNewDD, mcClockNewDM;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcClockTimeEvent;
+extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
 extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
@@ -100,7 +99,8 @@ void spotAxisInit(u08 clockId)
   u08 i;
   u08 xs, xh, y;
 
-  if (clockId == CHRON_CASCADE)
+  if (clockId == CHRON_BARCHART || clockId == CHRON_CASCADE ||
+      clockId == CHRON_LINECHART)
   {
     // Draw x/y-axis lines
     glcdFillRectangle(8, 23, 1, 34, mcFgColor);
@@ -112,16 +112,31 @@ void spotAxisInit(u08 clockId)
   }
 
   // Draw clock dependent things and setup coordinates for axis labels
-  if (clockId == CHRON_CASCADE)
+  if (clockId == CHRON_BARCHART)
   {
+    // Barchart
+    glcdDot(37, 57, mcFgColor);
+    glcdDot(64, 57, mcFgColor);
+    xs = 72; xh = 16; y=58;
+  }
+  else if (clockId == CHRON_CASCADE || clockId == CHRON_LINECHART)
+  {
+    // Cascade or linechart
     xs = 75; xh = 13; y = 58;
   }
   else if (clockId == CHRON_TRAFLIGHT)
   {
+    // Trafficlight
     xs = 78; xh = 10; y = 58;
   }
-  else
+  else if (clockId == CHRON_THERMOMETER)
   {
+    // Thermometer
+    xs = 78; xh = 10; y = 59;
+  }
+  else // clockId == CHRON_SPEEDDIAL || clockId == CHRON_PIECHART
+  {
+    // Speeddial or piechart
     xs = 78; xh = 10; y = 54;
   }
 
@@ -203,7 +218,7 @@ void spotCommonInit(char *label, u08 mode)
     u08 pxDone;
 
     // Partial init: clear only the chart area
-    glcdFillRectangle(0, 16, 100, 47, mcBgColor);
+    glcdFillRectangle(0, 16, 100, 48, mcBgColor);
 
     // Visualization title bar
     pxDone = glcdPutStr2(2, 9, FONT_5X5P, label, mcFgColor);
@@ -223,9 +238,8 @@ void spotCommonInit(char *label, u08 mode)
     menuBarId = -1;
     spotMenuBarUpdate();
 
-    // Init the visualization Title bar label and icons
+    // Init the visualization Title bar label
     glcdPutStr2(2, 9, FONT_5X5P, label, mcFgColor);
-    glcdPutStr2(86, 9, FONT_5X5P, "@&*", mcFgColor);
 
     // Filter panel label
     glcdPutStr2(104, 9, FONT_5X5P, "FILTERS", mcFgColor);
@@ -262,7 +276,7 @@ void spotCommonInit(char *label, u08 mode)
 u08 spotCommonUpdate(void)
 {
   // Update alarm/date info in clock
-  animAlarmAreaUpdate(AD_X_START, AD_Y_START, ALARM_AREA_ALM_DATE);
+  animADAreaUpdate(AD_X_START, AD_Y_START, AD_AREA_ALM_DATE);
 
   // Only if a time event or init is flagged we need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
@@ -294,8 +308,7 @@ static void spotMenuBarUpdate(void)
 {
   // Only get a new menu bar when the date has changed or when we're
   // initializing
-  if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
-      mcClockInit == GLCD_TRUE)
+  if (mcClockDateEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
   {
     uint8_t i = 1;
     uint8_t posX;
@@ -374,4 +387,3 @@ static void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal)
       y + FP_RS_Y_OFFSET - 1, 2, 3, mcFgColor);
   }
 }
-

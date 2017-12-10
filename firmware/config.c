@@ -495,9 +495,8 @@ static uint8_t cfgNextNumber(uint8_t value, uint8_t maxVal)
     value++;
   }
 
-  // Check on overflow
-  if (value >= maxVal)
-    value = value % maxVal;
+  // Beware of overflow
+  value = value % maxVal;
 
   return value;
 }
@@ -1096,4 +1095,3 @@ static void cfgSetTime(void)
     cfgEventPost();
   }
 }
-

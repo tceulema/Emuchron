@@ -1,12 +1,11 @@
 //*****************************************************************************
 // Filename : 'bigdigit.c'
-// Title    : Animation code for MONOCHRON bigdigit clock
+// Title    : Animation code for MONOCHRON big digit clock
 //*****************************************************************************
 
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -15,7 +14,7 @@
 #include "../anim.h"
 #include "bigdigit.h"
 
-// Specifics for bigdigit clock
+// Specifics for big digit clock
 #define BIGDIG_HMS_X_START	1
 #define BIGDIG_HMS_Y_START	54
 #define BIGDIG_DMY_X_START	126
@@ -37,6 +36,7 @@
 #define BIGDIG_ALARM_X_START	1
 #define BIGDIG_ALARM_Y_START	58
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -124,7 +124,7 @@ void bigDigButton(u08 pressedButton)
 //
 // Function: bigDigCycle
 //
-// Update the LCD display of a bigdigit clock
+// Update the lcd display of a bigdigit clock
 //
 void bigDigCycle(void)
 {
@@ -133,8 +133,8 @@ void bigDigCycle(void)
   uint8_t bigdigState;
 
   // Update alarm/date info in clock
-  animAlarmAreaUpdate(BIGDIG_ALARM_X_START, BIGDIG_ALARM_Y_START,
-    ALARM_AREA_ALM_ONLY);
+  animADAreaUpdate(BIGDIG_ALARM_X_START, BIGDIG_ALARM_Y_START,
+    AD_AREA_ALM_ONLY);
 
   // Only if a time event or init or force (due to button press) is flagged
   // we need to update the clock
@@ -237,7 +237,7 @@ void bigDigCycle(void)
 //
 // Function: bigDigInit
 //
-// Initialize the LCD display of bigdigit clock
+// Initialize the lcd display of bigdigit clock
 //
 void bigDigInit(u08 mode)
 {
@@ -327,4 +327,3 @@ static void bigDigItemInvert(void)
   // And force the digit to be drawn
   mcU8Util1 = GLCD_TRUE;
 }
-

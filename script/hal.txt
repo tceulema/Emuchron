@@ -29,7 +29,7 @@ vs xe=4
 vs ys=31
 vs yr=30
 
-# Paint x/y axis and markers 
+# Paint x/y axis and markers
 w 3000
 le
 w 500
@@ -142,12 +142,10 @@ pa f mx my+12 5x5p h 1 1 ]]#fail
 
 # Add seemingly random numbers as last message
 w 1500
-vs rb=pi^2*100000
-vs rs=5.317496278
+vs r=rand(0)
 wts
 rf rn=0 rn<40 rn=rn+1
-  vs rb=(rb*rs)%100000
-  vs ra=(rb+rn*75)%100000
+  vs ra=rand()*99999
   pn f mx my+18 5x5p h 1 1 ra >%05.f<
   wte 100
 rn

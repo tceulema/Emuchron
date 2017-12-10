@@ -3,13 +3,13 @@
 // Title    : Main animation and drawing code driver for MONOCHRON clocks
 //*****************************************************************************
 
-#ifdef EMULIN
+#ifndef EMULIN
+#include <util/delay.h>
+#include "util.h"
+#else
 #include "emulator/stub.h"
 #include "emulator/stubrefs.h"
 #include "emulator/controller.h"
-#else
-#include <util/delay.h>
-#include "util.h"
 #endif
 #include "ks0108.h"
 #include "monomain.h"
@@ -18,19 +18,24 @@
 
 // Include the supported clocks
 #include "clock/analog.h"
+#include "clock/barchart.h"
 #include "clock/bigdigit.h"
 #include "clock/cascade.h"
+#include "clock/crosstable.h"
 #include "clock/digital.h"
 #include "clock/example.h"
+#include "clock/linechart.h"
 #include "clock/mosquito.h"
 #include "clock/nerd.h"
 #include "clock/perftest.h"
+#include "clock/piechart.h"
 #include "clock/pong.h"
 #include "clock/puzzle.h"
 #include "clock/qr.h"
 #include "clock/slider.h"
 #include "clock/speeddial.h"
 #include "clock/spiderplot.h"
+#include "clock/thermometer.h"
 #include "clock/trafficlight.h"
 
 // The following monomain.c global variables are used to transfer the
@@ -50,17 +55,18 @@ volatile uint8_t mcClockNewTS = 0, mcClockNewTM = 0, mcClockNewTH = 0;
 volatile uint8_t mcClockOldDD = 0, mcClockOldDM = 0, mcClockOldDY = 0;
 volatile uint8_t mcClockNewDD = 0, mcClockNewDM = 0, mcClockNewDY = 0;
 
-// Indicates whether real time clock has changed since last check
+// Indicates whether real time clock has changed since last check.
+// Note the following:
+// - mcClockTimeEvent turns true when the time or date has changed since last
+//   check
+// - mcClockDateEvent turns true when the date has changed since last check
 volatile uint8_t mcClockTimeEvent = GLCD_FALSE;
+volatile uint8_t mcClockDateEvent = GLCD_FALSE;
 
 // Indicates whether the alarm switch is On or Off
 volatile uint8_t mcAlarmSwitch;
 
-// Indicates whether the alarm switch has changed since last check.
-// Note: Upon a date change (month, day) this flag will also turn true.
-// This will make it much more easy to manage the contents of the clock
-// alarm drawing area at the cost of one additional event per day. For
-// an example refer to animAlarmAreaUpdate() below.
+// Indicates whether the alarm switch has changed since last check
 volatile uint8_t mcUpdAlarmSwitch = GLCD_FALSE;
 
 // Indicates whether the clock is alarming or snoozing
@@ -124,7 +130,12 @@ clockDriver_t monochron[] =
    {CHRON_CASCADE,     DRAW_INIT_FULL,    spotCascadeInit,    spotCascadeCycle,    0}
   ,{CHRON_SPEEDDIAL,   DRAW_INIT_PARTIAL, spotSpeedDialInit,  spotSpeedDialCycle,  0}
   ,{CHRON_SPIDERPLOT,  DRAW_INIT_PARTIAL, spotSpiderPlotInit, spotSpiderPlotCycle, 0}
+  //,{CHRON_THERMOMETER, DRAW_INIT_PARTIAL, spotThermInit,      spotThermCycle,      0}
   ,{CHRON_TRAFLIGHT,   DRAW_INIT_PARTIAL, spotTrafLightInit,  spotTrafLightCycle,  0}
+  //,{CHRON_BARCHART,    DRAW_INIT_PARTIAL, spotBarChartInit,   spotBarChartCycle,   0}
+  //,{CHRON_CROSSTABLE,  DRAW_INIT_PARTIAL, spotCrossTableInit, spotCrossTableCycle, 0}
+  //,{CHRON_PIECHART,    DRAW_INIT_PARTIAL, spotPieChartInit,   spotPieChartCycle,   0}
+  //,{CHRON_LINECHART,   DRAW_INIT_PARTIAL, spotLineChartInit,  spotLineChartCycle,  0}
   ,{CHRON_ANALOG_HMS,  DRAW_INIT_FULL,    analogHmsInit,      analogCycle,         0}
   ,{CHRON_ANALOG_HM,   DRAW_INIT_PARTIAL, analogHmInit,       analogCycle,         0}
   ,{CHRON_DIGITAL_HMS, DRAW_INIT_FULL,    digitalHmsInit,     digitalCycle,        0}
@@ -136,8 +147,8 @@ clockDriver_t monochron[] =
   //,{CHRON_SLIDER,      DRAW_INIT_FULL,    sliderInit,         sliderCycle,         0}
   //,{CHRON_BIGDIG_TWO,  DRAW_INIT_FULL,    bigDigInit,         bigDigCycle,         bigDigButton}
   //,{CHRON_BIGDIG_ONE,  DRAW_INIT_PARTIAL, bigDigInit,         bigDigCycle,         bigDigButton}
-  //,{CHRON_QR_HM,       DRAW_INIT_FULL,    qrInit,             qrCycle,             0}
-  //,{CHRON_QR_HMS,      DRAW_INIT_PARTIAL, qrInit,             qrCycle,             0}
+  //,{CHRON_QR_HMS,      DRAW_INIT_FULL,    qrInit,             qrCycle,             0}
+  //,{CHRON_QR_HM,       DRAW_INIT_PARTIAL, qrInit,             qrCycle,             0}
   //,{CHRON_EXAMPLE,     DRAW_INIT_FULL,    exampleInit,        exampleCycle,        0}
 };
 
@@ -151,59 +162,67 @@ static u08 almDisplayState;
 
 // Local function prototypes
 static void animAlarmSwitchCheck(void);
+static void animDatePrint(u08 x, u08 y);
 static void animDateTimeCopy(void);
 
 //
-// Function: animAlarmAreaUpdate
+// Function: animADAreaUpdate
 //
-// Draw update in clock alarm area. It supports generic alarm/date area
-// functionality used in many clocks. The type defines whether the alarm
-// area is used for displaying the alarm time only, or is a combination
-// of the alarm time and the current date when the alarm switch is set to
-// off.
+// Draw update in clock alarm/date area. It supports generic alarm/date area
+// functionality used in many clocks. The type defines whether the area is
+// used for displaying the alarm time only, date only or a combination of both,
+// depending on whether the alarm switch is on or off.
+// NOTE: A single clock can implement multiple date-only areas but only a
+// single area that includes the alarm. This restriction is due to the method
+// used to administer the blinking state of the alarm time while alarming,
+// using static variable almDisplayState.
 //
-void animAlarmAreaUpdate(u08 x, u08 y, u08 type)
+void animADAreaUpdate(u08 x, u08 y, u08 type)
 {
   u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
   u08 pxDone = 0;
   char msg[6];
 
+  if (type == AD_AREA_DATE_ONLY)
+  {
+    // Only the date is shown
+    if (mcClockDateEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+      animDatePrint(x, y);
+    return;
+  }
+
   if ((mcCycleCounter & 0x0F) >= 8)
     newAlmDisplayState = GLCD_TRUE;
 
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
+  if (mcUpdAlarmSwitch == GLCD_TRUE || mcClockDateEvent == GLCD_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {
-      // Show alarm time
-      animValToStr(mcAlarmH, msg);
-      msg[2] = ':';
-      animValToStr(mcAlarmM, &msg[3]);
-      pxDone = glcdPutStr2(x, y, FONT_5X5P, msg, mcFgColor);
+      if (mcUpdAlarmSwitch == GLCD_TRUE)
+      {
+        // Show alarm time
+        animValToStr(mcAlarmH, msg);
+        msg[2] = ':';
+        animValToStr(mcAlarmM, &msg[3]);
+        pxDone = glcdPutStr2(x, y, FONT_5X5P, msg, mcFgColor);
+
+        // Clean up any trailing remnants of previous text
+        if (type == AD_AREA_ALM_DATE)
+          glcdFillRectangle(x + pxDone, y, AD_AREA_AD_WIDTH - pxDone, 5,
+            mcBgColor);
+      }
     }
     else
     {
-      // Remove alarm time that is potentially inverse
+      // Remove potential alarm time that is potentially inverted
       glcdFillRectangle(x - 1, y - 1, 19, 7, mcBgColor);
       almDisplayState = GLCD_FALSE;
 
       // Show date if requested
-      if (type == ALARM_AREA_ALM_DATE)
-      {
-        msg[0] = ' ';
-        pxDone = glcdPutStr2(x, y, FONT_5X5P,
-          (char *)animMonths[mcClockNewDM - 1], mcFgColor);
-        animValToStr(mcClockNewDD, &msg[1]);
-        pxDone = pxDone + glcdPutStr2(pxDone + x, y, FONT_5X5P, msg,
-          mcFgColor);
-      }
+      if (type == AD_AREA_ALM_DATE)
+        animDatePrint(x, y);
     }
-
-    // Clean up any trailing remnants of previous text
-    if (type == ALARM_AREA_ALM_DATE && pxDone < ALARM_AREA_AD_WIDTH)
-      glcdFillRectangle(x + pxDone, y, ALARM_AREA_AD_WIDTH - pxDone, 5,
-        mcBgColor);
   }
 
   if (mcAlarming == GLCD_TRUE)
@@ -236,7 +255,7 @@ void animAlarmAreaUpdate(u08 x, u08 y, u08 type)
 //
 // Check the position of the alarm switch versus the software state of
 // the alarm info, resulting in a flag indicating whether the alarm info
-// area must be updated.
+// area must be updated
 //
 static void animAlarmSwitchCheck(void)
 {
@@ -247,7 +266,7 @@ static void animAlarmSwitchCheck(void)
   {
     if (mcAlarmSwitch != ALARM_SWITCH_ON)
     {
-      // Let the clock show the alarm time
+      // Init alarm switch value, or the alarm switch has been switched on
       DEBUGP("Alarm info -> Alarm");
       mcAlarmSwitch = ALARM_SWITCH_ON;
       mcUpdAlarmSwitch = GLCD_TRUE;
@@ -256,11 +275,10 @@ static void animAlarmSwitchCheck(void)
   }
   else
   {
-    // Show the current date or a new date when we've passed midnight
-    if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
-        mcAlarmSwitch != ALARM_SWITCH_OFF)
+    // Show the current date
+    if (mcAlarmSwitch != ALARM_SWITCH_OFF)
     {
-      // Let the clock show something else than the alarm time
+      // Init alarm switch value, or he alarm switch has been switched off
       DEBUGP("Alarm info -> Other");
       mcAlarmSwitch = ALARM_SWITCH_OFF;
       mcUpdAlarmSwitch = GLCD_TRUE;
@@ -311,6 +329,9 @@ void animClockDraw(u08 mode)
     mcClockNewDD = rtcDateTimeNext.dateDay;
     mcClockNewDM = rtcDateTimeNext.dateMon;
     mcClockNewDY = rtcDateTimeNext.dateYear;
+    if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
+        mcClockNewDY != mcClockOldDY)
+      mcClockDateEvent = GLCD_TRUE;
   }
 
   // Have the clock initialize or update itself
@@ -352,6 +373,7 @@ void animClockDraw(u08 mode)
   {
     DEBUGP("Clear time event");
     mcClockTimeEvent = GLCD_FALSE;
+    mcClockDateEvent = GLCD_FALSE;
     rtcTimeEvent = GLCD_FALSE;
   }
 }
@@ -359,7 +381,7 @@ void animClockDraw(u08 mode)
 //
 // Function: animClockNext
 //
-// Get next clock based on the current one and return its init type.
+// Get next clock based on the current one and return its init type
 //
 u08 animClockNext(void)
 {
@@ -371,6 +393,30 @@ u08 animClockNext(void)
     mcMchronClock = 0;
 
   return mcClockPool[mcMchronClock].initType;
+}
+
+//
+// Function: animDatePrint
+//
+// Prints the current date at location px[x,y]. It takes care of removing any
+// date remnants when the new printed date is smaller than the max date print
+// size.
+//
+static void animDatePrint(u08 x, u08 y)
+{
+  u08 pxDone = 0;
+  char msg[4];
+
+  // Print the date
+  pxDone = glcdPutStr2(x, y, FONT_5X5P, (char *)animMonths[mcClockNewDM - 1],
+    mcFgColor);
+  msg[0] = ' ';
+  animValToStr(mcClockNewDD, &msg[1]);
+  pxDone = pxDone + glcdPutStr2(pxDone + x, y, FONT_5X5P, msg, mcFgColor);
+
+  // Clean up any trailing remnants of previous date
+  if (pxDone < AD_AREA_AD_WIDTH)
+    glcdFillRectangle(x + pxDone, y, AD_AREA_AD_WIDTH - pxDone, 5, mcBgColor);
 }
 
 //
@@ -391,7 +437,7 @@ static void animDateTimeCopy(void)
 //
 // Function: animValToStr
 //
-// Translate a value into a two-digit character string.
+// Translate a value into a two-digit character string
 //
 void animValToStr(u08 value, char valString[])
 {
@@ -407,9 +453,10 @@ void animValToStr(u08 value, char valString[])
 //
 void animWelcome(void)
 {
-  // Give startup welcome message
+  // Give startup welcome message and (optionally) firmware version
   glcdPutStr2(33, 14, FONT_5X7N, "Welcome to", mcFgColor);
   glcdPutStr2(18, 30, FONT_5X7N, "-- T1 clocks --", mcFgColor);
+  //glcdPutStr2(1, 58, FONT_5X5P, EMUCHRON_VERSION, mcFgColor);
 
 #ifdef EMULIN
   ctrlLcdFlush();
@@ -420,4 +467,3 @@ void animWelcome(void)
   beep(3750, 100);
   beep(4000, 100);
 }
-

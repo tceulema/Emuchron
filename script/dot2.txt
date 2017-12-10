@@ -1,0 +1,36 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test paint dot functionality by painting rotating spirals
+#
+
+hm --- press 'q' to quit ---
+
+vs ribbons=12
+vs arclevel=7
+vs raddelta=-0.06
+
+le
+wts
+vs radadd=0
+rf null true null
+  # Slowly increment radius spiral to prevent gaps in ribbon
+  rf radius=0 radius<30 radius=radius+0.45
+    vs factor=radius*arclevel/100
+    # Evenly distribute the spiral ribbon dots over a circle
+    rf radial=0 radial<2*pi radial=radial+2*pi/ribbons
+      vs dotradial=radial+radadd+factor
+      # Clear previous spiral ribbon dot as best as we can
+      # but we cannot prevent gaps at all times
+      iif radius>=2
+        pd b 64+sin(dotradial-raddelta)*radius 32+cos(dotradial-raddelta)*radius
+      ien
+      # Paint new spiral ribbon dot
+      pd f 64+sin(dotradial)*radius 32+cos(dotradial)*radius
+    rn
+  rn
+  wte 40
+  # Next spiral ribbons are drawn at a slightly different angle
+  # making them seem to be rotating ones
+  vs radadd=(radadd+raddelta)%(2*pi)
+rn

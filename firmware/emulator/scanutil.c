@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <regex.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -53,6 +54,7 @@ static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue, int silent);
 static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue, int silent);
 static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue, int silent);
 static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue, int silent);
+static void cmdDictCmdPrint(cmdCommand_t *cmdCommand);
 
 //
 // Function: cmdArgInit
@@ -288,7 +290,8 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
           if (retVal != CMD_RET_OK)
             return retVal;
         }
-        else if (cmdArg[i].cmdArgDomain->argDomainType == DOM_VAR_NAME)
+        else if (cmdArg[i].cmdArgDomain->argDomainType == DOM_VAR_NAME ||
+            cmdArg[i].cmdArgDomain->argDomainType == DOM_VAR_NAME_ALL)
         {
           retVal = cmdArgValidateVar(&cmdArg[i], argWord[argWordIdx - 1],
             silent);
@@ -444,43 +447,38 @@ static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue, int silent)
 // Function: cmdArgValidateVar
 //
 // Validate a variable name. When used in an expression, variable names are
-// validated in the expression evaluator. However, for the var print and var
-// reset commands we take the variable name as a word input and we must
-// validate whether it consists of a '*' or a string containing only [a-zA-Z_]
-// characters.
+// validated in the expression evaluator. For commands 'vr' and 'lr' however
+// we take the variable name as a word input and we must validate ourselves
+// whether it consists of [a-zA-Z_] characters, and for ''vr' where it may also
+// be a '.'.
 // Note that when the scan profile for a variable name (as defined in expr.l
 // [firmware/emulator]) is modified, this function must be changed as well.
 //
 static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue, int silent)
 {
-  char *varName = argValue;
+  regex_t regex;
+  int status = 0;
+  int argDomainType = cmdArg->cmdArgDomain->argDomainType;
 
-  if (cmdArg->cmdArgDomain->argDomainType != DOM_VAR_NAME)
+  if (argDomainType != DOM_VAR_NAME && argDomainType != DOM_VAR_NAME_ALL)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
     return CMD_RET_ERROR;
   }
 
-  // Find either a '*' or a string of [a-zA-Z_] characters
-  if (strcmp(argValue, "*") != 0)
+  // Scan the variable name argument using a regexp pattern
+  if (argDomainType == DOM_VAR_NAME)
+    regcomp(&regex, "^[a-zA-Z_]+$", REG_EXTENDED | REG_NOSUB);
+  else
+    regcomp(&regex, "^(\\.|[a-zA-Z_]+)$", REG_EXTENDED | REG_NOSUB);
+  status = regexec(&regex, argValue, (size_t)0, NULL, 0);
+  regfree(&regex);
+  if (status != 0)
   {
-    // A variable name is [a-zA-Z_]+
-    while (*varName != '\0')
-    {
-      if ((*varName >= 'a' && *varName <='z') ||
-          (*varName >= 'A' && *varName <='Z') ||
-          *varName == '_')
-      {
-        varName++;
-      }
-      else
-      {
-        // Invalid character found
-        if (silent == GLCD_FALSE)
-          printf("%s? invalid\n", cmdArg->argName);
-        return CMD_RET_ERROR;
-      }
-    }
+    // Invalid variable name character found
+    if (silent == GLCD_FALSE)
+      printf("%s? invalid\n", cmdArg->argName);
+    return CMD_RET_ERROR;
   }
 
   return CMD_RET_OK;
@@ -641,19 +639,12 @@ int cmdDictCmdGet(char *cmd, cmdCommand_t **cmdCommand)
 //
 // Print the dictionary contents of a command in the mchron command dictionary
 //
-int cmdDictCmdPrint(char *cmd)
+static void cmdDictCmdPrint(cmdCommand_t *cmdCommand)
 {
   int argCount = 0;
-  int retVal;
-  cmdCommand_t *cmdCommand;
   cmdArg_t *cmdArg;
   cmdArgDomain_t *cmdArgDomain;
   char *domainChar;
-
-  // Get the dictionary for the command
-  retVal = cmdDictCmdGet(cmd, &cmdCommand);
-  if (retVal != CMD_RET_OK)
-    return retVal;
 
   // Command name and description
   printf("command: %s (%s)\n", cmdCommand->cmdName, cmdCommand->cmdNameDescr);
@@ -781,7 +772,8 @@ int cmdDictCmdPrint(char *cmd)
 
       // Provide argument info
       if (cmdArgDomain->argDomainType == DOM_NULL_INFO ||
-          cmdArgDomain->argDomainType == DOM_VAR_NAME)
+          cmdArgDomain->argDomainType == DOM_VAR_NAME ||
+          cmdArgDomain->argDomainType == DOM_VAR_NAME_ALL)
       {
         // Provide generic domain info
         printf("%s", cmdArgDomain->argDomainInfo);
@@ -797,20 +789,25 @@ int cmdDictCmdPrint(char *cmd)
 
   // Print the actual command handler function name
   printf("handler: %s()\n", cmdCommand->cmdHandlerName);
-
-  return CMD_RET_OK;
 }
 
 //
-// Function: cmdDictCmdPrintAll
+// Function: cmdDictPrint
 //
-// Print the full mchron command dictionary
+// Print mchron command dictionary entries using a regexp pattern (where '.'
+// matches every command)
 //
-int cmdDictCmdPrintAll(void)
+int cmdDictPrint(char *pattern)
 {
+  regex_t regex;
+  int status = 0;
   int i;
   int j;
   int commandCount = 0;
+
+  // Validate regexp pattern
+  if (regcomp(&regex, pattern, REG_EXTENDED | REG_NOSUB) != 0)
+    return CMD_RET_ERROR;
 
   // Loop through each command group
   for (i = 0; i < cmdDictCount; i++)
@@ -818,10 +815,16 @@ int cmdDictCmdPrintAll(void)
     // Loop through each command in the command group
     for (j = 0; j < cmdDictMchron[i].commandCount; j++)
     {
-      // Print its dictionary
-      printf("------------------------\n");
-      cmdDictCmdPrint(cmdDictMchron[i].cmdCommand[j].cmdName);
-      commandCount++;
+      // See if command name matches regexp pattern
+      status = regexec(&regex, cmdDictMchron[i].cmdCommand[j].cmdName,
+        (size_t)0, NULL, 0);
+      if (status == 0)
+      {
+        // Print its dictionary
+        printf("------------------------\n");
+        cmdDictCmdPrint(&cmdDictMchron[i].cmdCommand[j]);
+        commandCount++;
+      }
     }
   }
 
@@ -829,6 +832,9 @@ int cmdDictCmdPrintAll(void)
   if (commandCount > 0)
     printf("------------------------\n");
   printf("registered commands: %d\n", commandCount);
+
+  // Cleanup regexp
+  regfree(&regex);
 
   return CMD_RET_OK;
 }

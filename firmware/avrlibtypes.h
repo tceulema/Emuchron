@@ -70,5 +70,4 @@ typedef char		CHAR;
 typedef int		INT;
 typedef long		LONG;
 #endif
-
 #endif

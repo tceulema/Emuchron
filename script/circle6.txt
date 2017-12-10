@@ -1,0 +1,32 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test the fill circle inverse functionality
+#
+# NOTE: Due to graphics speed limitations use either the glut device
+# (recommended) or the ncurses device, but NOT both or be prepared
+# to see lots of graphic glitches. Even if you do use only the glut or
+# ncurses lcd device you may still see some occasional graphic glitch.
+# Don't adjust your tv set for this, it's just the way ncurses works
+# and how the glut lcd device is implemented.
+#
+
+# Show message and a clock
+hm --- press 'q' to quit ---
+cs 8
+
+# Move inverted circle from left to right to left (etc...) while
+# inverting the display after each cycle
+wts
+vs delta=1
+vs x=29
+rf null true null
+  rf x=x+2*delta x>=31&&x<=96 x=x+delta
+    tf
+    pcf f x 32 31 4
+    wte 75
+    pcf f x 32 31 4
+  rn
+  li
+  vs delta=-delta
+rn

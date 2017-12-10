@@ -7,7 +7,7 @@ MCU = atmega328p
 F_CPU = 8000000
 
 # Output format, can be [srec, ihex, binary]
-FORMAT = ihex 
+FORMAT = ihex
 
 # Target file name (without extension)
 TARGET = monochron
@@ -43,7 +43,13 @@ SRC = $(BASE) \
 #SRC = $(BASE) \
 #  clock/analog.c clock/bigdigit.c clock/digital.c clock/qr.c clock/qrencode.c
 
-# Monochron clocks - IV - glcd performance test (that uses analog clock code)
+# Monochron clocks - IV
+#SRC = $(BASE) \
+#  clock/spotfire.c clock/barchart.c clock/cascade.c clock/crosstable.c \
+#  clock/linechart.c clock/piechart.c clock/speeddial.c clock/spiderplot.c \
+#  clock/thermometer.c clock/trafficlight.c
+
+# Monochron clocks - V - glcd performance test (that uses analog clock code)
 #SRC = $(BASE) \
 #  clock/perftest.c clock/analog.c
 
@@ -54,7 +60,9 @@ SRC = $(BASE) \
 #  clock/analog.c clock/bigdigit.c clock/digital.c clock/example.c \
 #  clock/mosquito.c clock/nerd.c clock/perftest.c clock/pong.c clock/puzzle.c \
 #  clock/qr.c clock/qrencode.c clock/slider.c clock/spotfire.c \
-#  clock/cascade.c clock/speeddial.c clock/spiderplot.c clock/trafficlight.c 
+#  clock/barchart.c clock/cascade.c clock/crosstable.c \
+#  clock/linechart.c clock/piechart.c clock/speeddial.c clock/spiderplot.c \
+#  clock/thermometer.c clock/trafficlight.c
 
 # List Assembler source files here.
 # Make them always end in a capital .S. Files ending in a lowercase .s
@@ -63,11 +71,11 @@ SRC = $(BASE) \
 # Even though the DOS/Win* filesystem matches both .s and .S the same,
 # it will preserve the spelling of the filenames, and gcc itself does
 # care about how the name is spelled on its command-line.
-ASRC = 
+ASRC =
 
 # List any extra directories to look for include files here.
 # Each directory must be seperated by a space.
-EXTRAINCDIRS = 
+EXTRAINCDIRS =
 
 # Optional compiler flags:
 #  -g:        generate debugging information (for GDB, or for COFF conversion)
@@ -93,7 +101,7 @@ CFLAGS += -std=gnu99
 #             for use in COFF files, additional information about filenames
 #             and function names needs to be present in the assembler source
 #             files
-ASFLAGS = -Wa,-adhlns=$(<:.S=.lst),-gstabs 
+ASFLAGS = -Wa,-adhlns=$(<:.S=.lst),-gstabs
 
 # Optional linker flags:
 #  -Wl,...:   tell GCC to pass this to linker
@@ -158,7 +166,7 @@ ELFSIZE = $(SIZE) -A $(TARGET).elf
 MSG_ERRORS_NONE = Errors: none
 MSG_BEGIN = -------- begin --------
 MSG_END = --------  end  --------
-MSG_SIZE_BEFORE = Size before: 
+MSG_SIZE_BEFORE = Size before:
 MSG_SIZE_AFTER = Size after:
 MSG_COFF = Converting to AVR COFF:
 MSG_EXTENDED_COFF = Converting to AVR Extended COFF:
@@ -172,7 +180,7 @@ MSG_ASSEMBLING = Assembling:
 MSG_CLEANING = Cleaning project:
 
 # Define all object files
-OBJ = $(SRC:.c=.o) $(ASRC:.S=.o) 
+OBJ = $(SRC:.c=.o) $(ASRC:.S=.o)
 
 # Define all listing files
 LST = $(SRC:.c=.lst) $(ASRC:.S=.lst)
@@ -199,11 +207,11 @@ rebuild: begin gccversion sizebefore clean_list $(TARGET).elf $(TARGET).hex \
 
 # Upload firmware to monochron
 program: $(TARGET).hex $(TARGET).eep
-	$(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) 
+	$(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH)
 
 # Verify connection to monochron
 connect:
-	$(AVRDUDE) $(AVRDUDE_FLAGS) 
+	$(AVRDUDE) $(AVRDUDE_FLAGS)
 
 # Burn fuses in monochron
 #burn-fuse:
@@ -231,7 +239,7 @@ sizeafter:
 	@if [ -f $(TARGET).elf ]; then echo; echo $(MSG_SIZE_AFTER); $(ELFSIZE); fi
 
 # Display compiler version information
-gccversion: 
+gccversion:
 	@$(CC) --version
 
 # ---------------------------------------------------------------------------
@@ -242,7 +250,7 @@ COFFCONVERT=$(OBJCOPY) --debugging \
 	--change-section-address .data-0x800000 \
 	--change-section-address .bss-0x800000 \
 	--change-section-address .noinit-0x800000 \
-	--change-section-address .eeprom-0x810000 
+	--change-section-address .eeprom-0x810000
 
 coff: $(TARGET).elf
 	@echo

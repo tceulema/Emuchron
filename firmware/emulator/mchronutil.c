@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <regex.h>
 #include <ctype.h>
 #include <signal.h>
 
@@ -77,7 +78,6 @@ int invokeExit = GLCD_FALSE;
 static int closeWinMsg = GLCD_FALSE;
 
 // Local function prototypes
-static int emuDigitsCheck(char *input);
 static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
 
 //
@@ -207,71 +207,63 @@ int emuArgcArgvGet(int argc, char *argv[])
   // Validate glut window geometry
   if (emuArgcArgv.argGlutGeometry > 0)
   {
-    char *input;
+    regex_t regex;
+    int status;
+    char *input = argv[emuArgcArgv.argGlutGeometry];
     char *separator;
 
-    input = malloc(strlen(argv[emuArgcArgv.argGlutGeometry]) + 1);
-    strcpy(input, argv[emuArgcArgv.argGlutGeometry]);
+    // Scan the geometry argument using a regexp pattern
+    regcomp(&regex, "^[0-9]+x[0-9]+$", REG_EXTENDED | REG_NOSUB);
+    status = regexec(&regex, input, (size_t)0, NULL, 0);
+    regfree(&regex);
+    if (status != 0)
+    {
+      printf("%s: -g: Invalid format glut geometry\n", __progname);
+      return CMD_RET_ERROR;
+    }
 
-    // Must find a 'x' separator
+    // An 'x' separator splits the two numeric geometry arguments
     separator = strchr(input, 'x');
-    if (separator == NULL)
-    {
-      printf("%s: -g: Invalid format glut geometry\n", __progname);
-      free(input);
-      return CMD_RET_ERROR;
-    }
-
-    // Must find non-zero length strings and digit characters only
     *separator = '\0';
-    if (emuDigitsCheck(input) == GLCD_FALSE ||
-        emuDigitsCheck(separator + 1) == GLCD_FALSE)
-    {
-      printf("%s: -g: Invalid format glut geometry\n", __progname);
-      free(input);
-      return CMD_RET_ERROR;
-    }
     emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeX = atoi(input);
     emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeY = atoi(separator + 1);
-    free(input);
   }
 
   // Validate glut window position
   if (emuArgcArgv.argGlutPosition > 0)
   {
-    char *input;
+    regex_t regex;
+    int status;
+    char *input = argv[emuArgcArgv.argGlutPosition];
     char *separator;
 
-    input = malloc(strlen(argv[emuArgcArgv.argGlutPosition]) + 1);
-    strcpy(input, argv[emuArgcArgv.argGlutPosition]);
+    // Scan the position argument using a regexp pattern
+    regcomp(&regex, "^[0-9]+,[0-9]+$", REG_EXTENDED | REG_NOSUB);
+    status = regexec(&regex, input, (size_t)0, NULL, 0);
+    regfree(&regex);
+    if (status != 0)
+    {
+      printf("%s: -p: Invalid format glut position\n", __progname);
+      return CMD_RET_ERROR;
+    }
 
-    // Must find a ',' separator
+    // A ',' separator splits the two numeric position arguments
     separator = strchr(input, ',');
-    if (separator == NULL)
-    {
-      printf("%s: -p: Invalid format glut position\n", __progname);
-      free(input);
-      return CMD_RET_ERROR;
-    }
-
-    // Must find non-zero length strings and digit characters only
     *separator = '\0';
-    if (emuDigitsCheck(input) == GLCD_FALSE ||
-        emuDigitsCheck(separator + 1) == GLCD_FALSE)
-    {
-      printf("%s: -p: Invalid format glut position\n", __progname);
-      free(input);
-      return CMD_RET_ERROR;
-    }
     emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posX = atoi(input);
     emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posY = atoi(separator + 1);
-    free(input);
   }
 
   // Get the ncurses output device
   if (emuArgcArgv.argTty != 0)
   {
     // Got it from the command line
+    if (strlen(argv[emuArgcArgv.argTty]) >= NCURSES_TTYLEN)
+    {
+      printf("%s: -t: tty too long (max = %d chars)\n", __progname,
+        NCURSES_TTYLEN - 1);
+      return CMD_RET_ERROR;
+    }
     strcpy(tty, argv[emuArgcArgv.argTty]);
   }
   else if (emuArgcArgv.ctrlDeviceArgs.useNcurses == 1)
@@ -412,7 +404,7 @@ u08 emuColorGet(char colorId)
 void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   int arg3, int arg4)
 {
-  if (origin == ORIGIN_GLCD)
+  if (origin == CD_GLCD)
   {
     // Error in the glcd interface
     // Note: y = vertical lcd byte location (0..7)
@@ -420,22 +412,28 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
     printf("api info (controller:x:y:data) = (%d:%d:%d:%d)\n",
       arg1, arg2, arg3, arg4);
   }
-  else if (origin == ORIGIN_CTRL)
+  else if (origin == CD_CTRL)
   {
     // Error in the controller interface
     printf("\n*** invalid controller api request in %s()\n", location);
     printf("api info (method/data)= %d\n", arg1);
   }
-  else if (origin == ORIGIN_EEPROM)
+  else if (origin == CD_EEPROM)
   {
     // Error in the eeprom interface
     printf("\n*** invalid eeprom api request in %s()\n", location);
     printf("api info (address)= %d\n", arg1);
   }
+  else if (origin == CD_VAR)
+  {
+    // Error in the named variable interface
+    printf("\n*** invalid var api request in %s()\n", location);
+    printf("api info (bucket, index, count) = (%d:%d:%d)\n", arg1, arg2, arg3);
+  }
 
   // Dump all Monochron variables. Might be useful.
   printf("*** registered variables\n");
-  varPrint("", "*");
+  varPrint(".", GLCD_FALSE);
 
   // Stating the obvious
   printf("*** debug by loading coredump file (when created) in a debugger\n");
@@ -471,26 +469,6 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
 
   // Force coredump
   abort();
-}
-
-//
-// Function: emuDigitsCheck
-//
-// Verifies whether a string is non-empty and contains only digit characters
-//
-static int emuDigitsCheck(char *input)
-{
-  if (*input == '\0')
-    return GLCD_FALSE;
-
-  while (*input != '\0')
-  {
-    if (isdigit(*input) == 0)
-      return GLCD_FALSE;
-    input++;
-  }
-
-  return GLCD_TRUE;
 }
 
 //
@@ -634,6 +612,7 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
 {
   char ch = '\0';
   cmdLine_t *cmdProgCounter = NULL;
+  cmdLine_t *cmdProgCounterNext = NULL;
   int cmdPcCtrlType;
   int i;
   int retVal = CMD_RET_OK;
@@ -677,7 +656,8 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
       // Execute the associated program counter control block handler
       // from the command dictionary.
       cmdPcCtrlType = cmdProgCounter->cmdCommand->cmdPcCtrlType;
-      retVal = (*cmdProgCounter->cmdCommand->cbHandler)(&cmdProgCounter);
+      cmdProgCounterNext = cmdProgCounter;
+      retVal = (*cmdProgCounter->cmdCommand->cbHandler)(&cmdProgCounterNext);
     }
 
     // Verify if a command interrupt was requested
@@ -711,11 +691,11 @@ int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
       break;
     }
 
-    // Move to next command in linked list. Note that after processing
-    // a program control type block the program counter already points
-    // to the appropriate next line to process.
+    // Move to next command in linked list
     if (cmdPcCtrlType == PC_CONTINUE)
       cmdProgCounter = cmdProgCounter->next;
+    else
+      cmdProgCounter = cmdProgCounterNext;
   }
 
   // End of list or encountered error/interrupt.
@@ -963,4 +943,3 @@ void emuWinClose(void)
   }
   exit(-1);
 }
-

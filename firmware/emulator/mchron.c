@@ -23,19 +23,24 @@
 
 // Monochron clocks
 #include "../clock/analog.h"
+#include "../clock/barchart.h"
 #include "../clock/bigdigit.h"
 #include "../clock/cascade.h"
+#include "../clock/crosstable.h"
 #include "../clock/digital.h"
 #include "../clock/example.h"
+#include "../clock/linechart.h"
 #include "../clock/mosquito.h"
 #include "../clock/nerd.h"
 #include "../clock/perftest.h"
+#include "../clock/piechart.h"
 #include "../clock/pong.h"
 #include "../clock/puzzle.h"
 #include "../clock/qr.h"
 #include "../clock/slider.h"
 #include "../clock/speeddial.h"
 #include "../clock/spiderplot.h"
+#include "../clock/thermometer.h"
 #include "../clock/trafficlight.h"
 
 // Emuchron stubs and utilities
@@ -61,7 +66,7 @@ extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
-extern volatile uint8_t mcClockTimeEvent;
+extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
@@ -69,7 +74,6 @@ extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern clockDriver_t *mcClockPool;
 extern clockDriver_t monochron[];
-extern volatile uint8_t rtcTimeEvent;
 extern volatile uint8_t almSwitchOn;
 extern volatile uint8_t almAlarming;
 extern int16_t almTickerAlarm;
@@ -84,7 +88,7 @@ extern char *argString;
 // The command profile for an mchron command
 extern cmdArg_t argCmd[];
 
-// External data from expression evaluator
+// The expression evaluator expression result value
 extern double exprValue;
 
 // The command list execution depth tells us if we're running at
@@ -119,8 +123,8 @@ uint8_t emuAlarmM = 9;
 // Current command file execution depth
 int fileExecDepth = 0;
 
-// The timer used for the 'we' and 'ws' commands
-struct timeval tvTimer;
+// The timer used for the 'wte' and 'wts' commands
+static struct timeval tvTimer;
 
 // The emulator background/foreground color of the lcd display and backlight
 // GLCD_OFF = 0 = black color (=0x0 bit value in lcd memory)
@@ -149,7 +153,12 @@ static clockDriver_t emuMonochron[] =
   {CHRON_CASCADE,     DRAW_INIT_FULL, spotCascadeInit,    spotCascadeCycle,    0},
   {CHRON_SPEEDDIAL,   DRAW_INIT_FULL, spotSpeedDialInit,  spotSpeedDialCycle,  0},
   {CHRON_SPIDERPLOT,  DRAW_INIT_FULL, spotSpiderPlotInit, spotSpiderPlotCycle, 0},
+  {CHRON_THERMOMETER, DRAW_INIT_FULL, spotThermInit,      spotThermCycle,      0},
   {CHRON_TRAFLIGHT,   DRAW_INIT_FULL, spotTrafLightInit,  spotTrafLightCycle,  0},
+  {CHRON_BARCHART,    DRAW_INIT_FULL, spotBarChartInit,   spotBarChartCycle,   0},
+  {CHRON_CROSSTABLE,  DRAW_INIT_FULL, spotCrossTableInit, spotCrossTableCycle, 0},
+  {CHRON_LINECHART,   DRAW_INIT_FULL, spotLineChartInit,  spotLineChartCycle,  0},
+  {CHRON_PIECHART,    DRAW_INIT_FULL, spotPieChartInit,   spotPieChartCycle,   0},
   {CHRON_BIGDIG_ONE,  DRAW_INIT_FULL, bigDigInit,         bigDigCycle,         bigDigButton},
   {CHRON_BIGDIG_TWO,  DRAW_INIT_FULL, bigDigInit,         bigDigCycle,         bigDigButton},
   {CHRON_QR_HMS,      DRAW_INIT_FULL, qrInit,             qrCycle,             0},
@@ -207,8 +216,8 @@ int main(int argc, char *argv[])
   //fgets(tmpInput, 10, stdin);
 
   // Welcome in mchron
-  printf("\n*** Welcome to Emuchron command line tool (build %s, %s) ***\n\n",
-    __DATE__, __TIME__);
+  printf("\n*** Welcome to Emuchron emulator command line tool %s %s ***\n\n",
+    __progname, EMUCHRON_VERSION);
 
   // Clear and show welcome message on lcd device
   beep(4000, 100);
@@ -222,11 +231,10 @@ int main(int argc, char *argv[])
   if (emuArgcArgv.argDebug != 0)
     emuLogfileOpen(argv[emuArgcArgv.argDebug]);
 
-  // Show our process id and (optional) ncurses output device
-  // (handy for attaching a debugger :-)
-  printf("%s PID = %d\n", __progname, getpid());
+  // Show process id and (optional) ncurses output device
+  printf("process id  : %d\n", getpid());
   if (emuArgcArgv.ctrlDeviceArgs.useNcurses == 1)
-    printf("ncurses tty = %s\n",
+    printf("ncurses tty : %s\n",
       emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty);
   printf("\n");
 
@@ -293,6 +301,8 @@ int main(int argc, char *argv[])
   }
 
   // Done: caused by 'x' or ^D
+  if (retVal != CMD_RET_EXIT)
+    printf("\n<ctrl>d - exit\n");
 
   // Cleanup command line read interface
   free(prompt);
@@ -306,10 +316,6 @@ int main(int argc, char *argv[])
   // Stop debug output
   DEBUGP("**** logging stopped");
   emuLogfileClose();
-
-  // Tell user if exit was due to manual EOF
-  if (retVal != CMD_RET_EXIT)
-    printf("\n<ctrl>d - exit\n");
 
   // Goodbye
   return CMD_RET_OK;
@@ -524,6 +530,9 @@ int doClockFeed(cmdLine_t *cmdLine)
     mcCycleCounter++;
   }
 
+  // Flush any pending updates in the lcd device
+  ctrlLcdFlush();
+
   // Return to line mode if needed
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_LINE);
@@ -548,7 +557,7 @@ int doClockSelect(cmdLine_t *cmdLine)
   {
     // Requested clock is beyond max value
     printf("%s? invalid: %.0f\n", cmdLine->cmdCommand->cmdArg[0].argName,
-      argDouble[0]+0.01);
+      argDouble[0] + 0.01);
     return CMD_RET_ERROR;
   }
 
@@ -563,7 +572,6 @@ int doClockSelect(cmdLine_t *cmdLine)
     // Switch to new clock: init and do first clock cycle
     alarmSoundStop();
     mcMchronClock = clock;
-    mcAlarmSwitch = ALARM_SWITCH_NONE;
     almStateSet();
     animClockDraw(DRAW_INIT_FULL);
     emuClockUpdate();
@@ -754,28 +762,20 @@ int doHelp(cmdLine_t *cmdLine)
 //
 int doHelpCmd(cmdLine_t *cmdLine)
 {
+  int retVal;
+
   if (listExecDepth > 0)
   {
     printf("use only at command prompt\n");
     return CMD_RET_ERROR;
   }
 
-  // Print dictionary of command or all commands
-  if (strcmp(argWord[1], "*") == 0)
-  {
-    cmdDictCmdPrintAll();
-  }
-  else
-  {
-    if (cmdDictCmdPrint(argWord[1]) != CMD_RET_OK)
-    {
-      printf("%s? invalid: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
-        argWord[1]);
-      return CMD_RET_ERROR;
-    }
-  }
+  // Print dictionary of command(s) where '.' is all
+  retVal = cmdDictPrint(argWord[1]);
+  if (retVal != CMD_RET_OK)
+    printf("%s? invalid\n", cmdLine->cmdCommand->cmdArg[0].argName);
 
-  return CMD_RET_OK;
+  return retVal;
 }
 
 //
@@ -971,18 +971,13 @@ int doIfEnd(cmdLine_t **cmdProgCounter)
   char *input = cmdLine->input;
   int retVal;
 
-  // Init the control block structure when needed
-  if (cmdPcCtrlParent->initialized == GLCD_FALSE)
-  {
-    // Scan the command line for the if-end parameters
-    cmdArgInit(&input);
-    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-      GLCD_FALSE);
-    if (retVal != CMD_RET_OK)
-      return retVal;
-    cmdPcCtrlParent->initialized = GLCD_TRUE;
-  }
+  // Scan the command line for the if-end parameters
+  cmdArgInit(&input);
+  cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+  retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+    GLCD_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
 
   // Deactivate current control block and continue on next line
   cmdPcCtrlParent->active = GLCD_FALSE;
@@ -995,7 +990,6 @@ int doIfEnd(cmdLine_t **cmdProgCounter)
 // Function: doLcdBacklightSet
 //
 // Set lcd backlight (0 = almost dark .. 16 = full power).
-// Note: Only the glut lcd stub supports backlight.
 //
 int doLcdBacklightSet(cmdLine_t *cmdLine)
 {
@@ -1015,7 +1009,7 @@ int doLcdBacklightSet(cmdLine_t *cmdLine)
 int doLcdCursorReset(cmdLine_t *cmdLine)
 {
   // Reset the controller hardware cursors to (0,0) and by doing so sync
-  // the y location with the glcd administered cursor y location.
+  // the y location with the glcd administered cursor y location
   glcdSetAddress(64, 7);
   glcdSetAddress(64, 0);
   glcdSetAddress(0, 7);
@@ -1077,6 +1071,41 @@ int doLcdErase(cmdLine_t *cmdLine)
 }
 
 //
+// Function: doLcdGlutGrSet
+//
+// Set glut graphics options
+//
+int doLcdGlutGrSet(cmdLine_t *cmdLine)
+{
+  u08 bezel = TO_UINT8_T(argDouble[0]);
+  u08 grid = TO_UINT8_T(argDouble[1]);
+
+  // Ignore if glut device is not used
+  if (emuArgcArgv.ctrlDeviceArgs.useGlut == GLCD_FALSE)
+    return CMD_RET_OK;;
+
+  // Set glut pixel bezel and gridline options on/off
+  ctrlLcdGlutGrSet(bezel, grid);
+
+  // Report the new option settings
+  if (echoCmd == CMD_ECHO_YES)
+  {
+    printf("glut pixel bezel: ");
+    if (bezel == GLCD_TRUE)
+      printf("on\n");
+    else
+      printf("off\n");
+    printf("glut gridlines: ");
+    if (grid == GLCD_TRUE)
+      printf("on\n");
+    else
+      printf("off\n");
+  }
+
+  return CMD_RET_OK;
+}
+
+//
 // Function: doLcdInverse
 //
 // Inverse the contents of the lcd screen
@@ -1104,27 +1133,27 @@ int doLcdInverse(cmdLine_t *cmdLine)
 }
 
 //
-// Function: doLcdNcurBLSet
+// Function: doLcdNcurGrSet
 //
-// Set ncurses backlight support on/off
+// Set ncurses graphics options
 //
-int doLcdNcurBLSet(cmdLine_t *cmdLine)
+int doLcdNcurGrSet(cmdLine_t *cmdLine)
 {
-  u08 support = TO_UINT8_T(argDouble[0]);
+  u08 backlight = TO_UINT8_T(argDouble[0]);
 
   // Ignore if ncurses device is not used
   if (emuArgcArgv.ctrlDeviceArgs.useNcurses == GLCD_FALSE)
     return CMD_RET_OK;;
 
-  // Set ncurses backlight support on/off
-  ctrlLcdNcurBLSet(support);
+  // Set ncurses backlight option on/off
+  ctrlLcdNcurGrSet(backlight);
   ctrlLcdFlush();
 
-  // Report the new support setting
+  // Report the new option setting
   if (echoCmd == CMD_ECHO_YES)
   {
-    printf("ncurses backlight support: ");
-    if (support == GLCD_TRUE)
+    printf("ncurses backlight: ");
+    if (backlight == GLCD_TRUE)
       printf("on\n");
     else
       printf("off\n");
@@ -1153,6 +1182,7 @@ int doLcdPrint(cmdLine_t *cmdLine)
 //
 int doLcdRead(cmdLine_t *cmdLine)
 {
+  char *varName;
   int varId;
   u08 lcdByte;
 
@@ -1160,17 +1190,22 @@ int doLcdRead(cmdLine_t *cmdLine)
   lcdByte = ctrlExecute(CTRL_METHOD_READ, TO_U08(argDouble[0]), 0);
 
   // Assign the lcd byte value to the variable
-  varId = varIdGet(argWord[1]);
-  if (varId < 0 )
+  varId = varIdGet(argWord[1], GLCD_TRUE);
+  if (varId < 0)
   {
-    printf("%s? internal error\n", cmdLine->cmdCommand->cmdArg[0].argName);
+    printf("%s? internal error\n", cmdLine->cmdCommand->cmdArg[1].argName);
     return CMD_RET_ERROR;
   }
   varValSet(varId, (double)lcdByte);
 
   // Print the variable holding the lcd byte
   if (echoCmd == CMD_ECHO_YES)
-    varPrint(cmdLine->cmdCommand->cmdArg[1].argName, argWord[1]);
+  {
+    varName = malloc(strlen(argWord[1]) + 3);
+    sprintf(varName, "^%s$", argWord[1]);
+    varPrint(varName, GLCD_TRUE);
+    free(varName);
+  }
 
   return CMD_RET_OK;
 }
@@ -1238,7 +1273,7 @@ int doMonochron(cmdLine_t *cmdLine)
   mcClockPool = monochron;
   mcMchronClock = 0;
   mcClockTimeEvent = GLCD_FALSE;
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
+  mcClockDateEvent = GLCD_FALSE;
   animDisplayMode = SHOW_TIME;
   almSwitchOn = GLCD_FALSE;
   almAlarming = GLCD_FALSE;
@@ -1354,23 +1389,13 @@ int doPaintCircle(cmdLine_t *cmdLine)
 int doPaintCircleFill(cmdLine_t *cmdLine)
 {
   u08 color;
-  u08 pattern;
 
   // Get color
   color = emuColorGet(argChar[0]);
 
-  // All fill patterns are allowed except inverse
-  pattern = TO_U08(argDouble[3]);
-  if (pattern == FILL_INVERSE)
-  {
-    printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[4].argName,
-      (int)pattern);
-    return CMD_RET_ERROR;
-  }
-
   // Draw filled circle
   glcdFillCircle2(TO_U08(argDouble[0]), TO_U08(argDouble[1]),
-    TO_U08(argDouble[2]), pattern, color);
+    TO_U08(argDouble[2]), TO_U08(argDouble[3]), color);
   ctrlLcdFlush();
 
   return CMD_RET_OK;
@@ -1506,7 +1531,7 @@ int doPaintRectFill(cmdLine_t *cmdLine)
 //
 // Function: doRepeatFor
 //
-// Initiate a new repeat loop
+// Initiate a new or continue a repeat loop
 //
 int doRepeatFor(cmdLine_t **cmdProgCounter)
 {
@@ -1580,18 +1605,13 @@ int doRepeatNext(cmdLine_t **cmdProgCounter)
   char *input = cmdLine->input;
   int retVal;
 
-  // Init the control block structure when needed
-  if (cmdPcCtrlParent->initialized == GLCD_FALSE)
-  {
-    // Scan and validate the repeat next command line
-    cmdArgInit(&input);
-    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-      GLCD_FALSE);
-    if (retVal != CMD_RET_OK)
-      return retVal;
-    cmdPcCtrlParent->initialized = GLCD_TRUE;
-  }
+  // Scan and validate the repeat next command line
+  cmdArgInit(&input);
+  cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
+  retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
+    GLCD_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
 
   // Decide where to go depending on whether the loop is still active
   if (cmdPcCtrlParent->active == GLCD_TRUE)
@@ -1739,15 +1759,16 @@ int doTimeSet(cmdLine_t *cmdLine)
 //
 // Function: doVarPrint
 //
-// Print value of one or all used named variables in rows with max 8
-// variable values per row
+// Print value of variables in rows with max 8 variable values per row
 //
 int doVarPrint(cmdLine_t *cmdLine)
 {
   int retVal;
 
-  // Print all variables or a single one
-  retVal = varPrint(cmdLine->cmdCommand->cmdArg[0].argName, argWord[1]);
+  // Print all variables matching a regexp pattern where '.' is all
+  retVal = varPrint(argWord[1], GLCD_FALSE);
+  if (retVal != CMD_RET_OK)
+    printf("%s? invalid\n", cmdLine->cmdCommand->cmdArg[0].argName);
 
   return retVal;
 }
@@ -1759,13 +1780,26 @@ int doVarPrint(cmdLine_t *cmdLine)
 //
 int doVarReset(cmdLine_t *cmdLine)
 {
-  int retVal = CMD_RET_OK;
+  int varId;
+  int retVal;
 
-  // Clear all variables or a single one
-  if (strcmp(argWord[1], "*") == 0)
+  // Clear all variables
+  if (strcmp(argWord[1], ".") == 0)
+  {
     varReset();
-  else
-    retVal = varClear(cmdLine->cmdCommand->cmdArg[0].argName, argWord[1]);
+    return CMD_RET_OK;
+  }
+
+  // Clear the single variable
+  varId = varIdGet(argWord[1], GLCD_FALSE);
+  if (varId < 0)
+  {
+    printf("%s? not in use\n", cmdLine->cmdCommand->cmdArg[0].argName);
+    return CMD_RET_ERROR;
+  }
+  retVal = varClear(varId);
+  if (retVal != CMD_RET_OK)
+    printf("%s? not in use\n", cmdLine->cmdCommand->cmdArg[0].argName);
 
   return retVal;
 }
@@ -1775,9 +1809,9 @@ int doVarReset(cmdLine_t *cmdLine)
 //
 // Init and set named variable. Note that the actual expression evaluation and
 // variable assignment has been performed by the command argument scan module.
-// When the expression evaluator failed this function won't be called. Only
-// when the expression was evaluated successfully this function is called
-// and there's nothing else left for us to do except for returning the
+// When the expression evaluator failed this function won't be called.
+// Only when the expression was evaluated successfully this function is called
+// but there's nothing else left for us to do except for returning the
 // successful technical result of the expression evaluator.
 //
 int doVarSet(cmdLine_t *cmdLine)
@@ -1855,4 +1889,3 @@ int doWaitTimerStart(cmdLine_t *cmdLine)
   waitTimerStart(&tvTimer);
   return CMD_RET_OK;
 }
-

@@ -6,8 +6,7 @@
 #include <math.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -59,10 +58,9 @@ typedef struct
   char *text;		// The element text (hour/min/sec)
 } timeElement_t;
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
@@ -114,32 +112,13 @@ static void mosquitoElementMovePrep(timeElement_t *element);
 //
 // Function: mosquitoCycle
 //
-// Update the LCD display of a mosquito clock
+// Update the lcd display of a mosquito clock
 //
 void mosquitoCycle(void)
 {
-  // Update alarm/date info in clock
-  animAlarmAreaUpdate(MOS_ALARM_X_START, MOS_AD_Y_START, ALARM_AREA_ALM_ONLY);
-
-  // Verify changes in date
-  if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
-      mcClockInit == GLCD_TRUE)
-  {
-    u08 pxDone;
-    char msg[4];
-
-    // Show new date and clean up potential remnants
-    pxDone = glcdPutStr2(MOS_DATE_X_START, MOS_AD_Y_START, FONT_5X5P,
-      (char *)animMonths[mcClockNewDM - 1], mcFgColor) + MOS_DATE_X_START;
-    msg[0] = ' ';
-    animValToStr(mcClockNewDD, &msg[1]);
-    pxDone = pxDone +
-      glcdPutStr2(pxDone, MOS_AD_Y_START, FONT_5X5P, msg, mcFgColor) -
-      MOS_DATE_X_START;
-    if (pxDone <= MOS_DATE_X_SIZE)
-      glcdFillRectangle(MOS_DATE_X_START + pxDone, MOS_AD_Y_START,
-        MOS_DATE_X_SIZE - pxDone + 1, FILL_BLANK, mcBgColor);
-  }
+  // Update date and alarm info areas in clock
+  animADAreaUpdate(MOS_DATE_X_START, MOS_AD_Y_START, AD_AREA_DATE_ONLY);
+  animADAreaUpdate(MOS_ALARM_X_START, MOS_AD_Y_START, AD_AREA_ALM_ONLY);
 
   // Each minute change the direction of the elements
   if (mcClockTimeEvent == GLCD_TRUE &&
@@ -186,7 +165,7 @@ void mosquitoCycle(void)
 //
 // Function: mosquitoInit
 //
-// Initialize the LCD display of a mosquito clock
+// Initialize the lcd display of a mosquito clock
 //
 void mosquitoInit(u08 mode)
 {
@@ -354,4 +333,3 @@ static void mosquitoElementMovePrep(timeElement_t *element)
   element->mathPosX = mathPosXNew;
   element->mathPosY = mathPosYNew;
 }
-

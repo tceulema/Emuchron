@@ -1,13 +1,11 @@
 //*****************************************************************************
 // Filename : 'trafficlight.c'
-// Title    : Animation code for MONOCHRON trafficlight clock
+// Title    : Animation code for MONOCHRON traffic light clock
 //*****************************************************************************
 
-#include <math.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -17,8 +15,7 @@
 #include "spotfire.h"
 #include "trafficlight.h"
 
-// Specifics for QV trafficlight
-// NDL = Needle
+// Specifics for traffic light clock
 #define TRAF_BOX_X_START	9
 #define TRAF_BOX_X_OFFSET_SIZE	33
 #define TRAF_BOX_Y_START	18
@@ -29,10 +26,9 @@
 #define TRAF_SEG_Y_OFFSET_SIZE	12
 #define TRAF_SEG_RADIUS		5
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
@@ -43,7 +39,7 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
 //
 // Function: spotTrafLightCycle
 //
-// Update the Spotfire QuintusVisuals Traffic Light and filter panel
+// Update the QuintusVisuals traffic light and filter panel
 //
 void spotTrafLightCycle(void)
 {
@@ -75,20 +71,19 @@ void spotTrafLightCycle(void)
 //
 // Function: spotTrafLightInit
 //
-// Initialize the LCD display for use as a Spotfire QuintusVisuals
-// Traffic Light
+// Initialize the lcd display of a QuintusVisuals traffic light
 //
 void spotTrafLightInit(u08 mode)
 {
-  u08 i,j,x;
+  u08 i, j, x;
 
   DEBUGP("Init TrafficLight");
 
   // Draw Spotfire form layout
   spotCommonInit("traffic light", mode);
 
-  // Draw static part of trafficlight
-  // There are three traffic lights
+  // Draw static part of traffic light.
+  // There are three traffic lights.
   for (i = 0; i <= 2; i++)
   {
     x = TRAF_BOX_X_START + i * TRAF_BOX_X_OFFSET_SIZE;
@@ -107,7 +102,7 @@ void spotTrafLightInit(u08 mode)
 //
 // Function: spotTrafSegmentUpdate
 //
-// Update a single trafficlight
+// Update a single traffic light
 //
 static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
   u08 newVal)
@@ -132,7 +127,7 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
   else if (segmentNew == 1)
   {
     fillType = FILL_HALF;
-    if (x%2 == 0)
+    if (x % 2 == 0)
       drawColor = mcBgColor;
   }
   else
@@ -146,4 +141,3 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
   glcdCircle2(x, y + segmentNew * TRAF_SEG_Y_OFFSET_SIZE, TRAF_SEG_RADIUS,
     CIRCLE_FULL, mcFgColor);
 }
-

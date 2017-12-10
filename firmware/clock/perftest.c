@@ -49,9 +49,7 @@
 // - glcdPutStr3
 // - glcdPutStr3v
 // - glcdPutStr
-//
-// The following high level glcd graphics function is not tested:
-// - glcdRectangle (covered by glcdFillRectangle2 tests)
+// - glcdRectangle (specific use of glcdFillRectangle2)
 //
 // A test suite consists of one or more tests. A single test consists of
 // generating many function calls to the function to be tested.
@@ -84,8 +82,7 @@
 #include <stdio.h>
 #include "../emulator/stub.h"
 #include "../emulator/controller.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../monomain.h"
@@ -102,14 +99,16 @@
 // For Emuchron v3.1 the test loop values are recalibrated in such a way that a
 // test, built for Emuchron v3.1 using avr-gcc 4.8.1 (Debian 8), runs on
 // Monochron hardware in about 2 minutes.
-#define PERF_CIRCLE2_1		407
-#define PERF_CIRCLE2_2		807
 #define PERF_DOT_1		64
 #define PERF_DOT_2		77
 #define PERF_LINE_1		11500
 #define PERF_LINE_2		28
-#define PERF_FILLCIRCLE2_1	299
-#define PERF_FILLCIRCLE2_2	1006
+#define PERF_CIRCLE2_1		407
+#define PERF_CIRCLE2_2		807
+#define PERF_FILLCIRCLE2_1	293
+#define PERF_FILLCIRCLE2_2	951
+#define PERF_RECTANGLE2_1	887
+#define PERF_RECTANGLE2_2	580
 #define PERF_FILLRECTANGLE2_1	1292
 #define PERF_FILLRECTANGLE2_2	6680
 #define PERF_FILLRECTANGLE2_3	4033
@@ -188,6 +187,7 @@ static u08 perfTestLine(void);
 static u08 perfTestPutStr3(void);
 static u08 perfTestPutStr3v(void);
 static u08 perfTestPutStr(void);
+static u08 perfTestRectangle(void);
 
 // Runtime environment for the performance test
 static testStats_t testStats;
@@ -219,13 +219,15 @@ void perfCycle(void)
   // Repeat forever
   while (1)
   {
-    if (perfTestCircle2() == GLCD_TRUE)
-      break;
     if (perfTestDot() == GLCD_TRUE)
       break;
     if (perfTestLine() == GLCD_TRUE)
       break;
+    if (perfTestCircle2() == GLCD_TRUE)
+      break;
     if (perfTestFillCircle2() == GLCD_TRUE)
+      break;
+    if (perfTestRectangle() == GLCD_TRUE)
       break;
     if (perfTestFillRectangle2() == GLCD_TRUE)
       break;
@@ -251,7 +253,7 @@ void perfCycle(void)
 //
 // Function: perfInit
 //
-// Initialize the LCD display for the performance test suite
+// Initialize the lcd display for the performance test suite
 //
 void perfInit(u08 mode)
 {
@@ -259,7 +261,6 @@ void perfInit(u08 mode)
 
   // Give welcome screen
   glcdPutStr2(1, 1, FONT_5X5P, "monochron glcd performance test", mcFgColor);
-
 #ifdef EMULIN
   printf("\nTo exit performance test clock press 'q' on any main test suite prompt\n\n");
 #endif
@@ -590,14 +591,14 @@ static u08 perfTestLine(void)
     button = perfTestEnd(interruptTest);
   }
 
-  // Test 2: Non-overlapping lines with varying length and draw angle.
+  // Test 2: Lines of varying length and draw angle.
   button = perfTestInit("glcdLine", 2);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
     glcdClearScreen(mcBgColor);
 
-    // Paint filled circles with same radius values at different locations
+    // Paint lines of varying length and draw angle
     interruptTest = GLCD_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_LINE_2; i++)
@@ -786,8 +787,8 @@ static u08 perfTestFillRectangle2(void)
   else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
-  // Test 1: Replacing filled rectangles of varying size, each with different
-  // fill types. The rectangles are small, causing the lcd buffer to be used.
+  // Test 1: Replacing filled rectangles of varying small size, each with
+  // different fill types.
   // It is the 'c' implementation of the rectangle5.txt test script with a
   // twist on paint color that varies per test cycle.
   button = perfTestInit("glcdFillRectangle2", 1);
@@ -814,7 +815,7 @@ static u08 perfTestFillRectangle2(void)
             (x + y + i) % 6, i % 2);
           dy = y + dy + 1;
 #ifdef EMULIN
-         ctrlLcdFlush();
+          ctrlLcdFlush();
 #endif
         }
         dx = x + dx + 1;
@@ -890,7 +891,7 @@ static u08 perfTestFillRectangle2(void)
     button = perfTestEnd(interruptTest);
   }
 
-  // Test 3: Painting large filled rectangles without any overlap.
+  // Test 3: Painting large filled overlapping rectangles.
   button = perfTestInit("glcdFillRectangle2", 3);
   while (button == BTN_PLUS)
   {
@@ -941,9 +942,8 @@ static u08 perfTestFillRectangle2(void)
     button = perfTestEnd(interruptTest);
   }
 
-  // Test 4: Painting large filled rectangles without any overlap.
-  // Only fill using HALF/THIRD to specifically measure the expected
-  // improved draw performance of these types in v1.3.
+  // Test 4: Painting large filled overlapping rectangles.
+  // Only use HALF/THIRD fill types to test specific draw logic.
   button = perfTestInit("glcdFillRectangle2", 4);
   while (button == BTN_PLUS)
   {
@@ -1435,7 +1435,7 @@ static u08 perfTestPutStr(void)
   else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
-  // Test 1: Draw text lines, beging the most common use for this function.
+  // Test 1: Draw text lines, being the most common use for this function.
   button = perfTestInit("glcdPutStr", 1);
   while (button == BTN_PLUS)
   {
@@ -1464,6 +1464,115 @@ static u08 perfTestPutStr(void)
 
       // Toggle text string
       perfTextToggle();
+
+      // Check for keypress interrupt
+      button = perfButtonGet();
+      if (button != 0)
+      {
+        interruptTest = GLCD_TRUE;
+        break;
+      }
+    }
+
+    // End test and report statistics
+    button = perfTestEnd(interruptTest);
+  }
+
+  return GLCD_FALSE;
+}
+
+//
+// Function: perfTestRectangle
+//
+// Performance test of glcdRectangle()
+//
+static u08 perfTestRectangle(void)
+{
+  u08 button;
+  u08 interruptTest;
+  int i,x,y;
+  u08 dx,dy;
+
+  // Give test suite welcome screen
+  button = perfSuiteWelcome("glcdRectangle");
+  if (button == 'q')
+    return GLCD_TRUE;
+  else if (button != BTN_PLUS)
+    return GLCD_FALSE;
+
+  // Test 1: Painting small rectangles of varying size.
+  // It is the 'c' implementation of the rectangle1.txt test script.
+  button = perfTestInit("glcdRectangle", 1);
+  while (button == BTN_PLUS)
+  {
+    // Prepare display for test
+    glcdClearScreen(mcBgColor);
+    glcdRectangle(3, 6, 122, 57, mcFgColor);
+
+    // Paint rectangles of varying size and fill options
+    interruptTest = GLCD_FALSE;
+    perfTestBegin();
+    for (i = 0; i < PERF_RECTANGLE2_1; i++)
+    {
+      dx = 1;
+      // Vary on x axis
+      for (x = 0; x < 14; x++)
+      {
+        dy = 1;
+        // Vary on y axis
+        for (y = 0; y < 9; y++)
+        {
+          glcdRectangle(x + dx + 4, y + dy + 7, x + 1, y + 1, i % 2);
+          dy = y + dy + 1;
+#ifdef EMULIN
+          ctrlLcdFlush();
+#endif
+        }
+        dx = x + dx + 1;
+      }
+
+      // Do statistics
+      testStats.loopsDone++;
+      testStats.elementsDrawn = testStats.elementsDrawn + x * y;
+
+      // Check for keypress interrupt
+      button = perfButtonGet();
+      if (button != 0)
+      {
+        interruptTest = GLCD_TRUE;
+        break;
+      }
+    }
+
+    // End test and report statistics
+    button = perfTestEnd(interruptTest);
+  }
+
+  // Test 2: Painting larger rectangles
+  button = perfTestInit("glcdRectangle", 2);
+  while (button == BTN_PLUS)
+  {
+    // Prepare display for test
+    glcdClearScreen(mcBgColor);
+
+    // Paint rectangles of varying fill options
+    interruptTest = GLCD_FALSE;
+    perfTestBegin();
+    x = 0;
+    y = 0;
+    for (i = 0; i < PERF_RECTANGLE2_2; i++)
+    {
+      for (y = 1; y < 64; y = y + 2)
+      {
+        glcdRectangle(64 - y, 32 - y / 2, y * 2, y, i & 0x1);
+#ifdef EMULIN
+        ctrlLcdFlush();
+#endif
+      }
+
+      // Do statistics
+      testStats.loopsDone++;
+      testStats.elementsDrawn = testStats.elementsDrawn + 32;
 
       // Check for keypress interrupt
       button = perfButtonGet();
@@ -1841,4 +1950,3 @@ static void perfTextToggle(void)
   else
     textLine = textLineA;
 }
-

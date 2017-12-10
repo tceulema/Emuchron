@@ -32,7 +32,7 @@ e i ../script/line1.txt
 # e i ../script/line2.txt
 
 w 0
-# Demo lines 
+# Demo lines
 e i ../script/line6.txt
 
 w 0

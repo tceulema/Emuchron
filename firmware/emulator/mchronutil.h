@@ -10,9 +10,10 @@
 #include "controller.h"
 
 // The coredump origin types
-#define ORIGIN_GLCD	0
-#define ORIGIN_CTRL	1
-#define ORIGIN_EEPROM	2
+#define CD_GLCD		0
+#define CD_CTRL		1
+#define CD_EEPROM	2
+#define CD_VAR		3
 
 // The active alarm type
 #define ALM_MONOCHRON	0

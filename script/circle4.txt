@@ -13,7 +13,7 @@
 #
 
 # Give help message
-hm --- press 'q' to quit --- 
+hm --- press 'q' to quit ---
 
 # Center coordinates and radius of circle
 vs xCenter=64
@@ -28,7 +28,7 @@ rf null true null
   # Paint in total 11 circles with increasing radius value
   rf radius=3 radius<=30 radius=radius+3
 
-    # Set start values for circle 
+    # Set start values for circle
     vs x=0
     vs y=radius
     vs ts=3-2*radius

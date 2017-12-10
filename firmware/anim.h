@@ -6,7 +6,7 @@
 #ifndef ANIM_H
 #define ANIM_H
 
-// Define the supported visualizations
+// Define the supported clocks
 #define CHRON_NONE		0
 #define CHRON_ANALOG_HMS	1
 #define CHRON_ANALOG_HM		2
@@ -27,6 +27,11 @@
 #define CHRON_QR_HM		17
 #define CHRON_PERFTEST		18
 #define CHRON_EXAMPLE		19
+#define CHRON_BARCHART		20
+#define CHRON_CROSSTABLE	21
+#define CHRON_LINECHART		22
+#define CHRON_PIECHART		23
+#define CHRON_THERMOMETER	24
 
 // Define how visualizations draw themselves
 #define DRAW_INIT_NONE		0
@@ -39,10 +44,11 @@
 #define ALARM_SWITCH_ON		1
 #define ALARM_SWITCH_OFF	2
 
-// Define what is present in a default alarm area
-#define ALARM_AREA_ALM_ONLY	0
-#define ALARM_AREA_ALM_DATE	1
-#define ALARM_AREA_AD_WIDTH	23
+// Define what is present in a default alarm/date area
+#define AD_AREA_ALM_ONLY	0
+#define AD_AREA_ALM_DATE	1
+#define AD_AREA_DATE_ONLY	2
+#define AD_AREA_AD_WIDTH	3
 
 // Structure defining the clock_init/clock_cycle/pressed_button methods
 // for a single clock. For a clock the init and cycle methods are required
@@ -62,7 +68,7 @@ void animClockDraw(u08 type);
 u08 animClockNext(void);
 
 // Generic clock utility functions
-void animAlarmAreaUpdate(u08 x, u08 y, u08 type);
+void animADAreaUpdate(u08 x, u08 y, u08 type);
 void animValToStr(u08 value, char valString[]);
 void animWelcome(void);
 #endif

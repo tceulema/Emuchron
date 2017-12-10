@@ -4,12 +4,13 @@
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
-// Emuchron defines
+// Monochron and emuchron defines
+#include "../ks0108.h"
 #include "interpreter.h"
 #include "varutil.h"
 #include "expr.h"
@@ -19,4 +20,3 @@
 // built using standard makefile dependency rules.
 #include "expr.tab.c"
 #include "expr.yy.c"
-

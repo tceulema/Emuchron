@@ -46,5 +46,6 @@ u08 ctrlExecute(u08 method, u08 controller, u08 data);
 // Lcd device methods
 void ctrlLcdBacklightSet(u08 brightness);
 void ctrlLcdFlush(void);
-void ctrlLcdNcurBLSet(u08 support);
+void ctrlLcdGlutGrSet(u08 bezel, u08 grid);
+void ctrlLcdNcurGrSet(u08 backlight);
 #endif

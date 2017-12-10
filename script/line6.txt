@@ -28,7 +28,7 @@ vs xe=4
 vs ys=31
 vs yr=30
 
-# Draw x and y axis and markers 
+# Draw x and y axis and markers
 pl f 2 ys-yr 2 ys+yr
 rf y=ys-yr y<=ys+yr y=y+6
   pd f 1 y

@@ -4,6 +4,7 @@
 //*****************************************************************************
 
 %{
+// All calculations in bison are done in type double
 #define YYSTYPE double
 
 // The following expression evaluator objects are the only ones that are
@@ -38,7 +39,7 @@ static int yylex(void);
 // Current value 1E-7L is considered to provide a wide margin of error,
 // but for our mchron purpose it is accurate enough.
 #define EPSILON		1E-7L
- 
+
 //
 // Function: exprCompare
 //
@@ -99,9 +100,9 @@ static double exprCompare(double valLeft, double valRight, int cond)
     // Based on the fact that the two values are considered unequal
     if (cond == COND_NEQ)
       return 1;
-    else if (valLeft > valRight && (cond == COND_GT || cond == COND_GET)) 
+    else if (valLeft > valRight && (cond == COND_GT || cond == COND_GET))
       return 1;
-    else if (valLeft < valRight && (cond == COND_LT || cond == COND_LET)) 
+    else if (valLeft < valRight && (cond == COND_LT || cond == COND_LET))
       return 1;
     else
       return 0;
@@ -113,7 +114,7 @@ static double exprCompare(double valLeft, double valRight, int cond)
 %token NUMBER VARIABLE IS
 %token QMARK COLON
 %token PLUS MINUS TIMES DIVIDE MODULO POWER
-%token SIN COS ABS FRAC INT
+%token SIN COS ABS FRAC INTEGER RAND
 %token AND OR
 %token BITAND BITOR BITNOT SHIFTL SHIFTR
 %token LET GET LT GT EQ NEQ
@@ -137,7 +138,7 @@ static double exprCompare(double valLeft, double valRight, int cond)
 %left TIMES DIVIDE MODULO
 %left POWER
 %left NEG
-%left SIN COS ABS FRAC INT
+%left SIN COS ABS FRAC INTEGER RAND
 
 // Our bison parser
 %start Input
@@ -185,7 +186,14 @@ Expression:
     | ABS LEFT Expression RIGHT { $$ = fabs($3); }
     | COS LEFT Expression RIGHT { $$ = cos($3); }
     | FRAC LEFT Expression RIGHT { $$ = modf($3, &myDummy); }
-    | INT LEFT Expression RIGHT { modf($3, &($$)); }
+    | INTEGER LEFT Expression RIGHT { modf($3, &($$)); }
+    | RAND LEFT RIGHT { $$ = (double)rand() / RAND_MAX; }
+    | RAND LEFT Expression RIGHT
+      { if ($3 >= 1)
+          srand((int)$3);
+        else
+          srand(time(NULL));
+        $$ = (double)rand() / RAND_MAX; }
     | SIN LEFT Expression RIGHT { $$ = sin($3); }
     // Bit operators
     // Note: Bit operations are done on type unsigned int
@@ -288,4 +296,3 @@ int exprEvaluate(char *argName, char *exprString, int exprStringLen)
 
   return CMD_RET_OK;
 }
-

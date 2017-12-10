@@ -3,6 +3,9 @@
 // Title    : Defines for utility routines for MONOCHRON
 //*****************************************************************************
 
+#ifndef UTIL_H
+#define UTIL_H
+
 #include <avr/pgmspace.h>
 
 // Raw constants for the UART to make the bit timing nice
@@ -43,4 +46,4 @@ void ROM_putstring(const char *str, uint8_t nl);
 void delay_ms(unsigned char ms);
 void delay_10us(uint8_t us);
 void delay_s(uint8_t s);
-
+#endif

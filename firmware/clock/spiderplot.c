@@ -1,13 +1,12 @@
 //*****************************************************************************
 // Filename : 'spiderplot.c'
-// Title    : Animation code for MONOCHRON spiderplot clock
+// Title    : Animation code for MONOCHRON spider plot clock
 //*****************************************************************************
 
 #include <math.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -17,7 +16,7 @@
 #include "spotfire.h"
 #include "spiderplot.h"
 
-// Specifics for QV spider plot
+// Specifics for spider plot clock
 #define SQRT2			(sqrt(2.0))
 #define SINPI3			(sin(M_PI/3))
 #define COSPI3			(cos(M_PI/3))
@@ -44,10 +43,9 @@
 #define SPDR_AXIS_VAL_BEGIN	4
 #define SPDR_AXIS_VAL_END	(SPDR_RADIUS)
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
@@ -63,7 +61,7 @@ static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
 //
 // Function: spotSpiderPlotCycle
 //
-// Update the Spotfire QuintusVisuals Spider Plot and filter panel
+// Update the QuintusVisuals spider plot and filter panel
 //
 void spotSpiderPlotCycle(void)
 {
@@ -101,7 +99,7 @@ void spotSpiderPlotCycle(void)
   // If only the seconds have changed verify if it impacts the Sec axis.
   // If not, then the plot remains untouched and we don't have to (re)paint
   // anything. Repainting (=remove and paint) an unchanged plot can be seen
-  // on the LCD by the lines faintly dis/reappearing; we want to avoid that.
+  // on the lcd by the lines faintly dis/reappearing; we want to avoid that.
   if (mcClockNewTS != mcClockOldTS && mcClockNewTM == mcClockOldTM &&
     mcClockNewTH == mcClockOldTH && mcClockInit == GLCD_FALSE)
   {
@@ -143,7 +141,7 @@ void spotSpiderPlotCycle(void)
 //
 // Function: spotSpiderPlotInit
 //
-// Initialize the LCD display for use as a Spotfire QuintusVisuals Spider Plot
+// Initialize the lcd display of a QuintusVisuals spider plot
 //
 void spotSpiderPlotInit(u08 mode)
 {
@@ -236,4 +234,3 @@ static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
     glcdLine(startX, startY, SPDR_X_START - (u08)(SPDR_RADIUS * COSPI3),
       SPDR_Y_START - (u08)(SPDR_RADIUS * SINPI3), color);
 }
-

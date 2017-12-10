@@ -6,8 +6,8 @@
 #ifndef FONT5X7_H
 #define FONT5X7_H
 
-// standard ascii 5x7 font
-// defines ascii characters 0x20-0x7F (32-127)
+// Standard ascii 5x7 font.
+// Defines ascii characters 0x20-0x7F (32-127).
 const unsigned char __attribute__ ((progmem)) Font5x7[] =
 {
   0x00, 0x00, 0x00, 0x00, 0x00,// (space)
@@ -107,5 +107,4 @@ const unsigned char __attribute__ ((progmem)) Font5x7[] =
   0x08, 0x08, 0x2A, 0x1C, 0x08,// ->
   0x08, 0x1C, 0x2A, 0x08, 0x08 // <-
 };
-
 #endif

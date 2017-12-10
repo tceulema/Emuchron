@@ -3,6 +3,7 @@
 // Title    : Stub functionality for emuchron emulator
 //*****************************************************************************
 
+// Everything we need for running this thing in Linux
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,15 +13,17 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include "stub.h"
-#include "mchronutil.h"
-#include "scanutil.h"
+
+// Monochron and emuchron defines
 #include "../monomain.h"
 #include "../buttons.h"
 #include "../ks0108.h"
 #include "../glcd.h"
 #include "../config.h"
 #include "../alarm.h"
+#include "stub.h"
+#include "mchronutil.h"
+#include "scanutil.h"
 
 // When used in a VM, Linux ALSA performance gets progressively worse with
 // every Debian release. As of Debian 8, short audio pulses are being clipped
@@ -128,6 +131,7 @@ static int minSleep = ANIM_TICK_CYCLE_MS + 1;
 // Terminal settings for stdin keypress mode data
 static struct termios termOld, termNew;
 static int kbMode = KB_MODE_LINE;
+static struct timeval tvKbThen;
 
 // Local function prototypes
 static int kbHit(void);
@@ -419,11 +423,26 @@ char kbKeypressScan(u08 quitFind)
   char ch = '\0';
   u08 quitFound = GLCD_FALSE;
   int myKbMode = KB_MODE_LINE;
+  struct timeval tvKbNow;
+  suseconds_t timeDiff;
 
   // Switch to keyboard scan mode if needed
   myKbMode = kbModeGet();
   if (myKbMode == KB_MODE_LINE)
+  {
     kbModeSet(KB_MODE_SCAN);
+  }
+  else
+  {
+    // For next keyboard scan wait at least 50 msec since last one
+    gettimeofday(&tvKbNow, NULL);
+    timeDiff = (tvKbNow.tv_sec - tvKbThen.tv_sec) * 1E6 +
+      tvKbNow.tv_usec - tvKbThen.tv_usec;
+    if (timeDiff >= 50000)
+      tvKbThen = tvKbNow;
+    else
+      return '\0';
+  }
 
   // Read pending input buffer
   while (kbHit())
@@ -470,6 +489,7 @@ void kbModeSet(int dir)
     termNew.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &termNew);
     kbMode = KB_MODE_SCAN;
+    gettimeofday(&tvKbThen, NULL);
   }
   else if (dir == KB_MODE_LINE && kbMode != KB_MODE_LINE)
   {
@@ -552,7 +572,7 @@ void stubEepReset(void)
 uint8_t stubEepRead(uint8_t *eprombyte)
 {
   if ((size_t)eprombyte >= EE_SIZE)
-    emuCoreDump(ORIGIN_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
+    emuCoreDump(CD_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
   return stubEeprom[(size_t)eprombyte];
 }
 
@@ -564,7 +584,7 @@ uint8_t stubEepRead(uint8_t *eprombyte)
 void stubEepWrite(uint8_t *eprombyte, uint8_t value)
 {
   if ((size_t)eprombyte >= EE_SIZE)
-    emuCoreDump(ORIGIN_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
+    emuCoreDump(CD_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
   stubEeprom[(size_t)eprombyte] = value;
 }
 
@@ -634,7 +654,7 @@ char stubEventGet(void)
     if (eventCycleState == CYCLE_REQ_WAIT)
     {
       alarmPidStop();
-      printf("<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
+      printf("\n<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
       fflush(stdout);
       // Continue in single cycle mode
       eventCycleState = CYCLE_WAIT;
@@ -648,7 +668,7 @@ char stubEventGet(void)
       // Print and glcd/controller performance statistics
       printf("\n");
       ctrlStatsPrint(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
-      printf("<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
+      printf("\n<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
       fflush(stdout);
       ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
     }
@@ -737,6 +757,7 @@ char stubEventGet(void)
     if (c == 'a')
     {
       // Toggle the alarm switch
+      printf("\n");
       alarmSwitchToggle(GLCD_TRUE);
     }
     else if (c == 'c')
@@ -748,6 +769,7 @@ char stubEventGet(void)
     else if (c == 'h')
     {
       // Provide help
+      printf("\n");
       if (stubHelp != NULL)
         stubHelp();
       else
@@ -761,7 +783,7 @@ char stubEventGet(void)
     else if (c == 'p')
     {
       // Print stub and glcd/lcd performance statistics
-      printf("statistics:\n");
+      printf("\nstatistics:\n");
       stubStatsPrint();
       ctrlStatsPrint(CTRL_STATS_FULL);
     }
@@ -770,7 +792,7 @@ char stubEventGet(void)
       // Reset stub and glcd/lcd performance statistics
       stubStatsReset();
       ctrlStatsReset(CTRL_STATS_FULL);
-      printf("statistics reset\n");
+      printf("\nstatistics reset\n");
     }
     else if (c == 's')
     {
@@ -780,6 +802,7 @@ char stubEventGet(void)
     else if (c == 't')
     {
       // Print time/date/alarm
+      printf("\n");
       emuTimePrint(ALM_MONOCHRON);
     }
     else if (c == '+')
@@ -1244,7 +1267,7 @@ char waitKeypress(int allowQuit)
   if (allowQuit == GLCD_FALSE)
     printf("<wait: press key to continue> ");
   else
-    printf("<wait: q = quit, other key will continue> ");
+    printf("<wait: q = quit, other key = continue> ");
   fflush(stdout);
   while (!kbHit())
   {
@@ -1354,4 +1377,3 @@ void uart_init(uint16_t x) { return; }
 void wdt_disable(void) { return; }
 void wdt_enable(uint16_t x) { return; }
 void wdt_reset(void) { return; }
-

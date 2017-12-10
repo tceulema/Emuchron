@@ -3,14 +3,12 @@
 // Title    : Animation code for MONOCHRON QR clock
 //*****************************************************************************
 
-#include <stdio.h>
+#include <string.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
-#include <string.h>
 #include "../ks0108.h"
 #include "../monomain.h"
 #include "../glcd.h"
@@ -32,14 +30,14 @@
 // To overcome this behavior we need to split up the QR generation process in
 // chunks where each chunk is executed in a single clock cycle, limited by its
 // 75 msec duration. So, the QR generation process must be put into a state
-// that the clock code will use to execute manageable chunck of work. Splitting
-// up the CPU workload over multiple clock cycles means that we need to wait
-// more time before the actual QR is drawn on the LCD display, but we won't
-// have any UI lag, and that's what matters most. We must make sure though that
-// each chunk of work fits within a single clock cycle of 75 msec.
+// that the clock code will use to execute a manageable chunck of work.
+// Splitting up the CPU workload over multiple clock cycles means that we need
+// to wait more time before the actual QR is drawn on the lcd display, but we
+// won't have any UI lag, and that's what matters most. We must make sure
+// though that each chunk of work fits within a single clock cycle of 75 msec.
 // There is another benefit of splitting up the CPU load over clock cycles.
 // The number of clock cycles needed to generate the QR will always be the same
-// and therefor always a constant x times 75 msec cycles. In adition to that,
+// and therefor always a constant x times 75 msec cycles. In addition to that,
 // the last step, being the QR Draw, requires an almost constant amount of CPU
 // time regardless the encoded string, making the QR always appear at the same
 // moment between consecutive seconds. This is good UI.
@@ -47,9 +45,10 @@
 // For a single QR 8 different masks are tried (evaluated), and the best mask
 // will be used for displaying the QR. A mask is a method of dispersing the
 // data over the QR area. The quality of a mask is determined by looking at how
-// good or bad the black and white pixels are spread over the QR. The most CPU
-// consuming element in trying a mask by far is to determine that good/badness
-// of a mask.
+// good or bad the black and white pixels are spread evenly over the QR. The
+// most CPU consuming element by far in trying a mask is to determine that
+// good/badness.
+//
 // For our QR generation process the following split-up is implemented using a
 // process state variable. Each single process state is processed in a single
 // clock cycle of 75 msec:
@@ -99,12 +98,12 @@
 #define QR_BORDER		4
 #define QR_PIX_FACTOR		2
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcClockTimeEvent;
+extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
@@ -126,27 +125,28 @@ extern volatile uint8_t mcU8Util1;
 // CHRON_QR_HMS - Draw QR every second
 extern volatile uint8_t mcU8Util2;
 
-// Local function prototypes
-static void qrDraw(void);
-static void qrMarkerDraw(u08 x, u08 y);
-
 // On april 1st, instead of the date, encode the message below. If you don't
 // like it make the textstring empty (""), and the clock will ignore it.
 // Note: The length of the message below will be truncated after 23 chars
 // when in HMS mode and after 26 chars when in HM mode.
 static char *qrAprilFools = "The cake is a lie.";
 
+// Local function prototypes
+static void qrDraw(void);
+static void qrMarkerDraw(u08 x, u08 y);
+
 //
 // Function: qrCycle
 //
-// Update the LCD display of a QR clock
+// Update the lcd display of a QR clock
 //
 void qrCycle(void)
 {
   // Update alarm info in clock
-  animAlarmAreaUpdate(QR_ALARM_X_START, QR_ALARM_Y_START, ALARM_AREA_ALM_ONLY);
+  animADAreaUpdate(QR_ALARM_X_START, QR_ALARM_Y_START, AD_AREA_ALM_ONLY);
 
-  // Only if a time event, init or QR cycle is flagged we need to update the clock
+  // Only when a time event, init or QR cycle is flagged we need to update the
+  // clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE &&
       mcU8Util1 == 0)
     return;
@@ -161,8 +161,7 @@ void qrCycle(void)
   {
     if (mcU8Util2 == CHRON_QR_HMS || mcClockInit == GLCD_TRUE ||
         mcClockNewTH != mcClockOldTH || mcClockNewTM != mcClockOldTM ||
-        mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
-        mcClockNewDY != mcClockOldDY)
+        mcClockDateEvent == GLCD_TRUE)
     {
       // Something has changed in date+time forcing us to update the QR
       char *dow;
@@ -203,18 +202,28 @@ void qrCycle(void)
           strinbuf[i + offset + 10] = mon[i];
         }
 
-        // Put day in QR string
-        animValToStr(mcClockNewDD, (char *)&strinbuf[14 + offset]);
+        // Fill up with spaces
+        strinbuf[9 + offset]  = ' ';
+        strinbuf[13 + offset] = ' ';
+
+        // Put day in QR string while excluding prefix 0
+        if (mcClockNewDD < 10)
+        {
+          strinbuf[14 + offset] = '0' + mcClockNewDD;
+          offset--;
+        }
+        else
+        {
+          animValToStr(mcClockNewDD, (char *)&strinbuf[14 + offset]);
+        }
+
+        // Fill up with comma and space
+        strinbuf[16 + offset] = ',';
+        strinbuf[17 + offset] = ' ';
 
         // Put year in QR string
         animValToStr(20, (char *)&strinbuf[18 + offset]);
         animValToStr(mcClockNewDY, (char *)&strinbuf[20 + offset]);
-
-        // Fill up with spaces and comma
-        strinbuf[9 + offset]  = ' ';
-        strinbuf[13 + offset] = ' ';
-        strinbuf[16 + offset] = ',';
-        strinbuf[17 + offset] = ' ';
       }
 
       // Start first cycle in generation of QR
@@ -262,7 +271,7 @@ void qrCycle(void)
 //
 // Function: qrInit
 //
-// Initialize the LCD display of a QR clock
+// Initialize the lcd display of a QR clock
 //
 void qrInit(u08 mode)
 {
@@ -332,7 +341,7 @@ void qrInit(u08 mode)
 // The simple way to do this is to use glcdFillRectangle() for each QR dot.
 // However, drawing 625 QR dots is inefficient and will take more that 0.3 sec
 // to complete. Not good. Instead, we'll use dedicated code that will not
-// require to read from the LCD and will only write full LCD bytes filled with
+// require to read from the lcd and will only write full lcd bytes filled with
 // multiple QR dots. The code also applies hardcoded shortcuts preventing
 // unnecessary write actions to the LCD.
 // The code uses similar techniques implemented in the glcd.c [firmware]

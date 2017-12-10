@@ -7,8 +7,7 @@
 #include <math.h>
 #ifdef EMULIN
 #include "../emulator/stub.h"
-#endif
-#ifndef EMULIN
+#else
 #include "../util.h"
 #endif
 #include "../ks0108.h"
@@ -77,9 +76,9 @@
 // of the display. Give it a try and you'll see what I mean...
 //#define BALL_VCENTERED
 
+// Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
@@ -169,7 +168,7 @@ void pongButton(u08 pressedButton)
 //
 // Function: pongCycle
 //
-// Update the Pong clock per clock cycle
+// Update the lcd display of a pong clock
 //
 void pongCycle(void)
 {
@@ -226,7 +225,7 @@ void pongCycle(void)
 //
 // Function: pongInit
 //
-// Initialize the LCD display for use as a Pong clock
+// Initialize the lcd display of a Pong clock
 //
 void pongInit(u08 mode)
 {
@@ -1232,4 +1231,3 @@ static void pongAlarmUpdate(void)
     }
   }
 }
-

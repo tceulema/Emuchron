@@ -29,10 +29,11 @@ CSRC = emulator/stub.c emulator/controller.c emulator/lcdglut.c \
   emulator/lcdncurses.c emulator/scanutil.c emulator/mchronutil.c \
   emulator/listutil.c emulator/varutil.c emulator/mchron.c \
   monomain.c ks0108.c glcd.c config.c anim.c \
-  clock/analog.c clock/bigdigit.c clock/digital.c clock/example.c \
-  clock/mosquito.c clock/nerd.c clock/perftest.c clock/pong.c clock/puzzle.c \
+  clock/analog.c clock/barchart.c clock/bigdigit.c clock/crosstable.c \
+  clock/digital.c clock/example.c clock/linechart.c clock/mosquito.c \
+  clock/nerd.c clock/piechart.c clock/perftest.c clock/pong.c clock/puzzle.c \
   clock/qr.c clock/qrencode.c clock/slider.c clock/spotfire.c clock/cascade.c \
-  clock/speeddial.c clock/spiderplot.c clock/trafficlight.c
+  clock/speeddial.c clock/spiderplot.c clock/thermometer.c clock/trafficlight.c
 FSRC = emulator/expr.l
 BSRC = emulator/expr.y
 EVALSRC = emulator/expr.c
@@ -53,7 +54,7 @@ EVALDEP = $(EVALSRC:.c=.d)
 all:	$(TARGET)
 
 # Clean project
-clean:	
+clean:
 	$(REMOVE) $(TARGET);
 	$(REMOVE) $(COBJ) $(EVALOBJ);
 	$(REMOVE) $(CDEP) $(EVALDEP);
@@ -66,7 +67,7 @@ rebuild:	clean all
 expr:	$(EVALOBJ)
 
 # Report relevant compiler and tool version information
-version: 
+version:
 	@echo "- $(CC)"; $(CC) --version;
 	@echo "- $(FLEX)"; $(FLEX) --version; echo;
 	@echo "- $(BISON)"; $(BISON) --version
