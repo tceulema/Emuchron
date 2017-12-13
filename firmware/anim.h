@@ -48,7 +48,7 @@
 #define AD_AREA_ALM_ONLY	0
 #define AD_AREA_ALM_DATE	1
 #define AD_AREA_DATE_ONLY	2
-#define AD_AREA_AD_WIDTH	3
+#define AD_AREA_AD_WIDTH	23
 
 // Structure defining the clock_init/clock_cycle/pressed_button methods
 // for a single clock. For a clock the init and cycle methods are required
