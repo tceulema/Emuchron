@@ -280,11 +280,11 @@ static void alarmPidStart(void)
     char soxTone1[80], soxTone2[80], soxSilent[80];
 
     sprintf(soxTone1, "|/usr/bin/sox -n -p synth %f sin %d",
-      (float)ALARMTICK_MS / 1000, ALARM_FREQ_1);
+      (float)SND_TICK_TONE_MS / 1000, ALARM_FREQ_1);
     sprintf(soxTone2, "|/usr/bin/sox -n -p synth %f sin %d",
-      (float)ALARMTICK_MS / 1000, ALARM_FREQ_2);
+      (float)SND_TICK_TONE_MS / 1000, ALARM_FREQ_2);
     sprintf(soxSilent, "|/usr/bin/sox -n -p synth %f sin 0",
-      (float)ALARMTICK_MS / 1000);
+      (float)SND_TICK_TONE_MS / 1000);
     execlp("/usr/bin/play", "/usr/bin/play", "-q",
       soxTone1, soxSilent, soxTone2, soxSilent,
       "-t", "alsa", "repeat", "3600", NULL);
