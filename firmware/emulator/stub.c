@@ -20,20 +20,17 @@
 #include "../ks0108.h"
 #include "../glcd.h"
 #include "../config.h"
-#include "../alarm.h"
 #include "stub.h"
 #include "mchronutil.h"
 #include "scanutil.h"
 
 // When used in a VM, Linux ALSA performance gets progressively worse with
 // every Debian release. As of Debian 8, short audio pulses are being clipped
-// while also generating an alsa buffer under-run runtime error.
+// while also generating an alsa buffer under-run runtime error. This behavior
+// impacts the mchron 'b' (beep) command.
 // In any case, it turns out that when prefixing a short audio pulse with a
 // larger pulse with no audio (0 Hz), the buffer under-run is avoided, and the
-// subsequent small audio pulse is no longer clipped. In case a series of
-// pulses is to be played, such as an alarm that is repeated multiple times,
-// the prefix pulse is required only once as the first tone in the sequence of
-// tones.
+// subsequent small audio pulse is no longer clipped.
 // Hence the following (kludgy) method to mitigate the alsa buffer under-run
 // runtime error using the #define below.
 //
@@ -48,9 +45,22 @@
 // On my machines prefix pulse value 95 (msec) seems to hit a sweet spot.
 // To re-iterate, only Debian 8 or later run as a VM seems to require a blank
 // prefix pulse. Use mchron command 'b' (beep) to test this.
-#define ALSA_PREFIX_PULSE_MS	95
-//#define ALSA_PREFIX_PULSE_MS	0
+//
+// Emuchron v4.1:
+// By changing the parameters in the sox command to play audio, it looks like
+// short audio pulses are no longer clipped. As such, the prefix pulse length
+// is set to 0, meaning we're no longer using it. If needed switch it on again.
+//
+//#define ALSA_PREFIX_PULSE_MS	95
+#define ALSA_PREFIX_PULSE_MS	0
 #define ALSA_PREFIX_ADD_MS	(ALSA_PREFIX_PULSE_MS + 25)
+
+// Emulator timer stub cycle state
+#define CYCLE_NOWAIT		0
+#define CYCLE_WAIT		1
+#define CYCLE_WAIT_STATS	2
+#define CYCLE_REQ_NOWAIT	3
+#define CYCLE_REQ_WAIT		4
 
 // Monochron global data
 extern volatile uint8_t almAlarming;
@@ -58,14 +68,6 @@ extern uint16_t almTickerSnooze;
 extern int16_t almTickerAlarm;
 extern volatile rtcDateTime_t rtcDateTime;
 extern volatile uint8_t mcAlarming;
-
-#ifdef MARIO
-// Mario chiptune alarm data
-extern const unsigned char __attribute__ ((progmem)) MarioTones[];
-extern const unsigned char __attribute__ ((progmem)) MarioBeats[];
-extern const unsigned char __attribute__ ((progmem)) MarioMaster[];
-extern const int marioMasterLen;
-#endif
 
 // Stubbed button data
 volatile uint8_t btnPressed = BTN_NONE;
@@ -141,9 +143,9 @@ static void alarmPidStop(void);
 //
 // Function: alarmSoundReset
 //
-// Stub to reset the internal alarm settings. It is needed to prevent the
-// alarm to restart when the clock feed or Monochron command is quit while
-// alarming and is later restarted with the same or different settings.
+// Stub to reset the internal alarm settings. It is needed to prevent the alarm
+// to restart when the clock feed or Monochron command is quit while alarming
+// and is later restarted with the same or different settings.
 //
 void alarmSoundReset(void)
 {
@@ -180,7 +182,7 @@ static void alarmPidStart(void)
   // Fork this process to play the alarm sound
   alarmPid = fork();
 
-  // Were we successfull in forking
+  // Were we successful in forking
   if (alarmPid < 0)
   {
     // Failure to fork
@@ -191,104 +193,10 @@ static void alarmPidStart(void)
   else if (alarmPid == 0)
   {
     // We forked successfully!
-#ifdef MARIO
-    // Generate a command that plays the Mario chiptune
-
-    char *mallocPtr = NULL;
-    int i = 0;
-    int j = 0;
-    int lineStart = 0;
-    int lineLength = 0;
-    int paramsIdx = 0;
-    int totalLength = 0;
-
-    // Get the total number of Mario tones to play and based on that
-    // declare an array that fits all required shell commands to play it
-    for (i = 0; i <= marioMasterLen - 2; i = i + 2)
-      totalLength = totalLength + MarioMaster[i + 1];
-    if (ALSA_PREFIX_PULSE_MS > 0)
-      totalLength++;
-    char *params[totalLength * 2 + 7];
-
-    // Begin of the execvp parameters
-    params[0] = "/usr/bin/play";
-    params[1] = "-q";
-
-    // Generate the Mario chiptune tones for execvp
-    paramsIdx = 2;
-
-    // Prefix blank pulse when needed to mitigate alsa buffer under-run
-    if (ALSA_PREFIX_PULSE_MS > 0)
-    {
-      mallocPtr = malloc(80);
-      sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin 0",
-        (float)(ALSA_PREFIX_ADD_MS) / 1000);
-      params[paramsIdx] = mallocPtr;
-      paramsIdx++;
-    }
-
-    // Mario alarm
-    for (i = 0; i < marioMasterLen; i = i + 2)
-    {
-      lineStart = MarioMaster[i];
-      lineLength = MarioMaster[i + 1];
-      for (j = lineStart; j < lineStart + lineLength; j++)
-      {
-        // Add the tone to be played
-        mallocPtr = malloc(80);
-
-        // The tone using a beat byte
-        sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin %d",
-          (float)(MarioBeats[j] * MAR_TEMPO / MAR_BEAT_FACTOR) / 1000,
-          MarioTones[j] * MAR_TONE_FACTOR);
-        params[paramsIdx] = mallocPtr;
-        paramsIdx++;
-
-        // Add a pauze of half a beat between tones
-        mallocPtr = malloc(80);
-        sprintf(mallocPtr, "|/usr/bin/sox -n -p synth %f sin %d",
-          (float)(MAR_TEMPO / 2) / 1000, 0);
-        params[paramsIdx] = mallocPtr;
-        paramsIdx++;
-      }
-    }
-
-    // Set use of alsa and play repeat and end of the execvp parameters
-    params[paramsIdx] = "-t";
-    params[paramsIdx + 1] = "alsa";
-    params[paramsIdx + 2] = "repeat";
-    params[paramsIdx + 3] = "100";
-    params[paramsIdx + 4] = NULL;
-
-    // Play Mario!
-    execvp("/usr/bin/play", params);
-#else
-    // Two-tone alarm
-    // Go play the alarm for max (0.325 + 0.325 + 0.325 + 0.325) * 3600 = 4680 secs
-    //
-    // The code below will result in something like this:
-    // execlp("/usr/bin/play", "/usr/bin/play", "-q",
-    //   "|/usr/bin/sox -n -p synth 0.325000 sin 4000",
-    //   "|/usr/bin/sox -n -p synth 0.325000 sin 0",
-    //   "|/usr/bin/sox -n -p synth 0.325000 sin 3750",
-    //   "|/usr/bin/sox -n -p synth 0.325000 sin 0",
-    //   "-t", "alsa", "repeat", "3600", 0);
-    //
-    // Example of a similar (yet shorter) command in bash is as follows (copy/paste):
-    // /usr/bin/play -q "|/usr/bin/sox -n -p synth 0.3 sin 4000" "|/usr/bin/sox -n -p synth 0.3 sin 0" -t alsa repeat 7200
-
-    char soxTone1[80], soxTone2[80], soxSilent[80];
-
-    sprintf(soxTone1, "|/usr/bin/sox -n -p synth %f sin %d",
-      (float)SND_TICK_TONE_MS / 1000, ALARM_FREQ_1);
-    sprintf(soxTone2, "|/usr/bin/sox -n -p synth %f sin %d",
-      (float)SND_TICK_TONE_MS / 1000, ALARM_FREQ_2);
-    sprintf(soxSilent, "|/usr/bin/sox -n -p synth %f sin 0",
-      (float)SND_TICK_TONE_MS / 1000);
-    execlp("/usr/bin/play", "/usr/bin/play", "-q",
-      soxTone1, soxSilent, soxTone2, soxSilent,
+    // Emuchron tool genalarm generated an audio file for us to play.
+    // The genalarm tool is built and run via MakefileEmu [firmware].
+    execlp("/usr/bin/play", "/usr/bin/play", "-q", "emulator/alarm.au", "-DG",
       "-t", "alsa", "repeat", "3600", NULL);
-#endif
     exit(0);
   }
   else
@@ -297,7 +205,7 @@ static void alarmPidStart(void)
     if (DEBUGGING)
     {
       char msg[45];
-      sprintf(msg, "Playing alarm audio via PID %d", alarmPid);
+      sprintf(msg, "playing alarm audio via pid %d", alarmPid);
       DEBUGP(msg);
     }
   }
@@ -306,8 +214,7 @@ static void alarmPidStart(void)
 //
 // Function: alarmPidStop
 //
-// Stub to stop playing the alarm. It may be restarted by functional
-// code.
+// Stub to stop playing the alarm. It may be restarted by functional code.
 //
 static void alarmPidStop(void)
 {
@@ -316,7 +223,7 @@ static void alarmPidStop(void)
   {
     // Kill it...
     char msg[45];
-    sprintf(msg, "Stopping alarm audio via PID %d", alarmPid);
+    sprintf(msg, "stopping alarm audio via pid %d", alarmPid);
     DEBUGP(msg);
     sprintf(msg, "kill -s 9 %d", alarmPid);
     system(msg);
@@ -413,9 +320,9 @@ static int kbHit(void)
 //
 // Function: kbKeypressScan
 //
-// Scan keyboard for keypress. The last key in the keyboard buffer
-// is returned. However, if a search for the quit key is requested
-// and that key was pressed, the quit character is returned instead.
+// Scan keyboard for keypress. The last key in the keyboard buffer is returned.
+// However, if a search for the quit key is requested and that key was pressed,
+// the quit character is returned instead.
 // No keypress returns the null character.
 //
 char kbKeypressScan(u08 quitFind)
@@ -430,7 +337,10 @@ char kbKeypressScan(u08 quitFind)
   myKbMode = kbModeGet();
   if (myKbMode == KB_MODE_LINE)
   {
+    // When switching force keyboard scan
     kbModeSet(KB_MODE_SCAN);
+    gettimeofday(&tvKbNow, NULL);
+    tvKbThen = tvKbNow;
   }
   else
   {
@@ -506,26 +416,25 @@ void kbModeSet(int dir)
 //
 void stubBeep(uint16_t hz, uint16_t msec)
 {
-  char shellCmd[150];
+  char shellCmd[160];
 
   if (ALSA_PREFIX_PULSE_MS > msec)
   {
     // This is a short beep that requires alsa buffer under-run mitigation.
     // Add the blank pulse in front of the actual pulse to be played.
-    char temp[75];
-    sprintf(shellCmd,
-      "/usr/bin/play -q \"|/usr/bin/sox -n -p synth %f sin 0\" ",
+    int length;
+    length = sprintf(shellCmd,
+      "/usr/bin/play -q '|/usr/bin/sox -b16 -r21k -DGnp synth %f sin 0' ",
       (float)(ALSA_PREFIX_ADD_MS) / 1000);
-    sprintf(temp,
-      "\"|/usr/bin/sox -n -p synth %f sin %d\" -t alsa > /dev/null 2>&1",
+    sprintf(&shellCmd[length],
+      "'|/usr/bin/sox -b16 -r21k -DGnp synth %f sin %d' -t alsa 2>/dev/null",
       (float)(msec) / 1000L, hz);
-    strcat(shellCmd, temp);
   }
   else
   {
     // Just play the requested beep
     sprintf(shellCmd,
-      "/usr/bin/play -q -n -t alsa synth %f sin %d > /dev/null 2>&1",
+      "/usr/bin/play -q -b16 -r21k -DGn -t alsa synth %f sin %d 2>/dev/null",
       (float)(msec) / 1000L, hz);
   }
   system(shellCmd);
@@ -607,8 +516,8 @@ char stubEventGet(void)
   // Sleep the remainder of the current cycle
   if (eventInit == GLCD_TRUE)
   {
-    // The first entry may not invoke a sleep but instead marks the
-    // timer timestamp for the next cycle
+    // The first entry may not invoke a sleep but instead marks the timer
+    // timestamp for the next cycle
     waitTimerStart(&tvCycleTimer);
     eventInit = GLCD_FALSE;
   }
@@ -785,13 +694,13 @@ char stubEventGet(void)
       // Print stub and glcd/lcd performance statistics
       printf("\nstatistics:\n");
       stubStatsPrint();
-      ctrlStatsPrint(CTRL_STATS_FULL);
+      ctrlStatsPrint(CTRL_STATS_ALL);
     }
     else if (c == 'r')
     {
       // Reset stub and glcd/lcd performance statistics
       stubStatsReset();
-      ctrlStatsReset(CTRL_STATS_FULL);
+      ctrlStatsReset(CTRL_STATS_ALL);
       printf("\nstatistics reset\n");
     }
     else if (c == 's')
@@ -840,10 +749,13 @@ char stubEventGet(void)
 //
 // Prepare the event generator for initial use by a requesting process.
 //
-void stubEventInit(int startMode, void (*stubHelpHandler)(void))
+void stubEventInit(u08 startWait, void (*stubHelpHandler)(void))
 {
   eventInit = GLCD_TRUE;
-  eventCycleState = startMode;
+  if (startWait == GLCD_TRUE)
+    eventCycleState = CYCLE_REQ_WAIT;
+  else
+    eventCycleState = CYCLE_NOWAIT;
   btnPressed = BTN_NONE;
   stubHelp = stubHelpHandler;
   stubHelp();
@@ -964,9 +876,9 @@ u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
 //
 // Function: stubPutString
 //
-// Stub for debug string. Output is redirected to output file as specified
-// on the mchron command line. If no output file is specified, debug info
-// is discarded.
+// Stub for debug string. Output is redirected to output file as specified on
+// the mchron command line. If no output file is specified, debug info is
+// discarded.
 // Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
 void stubPutString(char *x, char *format)
@@ -1086,8 +998,8 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   tmNewDateValidate1 = tmNewCopy;
   tmNewDateValidate2 = tmNewCopy;
 
-  // Get system timestamp for current and new time to obtain the time
-  // delta between the two timestamps
+  // Get system timestamp for current and new time to obtain the time delta
+  // between the two timestamps
   timeNow = mktime(&tmNowCopy);
   timeNew = mktime(&tmNewCopy);
   if (timeNew == -1)
@@ -1098,11 +1010,11 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   }
   timeDeltaNew = difftime(timeNew, timeNow);
 
-  // Verify the requested date by making use of the fact that mktime
-  // 'corrects' an invalid input date such as sep 31 to oct 1.
-  // As mktime also shifts a time due to DST settings, that may cause a
-  // shift in a day as well, set the time in the date to verify to around
-  // noon to make sure such a DST timeshift cannot affect the date.
+  // Verify the requested date by making use of the fact that mktime 'corrects'
+  // an invalid input date such as sep 31 to oct 1.
+  // As mktime also shifts a time due to DST settings, that may cause a shift
+  // in a day as well, set the time in the date to verify to around noon to
+  // make sure such a DST timeshift cannot affect the date.
   tmNewDateValidate1.tm_hour = 12;
   timeClock = mktime(&tmNewDateValidate1);
   if (tmNewDateValidate1.tm_mday != tmNewDateValidate2.tm_mday ||
@@ -1113,8 +1025,8 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
     return GLCD_FALSE;
   }
 
-  // Get delta between earlier retrieved current and new time and apply it
-  // on a fresh current timestamp
+  // Get delta between earlier retrieved current and new time and apply it on a
+  // fresh current timestamp
   gettimeofday(&tvNew, NULL);
   timeClock = tvNew.tv_sec + timeDeltaNew;
   tmNew = localtime(&timeClock);
@@ -1143,8 +1055,8 @@ int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
 //
 // Function: stubUartPutChar
 //
-// Stub for debug char. Output is redirected to output file as specified on
-// the mchron command line. If no output file is specified, debug info is
+// Stub for debug char. Output is redirected to output file as specified on the
+// mchron command line. If no output file is specified, debug info is
 // discarded.
 // Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
@@ -1200,8 +1112,8 @@ char waitDelay(int delay)
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_SCAN);
 
-  // Wait till end of delay or a 'q' keypress and ignore
-  // a remaining wait time that is less than 0.5 msec
+  // Wait till end of delay or a 'q' keypress and ignore a remaining wait time
+  // that is less than 0.5 msec
   while (ch != 'q' && timeDiff > 500)
   {
     // Split time to delay up in parts of max 250msec
@@ -1296,9 +1208,8 @@ char waitKeypress(int allowQuit)
 // allowing a 'q' keypress interrupt. Restart the timer when timer has already
 // expired upon entering this function or has expired after the remaining timer
 // period. When pressing the 'q' key the timer will not be restarted.
-// Return parameter remaining will indicate the remaining timer time in
-// usec upon entering this function, or -1 in case the timer had already
-// expired.
+// Return parameter remaining will indicate the remaining timer time in usec
+// upon entering this function, or -1 in case the timer had already expired.
 //
 char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
   suseconds_t *remaining)
@@ -1316,8 +1227,8 @@ char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
   // See if timer has already expired
   if (timeDiff < 0)
   {
-    // Get next timer offset using current time as reference, so do
-    // not even attempt to compensate
+    // Get next timer offset using current time as reference, so do not even
+    // attempt to compensate
     *remaining = -1;
     *tvTimer = tvNow;
   }

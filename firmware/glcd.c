@@ -944,11 +944,11 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
 {
   u08 h = 0;
   u08 i;
+  u08 j;
   u08 strWidth;
   u08 strHeight;
   u08 fontByte;
   u08 lcdByte = 0;
-  u08 currXScale = 0;
   u08 currYScale = 0;
   u08 lastYScale = 0;
   u08 fontBytePixel;
@@ -996,15 +996,14 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
   while (h < strHeight)
   {
     // In some cases we partly update an lcd byte
-    if ((startBit != 0 && orientation == ORI_VERTICAL_TD) ||
-        (startBit != 7 && orientation == ORI_VERTICAL_BU) ||
+    if ((orientation == ORI_VERTICAL_TD && startBit != 0) ||
+        (orientation == ORI_VERTICAL_BU && startBit != 7) ||
          strHeight - h < 8)
     {
-      // Read all the required lcd bytes for this y-byte in the
-      // line buffer and update them byte by byte
+      // Read all the required lcd bytes for this y-byte in the line buffer
+      // and update them byte by byte
       glcdBufferRead(xStart, yByte, strWidth);
-      if (orientation == ORI_VERTICAL_TD &&
-          (startBit + (strHeight - h) > 8))
+      if (orientation == ORI_VERTICAL_TD && (startBit + (strHeight - h) > 8))
         lcdPixelsToDo = 8 - startBit;
       else if (orientation == ORI_VERTICAL_BU &&
           ((8 - startBit) + (strHeight - h) > 8))
@@ -1022,8 +1021,6 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
     // consecutive lcd bytes
     glcdSetAddress(xStart, yByte);
 
-    // Start at the current string character and its font byte
-
     // Set mask for final build of lcd byte
     mask = (0xff >> (8 - lcdPixelsToDo));
     if (orientation == ORI_VERTICAL_TD)
@@ -1031,103 +1028,79 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
     else
       mask = mask << (startBit + 1 - lcdPixelsToDo);
 
-    // Restart x scaling
-    currXScale = 0;
-    fontBytePixel = fontPixelStart;
-
     // Loop through all x positions
-    for (i = 0; i < strWidth; i++)
+    fontBytePixel = fontPixelStart;
+    i = 0;
+    while (i < strWidth)
     {
-      // Get lcd byte in case not all 8 pixels are to be processed
-      if (lcdPixelsToDo != 8)
-        lcdByte = glcdBuffer[i];
+      // Reposition on character, y scale and font byte
+      c = startChar;
+      currYScale = lastYScale;
+      fontByteIdx = lastFontByteIdx;
 
-      // Set the number of bits to process in lcd byte
-      lcdPixelsLeft = lcdPixelsToDo;
+      // Get entry point in font array and width of the character
+      fontCharIdx = glcdFontIdxGet(*c) + fontByteIdx;
 
-      // In case of x scaling, the template for the final lcd byte merge
-      // is already known. So, only build it when we start with x scaling.
-      if (currXScale == 0)
+      // Start at the proper font byte
+      fontByte = glcdFontByteGet(color);
+
+      // Build the lcd byte template bit by bit
+      template = 0;
+      bitmask = (0x1 << startBit);
+      for (lcdPixelsLeft = lcdPixelsToDo; lcdPixelsLeft > 0; lcdPixelsLeft--)
       {
-        // Reposition on character, y scale and font byte
-        c = startChar;
-        currYScale = lastYScale;
-        fontByteIdx = lastFontByteIdx;
+        // Map a single font bit on the lcd byte template
+        if ((fontByte & (1 << fontBytePixel)) != 0)
+          template = (template | bitmask);
 
-        // Get entry point in font array and width of the character
-        fontCharIdx = glcdFontIdxGet(*c) + fontByteIdx;
+        // Proceed with next lcd bit
+        if (orientation == ORI_VERTICAL_TD)
+          bitmask = (bitmask << 1);
+        else
+          bitmask = (bitmask >> 1);
 
-        // Start at the proper font byte
-        fontByte = glcdFontByteGet(color);
-
-        // Build the lcd byte template bit by bit
-        template = 0;
-        bitmask = (0x1 << startBit);
-        while (lcdPixelsLeft != 0)
+        // For y scaling repeat current font pixel or move to the next
+        currYScale++;
+        if (currYScale == yScale)
         {
-          // Map a single font bit on the lcd byte template
-          if ((fontByte & (1 << fontBytePixel)) != 0)
-            template = (template | bitmask);
-
-          // Proceed with next lcd bit
-          if (orientation == ORI_VERTICAL_TD)
-            bitmask = (bitmask << 1);
-          else
-            bitmask = (bitmask >> 1);
-
-          // Increment y scaling
-          currYScale++;
-          if (currYScale == yScale)
+          // Continue with next font byte or move to next character in string
+          currYScale = 0;
+          if (fontByteIdx != fontWidth)
           {
-            // Continue with next font byte pixel or move to next
-            // character in string
-            if (fontByteIdx != fontWidth)
+            // Move to next font byte
+            fontByteIdx++;
+            fontCharIdx++;
+          }
+          else
+          {
+            // Processed the last font byte so move to next character in
+            // string to process
+            fontByteIdx = 0;
+            if (*(c + 1) != 0)
             {
-              // Move to next font byte
-              fontByteIdx++;
-              fontCharIdx++;
-            }
-            else
-            {
-              // Processed the last font byte so move to next character
-              // in string to process
+              // Get entry point in font array and width of the character
               c++;
-              fontByteIdx = 0;
-              if (*c != 0)
-              {
-                // Not yet at end of string
-                currYScale = 0;
-                fontByteIdx = 0;
-
-                // Get entry point in font array and width of the character
-                fontCharIdx = glcdFontIdxGet(*c);
-              }
+              fontCharIdx = glcdFontIdxGet(*c);
             }
-
-            // Get the font byte
-            fontByte = glcdFontByteGet(color);
-
-            // Reset y scaling
-            currYScale = 0;
           }
 
-          // Reduce number of pixels to process for this lcd byte
-          lcdPixelsLeft--;
+          // Get the font byte
+          fontByte = glcdFontByteGet(color);
         }
       }
 
       // Add the template to the final lcd byte and write it to the lcd
-      lcdByte = ((lcdByte & ~mask) | (template & mask));
-      glcdDataWrite(lcdByte);
-
-      // Set x scaling offset for next lcd byte
-      currXScale++;
-      if (currXScale == xScale)
+      for (j = 0; j < xScale; j++)
       {
-        // Reset x scaling and move to next or previous pixel in font byte
-        currXScale = 0;
-        fontBytePixel = fontBytePixel - byteDelta;
+        if (lcdPixelsToDo != 8)
+          lcdByte = glcdBuffer[i];
+        lcdByte = ((lcdByte & ~mask) | (template & mask));
+        glcdDataWrite(lcdByte);
+        i++;
       }
+
+      // Move to next or previous pixel in font byte
+      fontBytePixel = fontBytePixel - byteDelta;
     }
 
     // Go to next y byte where we'll start at either the first or last bit

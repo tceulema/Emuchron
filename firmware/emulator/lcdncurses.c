@@ -48,7 +48,7 @@
 #define NCUR_COLOR_BORDER	129
 
 // Get ncurses brightness greyscale based on display backlight level 0..16
-#define NCUR_BRIGHTNESS(level)	(short)(1000 * (6 + (float)(level)) / 22)
+#define NCUR_BRIGHTNESS(level)	(int)(1000 * (6 + (float)(level)) / 22)
 
 // This is me
 extern const char *__progname;
@@ -78,7 +78,7 @@ static unsigned char lcdNcurImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 
 // The init parameters
 static lcdNcurInitArgs_t lcdNcurInitArgs;
-static int deviceActive = GLCD_FALSE;
+static unsigned char deviceActive = GLCD_FALSE;
 
 // Data needed for ncurses stub lcd device
 static FILE *ttyFile = NULL;
@@ -100,6 +100,7 @@ static struct timeval tvNow;
 static struct timeval tvThen;
 
 // Local function prototypes
+static void lcdNcurClose(void);
 static void lcdNcurDrawModeSet(unsigned char controller, unsigned char color);
 static void lcdNcurRedraw(unsigned char controller, int startY, int rows);
 
@@ -148,14 +149,14 @@ void lcdNcurCleanup(void)
   curs_set(1);
 
   // End the ncurses session.
-  // Okay... it turns out that the combination of ncurses, readline and
-  // using ncurses endwin() on the ncurses tty makes the mchron command
-  // terminal go haywire after exiting mchron, requiring to use the 'reset'
-  // command to make it function properly again. It turns out that omitting
-  // endwin() keeps the mchron terminal in a proper state. So, what to do?
-  // Implement ending an ncurses session according specs (= use endwin())
-  // and then prohibit the use of the readline library, or, don't call endwin()
-  // so we can use the readline library thereby deviating from the official
+  // Okay... it turns out that the combination of ncurses, readline and using
+  // ncurses endwin() on the ncurses tty makes the mchron command terminal go
+  // haywire after exiting mchron, requiring to use the 'reset' command to make
+  // it function properly again. It turns out that omitting endwin() keeps the
+  // mchron terminal in a proper state. So, what to do?
+  // Implement ending an ncurses session according specs (= use endwin()) and
+  // then prohibit the use of the readline library, or, don't call endwin() so
+  // we can use the readline library thereby deviating from the official
   // ncurses specs.
   // The verdict: The readline library is awesome! Sorry endwin()...
   //endwin();
@@ -169,6 +170,17 @@ void lcdNcurCleanup(void)
   fclose(ttyFile);
   ttyFile = NULL;
   deviceActive = GLCD_FALSE;
+}
+
+//
+// Function: lcdNcurClose
+//
+// Callback for ncurses window close event
+//
+static void lcdNcurClose(void)
+{
+  // Attempt to shutdown gracefully
+  lcdNcurInitArgs.winClose();
 }
 
 //
@@ -299,7 +311,7 @@ void lcdNcurFlush(void)
     if (stat(lcdNcurInitArgs.tty, &buffer) != 0)
     {
       // The ncurses tty is gone so we'll force mchron to exit
-      lcdNcurInitArgs.winClose();
+      lcdNcurClose();
     }
   }
 
@@ -374,11 +386,10 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   FILE *fp;
   struct winsize sizeTty;
   struct stat statTty;
-  int retVal = 0;
 
   // Nothing to do if the ncurses environment is already initialized
   if (deviceActive == GLCD_TRUE)
-    return 0;
+    return GLCD_TRUE;
 
   // Copy ncursus init parameters
   lcdNcurInitArgs = *lcdNcurInitArgsSet;
@@ -386,23 +397,29 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   // Check if the ncurses tty is actually in use
   if (stat(lcdNcurInitArgs.tty, &statTty) != 0)
   {
-    printf("%s: Destination ncurses tty \"%s\" is not in use\n", __progname,
+    printf("%s: -t: destination ncurses tty \"%s\" is not in use\n", __progname,
       lcdNcurInitArgs.tty);
-    return -1;
+    return GLCD_FALSE;
   }
 
-  // Check if the ncurses tty has a minimum size
+  // Open tty and check if it has a minimum size
   fp = fopen(lcdNcurInitArgs.tty, "r");
+  if (fp == (FILE *)NULL)
+  {
+    printf("%s: -t: cannot open destination ncurses tty \"%s\"\n", __progname,
+      lcdNcurInitArgs.tty);
+    return GLCD_FALSE;
+  }
   if (ioctl(fileno(fp), TIOCGWINSZ, (char *)&sizeTty) >= 0)
   {
     if (sizeTty.ws_col < NCUR_X_PIXELS || sizeTty.ws_row < NCUR_Y_PIXELS)
     {
-      printf("%s: Destination ncurses tty size (%dx%d) is too small for use as\n",
-        __progname, sizeTty.ws_col, sizeTty.ws_row);
-      printf("mchron ncurses terminal (minimum size = %dx%d characters)\n",
+      printf("%s: -t: destination ncurses tty \"%s\" size (%dx%d) is too\n",
+        __progname, lcdNcurInitArgs.tty, sizeTty.ws_col, sizeTty.ws_row);
+      printf("small for use as mchron ncurses terminal (min = %dx%d chars)\n",
         NCUR_X_PIXELS, NCUR_Y_PIXELS);
       fclose(fp);
-      return -1;
+      return GLCD_FALSE;
     }
   }
   fclose(fp);
@@ -471,7 +488,7 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   // We're initialized
   deviceActive = GLCD_TRUE;
 
-  return retVal;
+  return GLCD_TRUE;
 }
 
 //
@@ -488,10 +505,10 @@ static void lcdNcurRedraw(unsigned char controller, int startY, int rows)
   unsigned char lcdLine;
   int posY;
 
-  // Redraw all x columns for (a limited set of) rows. We either start
-  // at line 0 for a number of rows, or start at a non-0 line and draw
-  // all up to the end of the window. We only need to draw the white
-  // (or grey-tone) pixels.
+  // Redraw all x columns for (a limited set of) rows. We either start at line
+  // 0 for a number of rows, or start at a non-0 line and draw all up to the
+  // the end of the window. We only need to draw the white (or grey-tone)
+  // pixels.
   lcdNcurDrawModeSet(controller, GLCD_ON);
   for (x = 0; x < GLCD_CONTROLLER_XPIXELS; x++)
   {
@@ -540,8 +557,8 @@ void lcdNcurStartLineSet(unsigned char controller, unsigned char startLine)
   int fillStart;
   int rows;
 
-  // If the display is off or when there's no change in the startline
-  // there's no reason to redraw so only sync new value
+  // If the display is off or when there's no change in the startline there's
+  // no reason to redraw so only sync new value
   if (lcdNcurCtrl[controller].display == GLCD_FALSE ||
       lcdNcurCtrl[controller].startLine == startLine)
   {

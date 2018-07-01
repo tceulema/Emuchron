@@ -19,7 +19,6 @@
 #include "../glcd.h"
 #include "../anim.h"
 #include "../config.h"
-#include "../alarm.h"
 
 // Monochron clocks
 #include "../clock/analog.h"
@@ -46,6 +45,7 @@
 // Emuchron stubs and utilities
 #include "stub.h"
 #include "expr.h"
+#include "dictutil.h"
 #include "listutil.h"
 #include "mchronutil.h"
 #include "scanutil.h"
@@ -79,30 +79,18 @@ extern volatile uint8_t almAlarming;
 extern int16_t almTickerAlarm;
 extern uint16_t almTickerSnooze;
 
-// The variables that store the processed command line arguments
+// The variables that store the published command line arguments
 extern char argChar[];
 extern double argDouble[];
 extern char *argWord[];
 extern char *argString;
 
-// The command profile for an mchron command
-extern cmdArg_t argCmd[];
-
 // The expression evaluator expression result value
 extern double exprValue;
 
-// The command list execution depth tells us if we're running at
-// command prompt level
+// The command list execution depth tells us if we're running at command prompt
+// level
 extern int listExecDepth;
-
-#ifdef MARIO
-// Mario chiptune alarm sanity check data
-extern const int marioTonesLen;
-extern const int marioBeatsLen;
-#endif
-
-// Data resulting from mchron startup command line processing
-extern emuArgcArgv_t emuArgcArgv;
 
 // Flag to indicate we're going to exit
 extern int invokeExit;
@@ -134,9 +122,9 @@ static u08 emuFgColor = GLCD_ON;
 static u08 emuBacklight = 16;
 
 // The clocks supported in the mchron clock test environment.
-// Note that Monochron will have its own implemented array of supported
-// clocks in anim.c [firmware]. So, we need to switch between the two
-// arrays when appropriate.
+// Note that Monochron will have its own implemented array of supported clocks
+// in anim.c [firmware]. So, we need to switch between the two arrays when
+// appropriate.
 static clockDriver_t emuMonochron[] =
 {
   {CHRON_NONE,        DRAW_INIT_NONE, 0,                  0,                   0},
@@ -176,6 +164,7 @@ int main(int argc, char *argv[])
 {
   cmdLine_t cmdLine;
   char *prompt;
+  emuArgcArgv_t emuArgcArgv;
   int retVal = CMD_RET_OK;
 
   // Setup signal handlers to either recover from signal or to attempt
@@ -183,19 +172,9 @@ int main(int argc, char *argv[])
   emuSigSetup();
 
   // Do command line processing
-  retVal = emuArgcArgvGet(argc, argv);
+  retVal = emuArgcArgvGet(argc, argv, &emuArgcArgv);
   if (retVal != CMD_RET_OK)
     return CMD_RET_ERROR;
-
-#ifdef MARIO
-  // Do sanity check on Mario data
-  if (marioTonesLen != marioBeatsLen)
-  {
-    printf("%s: Mario alarm - Tone and beat array sizes not aligned: %d vs %d\n",
-      __progname, marioTonesLen, marioBeatsLen);
-    return CMD_RET_ERROR;
-  }
-#endif
 
   // Init the lcd color modes
   mcBgColor = emuBgColor;
@@ -206,12 +185,12 @@ int main(int argc, char *argv[])
   mcAlarmM = emuAlarmM;
 
   // Init the lcd controllers and display stub device(s)
-  retVal = ctrlInit(emuArgcArgv.ctrlDeviceArgs);
+  retVal = ctrlInit(&emuArgcArgv.ctrlDeviceArgs);
   if (retVal != CMD_RET_OK)
     return retVal;
 
-  // Uncomment this if you want to join with debugger prior to using
-  // anything in the glcd library for the lcd device
+  // Uncomment this if you want to join with debugger prior to using anything
+  // in the glcd library for the lcd device
   //char tmpInput[10];
   //fgets(tmpInput, 10, stdin);
 
@@ -266,15 +245,16 @@ int main(int argc, char *argv[])
   cmdInputInit(&cmdInput);
 
   // All initialization is done!
-  printf("\nEnter 'h' for help.\n");
+  printf("\nenter 'h' for help\n");
 
-  // We're in business: give prompt and process keyboard commands until
-  // the last proton in the universe has desintegrated (or use 'x' or
-  // ^D to exit)
+  // We're in business: give prompt and process keyboard commands until the
+  // last proton in the universe has desintegrated (or use 'x' or ^D to exit)
 
   // Initialize a command line for the interpreter
   cmdLine.lineNum = 0;
   cmdLine.input = NULL;
+  cmdLine.args = NULL;
+  cmdLine.initialized = GLCD_FALSE;
   cmdLine.cmdCommand = NULL;
   cmdLine.cmdPcCtrlParent = NULL;
   cmdLine.cmdPcCtrlChild = NULL;
@@ -292,7 +272,8 @@ int main(int argc, char *argv[])
     cmdLine.lineNum++;
     cmdLine.input = cmdInput.input;
     cmdLine.cmdCommand = NULL;
-    retVal = emuLineExecute(&cmdLine, &cmdInput);
+    retVal = cmdLineExecute(&cmdLine, &cmdInput);
+    cmdArgCleanup(&cmdLine);
     if (retVal == CMD_RET_EXIT)
       break;
 
@@ -308,8 +289,8 @@ int main(int argc, char *argv[])
   free(prompt);
   cmdInputCleanup(&cmdInput);
 
-  // Shutdown gracefully by killing audio and stopping the controller
-  // and lcd device(s)
+  // Shutdown gracefully by killing audio and stopping the controller and lcd
+  // device(s)
   alarmSoundStop();
   ctrlCleanup();
 
@@ -333,10 +314,8 @@ int main(int argc, char *argv[])
 // sequence of command arguments in the command dictionary.
 //
 // A control block handler (for if-logic and repeat commands) however must
-// implement more functionality as command arguments are evaluated optionally,
-// depending on the control block type and the execution state of the
-// associated block. As such, a control block handler is responsible for its
-// own argument scanning and processing.
+// decide which command arguments are evaluated, depending on the state of its
+// control block. In other words, command arguments are evaluated optionally,
 //
 
 //
@@ -400,16 +379,16 @@ int doAlarmSet(cmdLine_t *cmdLine)
     {
       // Normally the alarm can only be set via the config menu, so the new
       // alarm time will be displayed when the clock is initialized after
-      // exiting the config menu. We therefore don't care what the old
-      // value was. This behavior will not cause a problem for most clocks
-      // when we are in command mode and change the alarm: the alarm time
-      // will overwrite the old value on the lcd. However, for a clock like
-      // Analog that shows the alarm in an analog clock style, changing the
-      // alarm in command mode will draw the new alarm while not erasing
-      // the old alarm time.
-      // We'll use a trick to overwrite the old alarm: toggle the alarm
-      // switch twice. Note: This may cause a slight blink in the alarm
-      // area when using the glut lcd device.
+      // exiting the config menu. We therefore don't care what the old value
+      // was. This behavior will not cause a problem for most clocks when we
+      // are in command mode and change the alarm: the alarm time wil
+      // overwrite the old value on the lcd. However, for a clock like Analog
+      // that shows the alarm in an analog clock style, changing the alarm in
+      // command mode will draw the new alarm while not erasing the old alarm
+      // time.
+      // We'll use a trick to overwrite the old alarm: toggle the alarm switch
+      // twice. Note: This may cause a slight blink in the alarm area when
+      // using the glut lcd device.
       alarmSwitchToggle(GLCD_FALSE);
       almStateSet();
       animClockDraw(DRAW_CYCLE);
@@ -486,11 +465,11 @@ int doBeep(cmdLine_t *cmdLine)
 int doClockFeed(cmdLine_t *cmdLine)
 {
   char ch = '\0';
-  int startMode = CYCLE_NOWAIT;
+  int startWait = GLCD_FALSE;
   int myKbMode = KB_MODE_LINE;
 
   // Get the start mode
-  startMode = emuStartModeGet(argChar[0]);
+  startWait = emuStartModeGet(argChar[0]);
 
   // Check clock
   if (mcClockPool[mcMchronClock].clockId == CHRON_NONE)
@@ -509,7 +488,7 @@ int doClockFeed(cmdLine_t *cmdLine)
   rtcMchronTimeInit();
 
   // Init stub event handler used in main loop below
-  stubEventInit(startMode, stubHelpClockFeed);
+  stubEventInit(startWait, stubHelpClockFeed);
 
   // Run clock until 'q'
   while (ch != 'q')
@@ -661,8 +640,8 @@ int doExecute(cmdLine_t *cmdLine)
   // Verify too deep nested 'e' commands (prevent potential recursive call)
   if (fileExecDepth >= CMD_FILE_DEPTH_MAX)
   {
-    printf("stack level exceeded by last 'e' command (max=%d).\n",
-      CMD_FILE_DEPTH_MAX);
+    printf("stack level exceeded by last '%s' command (max=%d)\n",
+      cmdLine->cmdCommand->cmdName, CMD_FILE_DEPTH_MAX);
     return CMD_RET_ERROR;
   }
 
@@ -684,26 +663,24 @@ int doExecute(cmdLine_t *cmdLine)
 
   // Load the lines from the command file in a linked list.
   // Warning: this will reset the cmd scan global variables.
-  // When ok execute the list. If an error occured prepare for
-  // completing a stack trace.
+  // When ok execute the list. If an error occured prepare for completing a
+  // stack trace.
   retVal = cmdListFileLoad(&cmdLineRoot, &cmdPcCtrlRoot, fileName,
     fileExecDepth);
   if (retVal == CMD_RET_OK)
-    retVal = emuListExecute(cmdLineRoot, fileName);
+    retVal = cmdListExecute(cmdLineRoot, fileName);
   else if (retVal == CMD_RET_ERROR)
     retVal = CMD_RET_RECOVER;
 
   // We're done: decrease stack level
   fileExecDepth--;
 
-  // Either all commands in the linked list have been executed
-  // successfullly or an error has occured. Do some admin stuff by
-  // cleaning up the linked lists.
+  // Either all commands in the linked list have been executed successfully or
+  // an error has occured. Do some admin stuff by cleaning up the linked lists.
   free(fileName);
   cmdListCleanup(cmdLineRoot, cmdPcCtrlRoot);
 
-  // Final stack trace element for error/interrupt that occured at
-  // lower level
+  // Final stack trace element for error/interrupt that occured at lower level
   if (retVal == CMD_RET_RECOVER && listExecDepth == 0)
     printf(CMD_STACK_ROOT_FMT, fileExecDepth, __progname, cmdLine->input);
 
@@ -771,7 +748,7 @@ int doHelpCmd(cmdLine_t *cmdLine)
   }
 
   // Print dictionary of command(s) where '.' is all
-  retVal = cmdDictPrint(argWord[1]);
+  retVal = dictPrint(argWord[1]);
   if (retVal != CMD_RET_OK)
     printf("%s? invalid\n", cmdLine->cmdCommand->cmdArg[0].argName);
 
@@ -813,39 +790,22 @@ int doIf(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
-  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
-  char *input = cmdLine->input;
-  int retVal;
-
-  // Init the control block structure when needed
-  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
-  {
-    // Scan the command line for the if-then arguments
-    cmdArgInit(&input);
-    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-      GLCD_FALSE);
-    if (retVal != CMD_RET_OK)
-      return retVal;
-
-    // Copy the condition expression for the if-then
-    cmdPcCtrlChild->cbArg1 = cmdPcCtrlArgCreate(argWord[1]);
-    cmdPcCtrlChild->initialized = GLCD_TRUE;
-  }
+  cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
 
   // Evaluate the condition expression
-  EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
+  if (exprEvaluate(cmdArg[0].argName, cmdLine->args[0]) != CMD_RET_OK)
+    return CMD_RET_ERROR;
 
   // Decide where to go depending on the condition result
   if (exprValue != 0)
   {
-    // The if-then block is active and continue on next line
+    // Make the if-then block active and continue on next line
     cmdPcCtrlChild->active = GLCD_TRUE;
     *cmdProgCounter = (*cmdProgCounter)->next;
   }
   else
   {
-    // Jump to if-else-if, if-else or if-end block
+    // Jump to next if-else-if, if-else or if-end block
     *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
   }
 
@@ -862,25 +822,9 @@ int doIfElse(cmdLine_t **cmdProgCounter)
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
   cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
-  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
-  char *input = cmdLine->input;
-  int retVal;
 
-  // Init the control block structure when needed
-  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
-  {
-    // Scan the command line for the if-else parameters
-    cmdArgInit(&input);
-    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-      GLCD_FALSE);
-    if (retVal != CMD_RET_OK)
-      return retVal;
-    cmdPcCtrlChild->initialized = GLCD_TRUE;
-  }
-
-  // Decide where to go depending on whether the preceding block
-  // (if-then or else-if) was active
+  // Decide where to go depending on whether the preceding block (if-then or
+  // else-if) was active
   if (cmdPcCtrlParent->active == GLCD_TRUE)
   {
     // Deactivate preceding block and jump to end-if
@@ -907,28 +851,10 @@ int doIfElseIf(cmdLine_t **cmdProgCounter)
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
   cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
-  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
-  char *input = cmdLine->input;
-  int retVal;
+  cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
 
-  // Init the control block structure when needed
-  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
-  {
-    // Scan the command line for the if-else-if arguments
-    cmdArgInit(&input);
-    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-      GLCD_FALSE);
-    if (retVal != CMD_RET_OK)
-      return retVal;
-
-    // Copy the condition expression for the if-else-if
-    cmdPcCtrlChild->cbArg1 = cmdPcCtrlArgCreate(argWord[1]);
-    cmdPcCtrlChild->initialized = GLCD_TRUE;
-  }
-
-  // Decide where to go depending on whether the preceding block
-  // (if-then or else-if) was active
+  // Decide where to go depending on whether the preceding block (if-then or
+  // else-if) was active
   if (cmdPcCtrlParent->active == GLCD_TRUE)
   {
     // Deactivate preceding block and jump to end-if
@@ -939,12 +865,13 @@ int doIfElseIf(cmdLine_t **cmdProgCounter)
   else
   {
     // Evaluate the condition expression
-    EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
+    if (exprEvaluate(cmdArg[0].argName, cmdLine->args[0]) != CMD_RET_OK)
+      return CMD_RET_ERROR;
 
     // Decide where to go depending on the condition result
     if (exprValue != 0)
     {
-      // The if-else-if block is active and we'll continue on the next line
+      // Make the if-else-if block active and continue on the next line
       cmdPcCtrlChild->active = GLCD_TRUE;
       *cmdProgCounter = (*cmdProgCounter)->next;
     }
@@ -967,19 +894,8 @@ int doIfEnd(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
-  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
-  char *input = cmdLine->input;
-  int retVal;
 
-  // Scan the command line for the if-end parameters
-  cmdArgInit(&input);
-  cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-  retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-    GLCD_FALSE);
-  if (retVal != CMD_RET_OK)
-    return retVal;
-
-  // Deactivate current control block and continue on next line
+  // Deactivate preceding control block (if anyway) and continue on next line
   cmdPcCtrlParent->active = GLCD_FALSE;
   *cmdProgCounter = (*cmdProgCounter)->next;
 
@@ -1008,8 +924,8 @@ int doLcdBacklightSet(cmdLine_t *cmdLine)
 //
 int doLcdCursorReset(cmdLine_t *cmdLine)
 {
-  // Reset the controller hardware cursors to (0,0) and by doing so sync
-  // the y location with the glcd administered cursor y location
+  // Reset the controller hardware cursors to (0,0) and by doing so sync the y
+  // location with the glcd administered cursor y location
   glcdSetAddress(64, 7);
   glcdSetAddress(64, 0);
   glcdSetAddress(0, 7);
@@ -1081,8 +997,8 @@ int doLcdGlutGrSet(cmdLine_t *cmdLine)
   u08 grid = TO_UINT8_T(argDouble[1]);
 
   // Ignore if glut device is not used
-  if (emuArgcArgv.ctrlDeviceArgs.useGlut == GLCD_FALSE)
-    return CMD_RET_OK;;
+  if (ctrlDeviceActive(CTRL_DEVICE_GLUT) == GLCD_FALSE)
+    return CMD_RET_OK;
 
   // Set glut pixel bezel and gridline options on/off
   ctrlLcdGlutGrSet(bezel, grid);
@@ -1142,8 +1058,8 @@ int doLcdNcurGrSet(cmdLine_t *cmdLine)
   u08 backlight = TO_UINT8_T(argDouble[0]);
 
   // Ignore if ncurses device is not used
-  if (emuArgcArgv.ctrlDeviceArgs.useNcurses == GLCD_FALSE)
-    return CMD_RET_OK;;
+  if (ctrlDeviceActive(CTRL_DEVICE_NCURSES) == GLCD_FALSE)
+    return CMD_RET_OK;
 
   // Set ncurses backlight option on/off
   ctrlLcdNcurGrSet(backlight);
@@ -1251,11 +1167,11 @@ int doLcdWrite(cmdLine_t *cmdLine)
 int doMonochron(cmdLine_t *cmdLine)
 {
   u08 myBacklight = 16;
+  u08 startWait = GLCD_FALSE;
   int myKbMode = KB_MODE_LINE;
-  int startMode = CYCLE_NOWAIT;
 
   // Get the start mode
-  startMode = emuStartModeGet(argChar[0]);
+  startWait = emuStartModeGet(argChar[0]);
 
   // Clear active clock (if any)
   emuClockRelease(CMD_ECHO_NO);
@@ -1280,8 +1196,8 @@ int doMonochron(cmdLine_t *cmdLine)
   almTickerAlarm = 0;
   almTickerSnooze = 0;
 
-  // Clear the screen so we won't see any flickering upon
-  // changing the backlight later on
+  // Clear the screen so we won't see any flickering upon changing the
+  // backlight later on
   glcdClearScreen(GLCD_OFF);
 
   // Upon request force the eeprom to init
@@ -1293,20 +1209,20 @@ int doMonochron(cmdLine_t *cmdLine)
   ctrlLcdBacklightSet(myBacklight);
 
   // Init stub event handler used in Monochron
-  stubEventInit(startMode, stubHelpMonochron);
+  stubEventInit(startWait, stubHelpMonochron);
 
   // Start Monochron and witness the magic :-)
   monoMain();
 
   // We're done.
-  // Restore the clock pool that mchron supports (as it was overridden
-  // by the Monochron clock pool). By clearing the active clock from that
-  // pool also any audible alarm will be stopped and reset.
+  // Restore the clock pool that mchron supports (as it was overridden by the
+  // Monochron clock pool). By clearing the active clock from that pool also
+  // any audible alarm will be stopped and reset.
   mcClockPool = emuMonochron;
   emuClockRelease(CMD_ECHO_NO);
 
-  // Restore alarm, foreground/background color and backlight as they
-  // were prior to starting Monochron
+  // Restore alarm, foreground/background color and backlight as they were
+  // prior to starting Monochron
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
   mcBgColor = emuBgColor;
@@ -1537,43 +1453,27 @@ int doRepeatFor(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
-  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
-  char *input = cmdLine->input;
-  int retVal;
-
-  // Init the control block structure when needed
-  if (cmdPcCtrlChild->initialized == GLCD_FALSE)
-  {
-    // Scan the command line for the repeat arguments
-    cmdArgInit(&input);
-    cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-      GLCD_FALSE);
-    if (retVal != CMD_RET_OK)
-      return retVal;
-
-    // Copy the expressions for the init, condition and post arguments
-    cmdPcCtrlChild->cbArg1 = cmdPcCtrlArgCreate(argWord[1]);
-    cmdPcCtrlChild->cbArg2 = cmdPcCtrlArgCreate(argWord[2]);
-    cmdPcCtrlChild->cbArg3 = cmdPcCtrlArgCreate(argWord[3]);
-    cmdPcCtrlChild->initialized = GLCD_TRUE;
-  }
+  cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
 
   // Execute the repeat logic
   if (cmdPcCtrlChild->active == GLCD_FALSE)
   {
-    // First entry for this loop. Make the repeat active, then evaluate
-    // the repeat init and the repeat condition expressions.
+    // First entry for this loop. Make the repeat active, then evaluate the
+    // repeat init and the repeat condition expressions.
     cmdPcCtrlChild->active = GLCD_TRUE;
-    EXPR_EVALUATE(cmdCommand->cmdArg[0].argName, cmdPcCtrlChild->cbArg1);
-    EXPR_EVALUATE(cmdCommand->cmdArg[1].argName, cmdPcCtrlChild->cbArg2);
+    if (exprEvaluate(cmdArg[0].argName, cmdLine->args[0]) != CMD_RET_OK)
+      return CMD_RET_ERROR;
+    if (exprEvaluate(cmdArg[1].argName, cmdLine->args[1]) != CMD_RET_OK)
+      return CMD_RET_ERROR;
   }
   else
   {
-    // For a next repeat loop first evaluate the step expression and
-    // then re-evaluate the repeat condition expression
-    EXPR_EVALUATE(cmdCommand->cmdArg[2].argName, cmdPcCtrlChild->cbArg3);
-    EXPR_EVALUATE(cmdCommand->cmdArg[1].argName, cmdPcCtrlChild->cbArg2);
+    // For a next repeat loop first evaluate the step expression and then
+    // re-evaluate the repeat condition expression
+    if (exprEvaluate(cmdArg[2].argName, cmdLine->args[2]) != CMD_RET_OK)
+      return CMD_RET_ERROR;
+    if (exprEvaluate(cmdArg[1].argName, cmdLine->args[1]) != CMD_RET_OK)
+      return CMD_RET_ERROR;
   }
 
   // Decide where to go depending on the repeat condition result
@@ -1601,23 +1501,12 @@ int doRepeatNext(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
-  cmdCommand_t *cmdCommand = cmdLine->cmdCommand;
-  char *input = cmdLine->input;
-  int retVal;
-
-  // Scan and validate the repeat next command line
-  cmdArgInit(&input);
-  cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-  retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount, &input,
-    GLCD_FALSE);
-  if (retVal != CMD_RET_OK)
-    return retVal;
 
   // Decide where to go depending on whether the loop is still active
   if (cmdPcCtrlParent->active == GLCD_TRUE)
   {
-    // Jump back to top of repeat (and evaluate there whether the repeat
-    // loop will continue)
+    // Jump back to top of repeat (and evaluate there whether the repeat loop
+    // will continue)
     *cmdProgCounter = cmdPcCtrlParent->cmdLineParent;
   }
   else
@@ -1642,7 +1531,7 @@ int doStatsPrint(cmdLine_t *cmdLine)
   stubStatsPrint();
 
   // Print glcd interface and lcd performance statistics
-  ctrlStatsPrint(CTRL_STATS_FULL);
+  ctrlStatsPrint(CTRL_STATS_ALL);
 
   return CMD_RET_OK;
 }
@@ -1658,7 +1547,7 @@ int doStatsReset(cmdLine_t *cmdLine)
   stubStatsReset();
 
   // Reset glcd interface and lcd performance statistics
-  ctrlStatsReset(CTRL_STATS_FULL);
+  ctrlStatsReset(CTRL_STATS_ALL);
 
   if (echoCmd == CMD_ECHO_YES)
     printf("statistics reset\n");

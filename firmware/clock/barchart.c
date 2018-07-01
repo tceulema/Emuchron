@@ -30,7 +30,6 @@
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcFgColor;
 
 //
 // Function: spotBarChartCycle

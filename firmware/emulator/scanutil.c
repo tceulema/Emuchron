@@ -1,13 +1,12 @@
 //*****************************************************************************
 // Filename : 'scanutil.c'
-// Title    : Utilities for mchron command line scanning, command dictionary
-//            and readline command cache with history
+// Title    : Utility routines for mchron command line scanning, input stream
+//            handling and command history caching
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <math.h>
 #include <regex.h>
 #include <readline/readline.h>
@@ -15,9 +14,9 @@
 
 // Monochron and emuchron defines
 #include "../ks0108.h"
-#include "scanutil.h"
-#include "mchrondict.h"
 #include "expr.h"
+#include "dictutil.h"
+#include "scanutil.h"
 
 // The command line input stream batch size for a single line
 #define CMD_BUILD_LEN		128
@@ -34,7 +33,7 @@ extern unsigned char exprAssign;
 // This is me
 extern const char *__progname;
 
-// The variables to store the command line argument scan results
+// The variables to store the published command line argument scan results
 char argChar[ARG_TYPE_COUNT_MAX];
 double argDouble[ARG_TYPE_COUNT_MAX];
 char *argWord[ARG_TYPE_COUNT_MAX];
@@ -50,310 +49,347 @@ static int rlCacheLen = 0;
 static char *rlHistoryFile = NULL;
 
 // Local function prototypes
-static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue, int silent);
-static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue, int silent);
-static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue, int silent);
-static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue, int silent);
-static void cmdDictCmdPrint(cmdCommand_t *cmdCommand);
+static char *cmdArgCreate(char *arg, int len, int isExpr);
+static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue);
+static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue);
+static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue);
+static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue);
+
+//
+// Function: cmdArgCleanup
+//
+// Cleanup the split-up command arguments in a command line
+//
+void cmdArgCleanup(cmdLine_t *cmdLine)
+{
+  int i;
+
+  // Anything to clean?
+  cmdLine->initialized = GLCD_FALSE;
+  if (cmdLine->args == NULL)
+    return;
+
+  // Clean each of the command argument values
+  for (i = 0; i < cmdLine->cmdCommand->argCount; i++)
+  {
+    if (cmdLine->args[i] != NULL)
+      free(cmdLine->args[i]);
+  }
+
+  // Clean the argument array
+  free(cmdLine->args);
+  cmdLine->args = NULL;
+}
+
+//
+// Function: cmdArgCreate
+//
+// Allocate memory for a command argument and copy its text into it.
+// The argument text to copy will not include a trailing '\0' so we'll have to
+// add it ourselves.
+// For an argument that is to result in a numeric value add a '\n' to its
+// expression as per expression evaluator requirement.
+//
+static char *cmdArgCreate(char *arg, int len, int isExpr)
+{
+  int closeLen = 1;
+  char *cmdArg;
+
+  // Do we need to reserve space for adding a '\n' to the argument
+  if (isExpr == GLCD_TRUE)
+    closeLen = 2;
+
+  // Allocate memory and copy the argument into it
+  cmdArg = malloc(len + closeLen);
+  memcpy(cmdArg, arg, (size_t)len);
+
+  // Do we need to add a '\n' or just stick with adding a trailing '\0'
+  if (isExpr == GLCD_TRUE)
+  {
+    cmdArg[len] = '\n';
+    cmdArg[len + 1] = '\0';
+  }
+  else
+  {
+    cmdArg[len] = '\0';
+  }
+
+  return cmdArg;
+}
 
 //
 // Function: cmdArgInit
 //
-// Preprocess the input string by skipping to the first non-white
-// character. And, clear previous scan results by initializing the
-// indices in the scan result arrays and freeing malloc-ed string
-// space.
+// Preprocess the input string by skipping to the first non-white character,
+// scan the mchron command and get its associated command dictionary.
+// When done the input pointer points to the start of the first command
+// argument or '\0'.
 //
-void cmdArgInit(char **input)
+int cmdArgInit(char **input, cmdLine_t *cmdLine)
 {
+  char *workPtr;
+  char *name;
+  char nameEnd;
   int i = 0;
-  int argFound = GLCD_FALSE;
-  char *argInput = *input;
 
-  // Skip to first non-white character or stop at end of string
-  while (*argInput != '\0' && argFound == GLCD_FALSE)
+  // Verify empty command
+  *input = cmdLine->input + strspn(cmdLine->input, " \t");
+  if (**input == '\0')
   {
-    if (*argInput != ' ' && *argInput != '\t')
-      argFound = GLCD_TRUE;
-    else
-      argInput++;
-  }
-  *input = argInput;
-
-  // Reset the contents of the scan result arrays and scan string
-  for (i = 0; i < ARG_TYPE_COUNT_MAX; i++)
-  {
-    argChar[i] = '\0';
-    argDouble[i] = 0;
-    if (argWord[i] != NULL)
-    {
-      free(argWord[i]);
-      argWord[i] = NULL;
-    }
-  }
-  if (argString != NULL)
-  {
-    free(argString);
-    argString = NULL;
+    cmdLine->initialized = GLCD_TRUE;
+    return CMD_RET_OK;
   }
 
-  // Reset the indices in the scan result arrays
-  argCharIdx = 0;
-  argDoubleIdx = 0;
-  argWordIdx = 0;
+  // Get the command
+  workPtr = *input;
+  name = *input;
+
+  // First find whitespace char that marks the end of the mchron command and
+  // skip to next argument (if any)
+  i = strcspn(workPtr, " \t");
+  workPtr = workPtr + i;
+  *input = workPtr + strspn(workPtr, " \t");
+
+  // Find associated command dictionary for the command (if still unknown)
+  if (cmdLine->cmdCommand == NULL)
+  {
+    // Temporarily mark end-of-string to obtain dictionary info
+    nameEnd = name[i];
+    name[i] = '\0';
+    cmdLine->cmdCommand = dictCmdGet(name);
+    name[i] = nameEnd;
+    if (cmdLine->cmdCommand == NULL)
+      return CMD_RET_ERROR;
+  }
+  return CMD_RET_OK;
 }
 
 //
-// Function: cmdArgScan
+// Function: cmdArgPublish
 //
-// Scan a (partial) argument profile.
-// For a char, word or string profile just copy the char/string value
-// into the designated array or string argument variable.
-// For a numeric profile though copy the string expression and push
-// it through the expression evaluator to get a resulting numeric
-// value. When a valid numeric value is obtained copy it into the
-// designated double array variable.
-// Parameter input is modified to point to the remaining string to be
-// scanned.
+// Publish the command line arguments of a command line to the defined command
+// argument variables: argChar[], argDouble[], argWord[] and argString.
+// In case of a non-numeric argument type its domain profile has already been
+// checked. In case of a numeric argument we need to run it through the
+// expression evaluator and then check its domain profile.
 //
-int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
+int cmdArgPublish(cmdLine_t *cmdLine)
 {
-  char *workPtr = *input;
-  char *evalString;
+  cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
+  int argCount = cmdLine->cmdCommand->argCount;
   int i = 0;
-  int j = 0;
+  int argType;
   int retVal = CMD_RET_OK;
 
-  while (i < argCount)
+  // Reset the argument array pointers and set number of args to publish
+  argCharIdx = 0;
+  argDoubleIdx = 0;
+  argWordIdx = 0;
+
+  // First publish the command name
+  argWord[argWordIdx] = cmdLine->cmdCommand->cmdName;
+  argWordIdx++;
+
+  // Publish all other arguments (if any remain)
+  for (i = 0; i < argCount; i++)
   {
-    char c = *workPtr;
-
-    if (cmdArg[i].argType == ARG_CHAR)
+    argType = cmdArg[i].argType;
+    if (argType == ARG_CHAR)
     {
-      // Scan a single character argument profile
-
-      // Verify argument count overflow
+      // Verify argument count overflow and publish the char argument
       if (argCharIdx == ARG_TYPE_COUNT_MAX)
       {
         printf("%s? internal: overflow char argument count\n",
           cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
-
-      // Verify end-of-string
-      if (c == '\0')
-      {
-        if (silent == GLCD_FALSE)
-          printf("%s? missing value\n", cmdArg[i].argName);
-        return CMD_RET_ERROR;
-      }
-
-      // The next character must be white space or end of string
-      if (strcspn(workPtr, " \t") > 1)
-      {
-        if (silent == GLCD_FALSE)
-          printf("%s? invalid: not a single character\n",
-            cmdArg[i].argName);
-        return CMD_RET_ERROR;
-      }
-      workPtr++;
-
-      // Validate the character (if a validation rule has been setup)
-      if (cmdArg[i].cmdArgDomain->argDomainType != DOM_NULL_INFO)
-      {
-        retVal = cmdArgValidateChar(&cmdArg[i], c, silent);
-        if (retVal != CMD_RET_OK)
-          return retVal;
-      }
-
-      // Value approved so copy the char argument
-      argChar[argCharIdx] = c;
+      argChar[argCharIdx] = cmdLine->args[i][0];
       argCharIdx++;
-
-      // Skip to next argument element in string
-      workPtr = workPtr + strspn(workPtr, " \t");
-
-      // Next argument profile
-      i++;
     }
-    else if (cmdArg[i].argType == ARG_UNUM || cmdArg[i].argType == ARG_NUM ||
-             cmdArg[i].argType == ARG_ASSIGN)
+    else if (argType == ARG_UNUM || argType == ARG_NUM ||
+      argType == ARG_ASSIGN)
     {
-      // Scan an (unsigned) number argument profile.
-      // A number profile is an expression that can be a constant, a variable,
-      // a combination of both or a variable value assignment in a mathematical
-      // expression. We'll use flex/bison to evaluate the expression.
-
       // Verify argument count overflow
-      if (argCharIdx == ARG_TYPE_COUNT_MAX)
+      if (argDoubleIdx == ARG_TYPE_COUNT_MAX)
       {
         printf("%s? internal: overflow numeric argument count\n",
           cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
 
-      // Verify end-of-string
-      if (c == '\0')
-      {
-        if (silent == GLCD_FALSE)
-          printf("%s? missing value\n", cmdArg[i].argName);
-        return CMD_RET_ERROR;
-      }
-
-      // Copy the expression upto next delimeter
-      j = strcspn(workPtr, " \t");
-      evalString = malloc(j + 2);
-      memcpy(evalString, workPtr, j);
-      evalString[j] = '\n';
-      evalString[j+1] = '\0';
-      workPtr = workPtr + j;
-
-      // Evaluate the expression
-      retVal = exprEvaluate(cmdArg[i].argName, evalString, j + 1);
-      free(evalString);
+      // Evaluate expression and validate numeric type and expression value
+      retVal = exprEvaluate(cmdArg[i].argName, cmdLine->args[i]);
       if (retVal != CMD_RET_OK)
         return CMD_RET_ERROR;
-
-      // Validate unsigned number
-      if (cmdArg[i].argType == ARG_UNUM && exprValue < 0)
+      if (argType == ARG_UNUM && exprValue < 0)
       {
-        if (silent == GLCD_FALSE)
-        {
-          printf("%s? invalid: ", cmdArg[i].argName);
-          cmdArgValuePrint(exprValue, GLCD_FALSE);
-          printf("\n");
-        }
+        printf("%s? invalid: ", cmdArg[i].argName);
+        cmdArgValuePrint(exprValue, GLCD_FALSE);
+        printf("\n");
         return CMD_RET_ERROR;
       }
-
-      // Validate assignment expression
-      if (cmdArg[i].argType == ARG_ASSIGN && exprAssign == 0)
+      if (argType == ARG_ASSIGN && exprAssign == 0)
       {
-        if (silent == GLCD_FALSE)
-          printf("%s? syntax error\n", cmdArg[i].argName);
+        printf("%s? syntax error\n", cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
-
-      // Validate the number (if a validation rule has been setup)
       if (cmdArg[i].cmdArgDomain->argDomainType != DOM_NULL_INFO)
       {
-        retVal = cmdArgValidateNum(&cmdArg[i], exprValue, silent);
+        retVal = cmdArgValidateNum(&cmdArg[i], exprValue);
         if (retVal != CMD_RET_OK)
           return retVal;
       }
 
-      // Value approved so copy the resulting value of the expression
+      // Publish the resulting value of the expression
       argDouble[argDoubleIdx] = exprValue;
       argDoubleIdx++;
-
-      // Skip to next argument element in string
-      workPtr = workPtr + strspn(workPtr, " \t");
-
-      // Next argument profile
-      i++;
     }
-    else if (cmdArg[i].argType == ARG_WORD)
+    else if (argType == ARG_WORD)
     {
-      // Scan a character word argument profile
-
-      // Verify argument count overflow
-      if (argCharIdx == ARG_TYPE_COUNT_MAX)
+      // Verify argument count overflow and publish the word argument
+      if (argWordIdx == ARG_TYPE_COUNT_MAX)
       {
         printf("%s? internal: overflow word argument count\n",
           cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
+      argWord[argWordIdx] = cmdLine->args[i];
+      argWordIdx++;
+    }
+    else if (argType == ARG_STRING || argType == ARG_STR_OPT)
+    {
+      // Publish the string argument
+      argString = cmdLine->args[i];
+    }
+    else
+    {
+      printf("internal: invalid element: %d %d\n", i, argType);
+      return CMD_RET_ERROR;
+    }
+  }
 
-      // Verify end-of-string
-      if (c == '\0')
+  return retVal;
+}
+
+//
+// Function: cmdArgRead
+//
+// Scan the argument profile for a command. Copy each argument into a malloc'ed
+// command argument list pointer array in the command line.
+// Note: We assume that *input points to the first non-white character after
+//       the command name or to '\0'.
+//
+int cmdArgRead(char *input, cmdLine_t *cmdLine)
+{
+  char *workPtr = input;
+  char c;
+  cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
+  int argType;
+  int argCount = cmdLine->cmdCommand->argCount;
+  int i = 0;
+  int j = 0;
+  int retVal = CMD_RET_OK;
+
+  // Allocate and init pointer array for split-up command line arguments
+  if (argCount > 0)
+  {
+    cmdLine->args = malloc(sizeof(cmdLine->args) * argCount);
+    for (j = 0; j < argCount; j++)
+      cmdLine->args[j] = NULL;
+  }
+
+  // Scan each command argument
+  for (i = 0; i < argCount; i++)
+  {
+    c = *workPtr;
+    argType = cmdArg[i].argType;
+
+    // Verify unexpected end-of-string
+    if (argType != ARG_STR_OPT && c == '\0')
+    {
+      printf("%s? missing value\n", cmdArg[i].argName);
+      return CMD_RET_ERROR;
+    }
+
+    // Scan argument based on argument type
+    if (argType == ARG_CHAR)
+    {
+      // Scan and copy a single char argument
+      j = strcspn(workPtr, " \t");
+      if (j > 1)
       {
-        if (silent == GLCD_FALSE)
-          printf("%s? missing value\n", cmdArg[i].argName);
+        printf("%s? invalid: not a single character\n", cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
+      cmdLine->args[i] = cmdArgCreate(workPtr, 1, GLCD_FALSE);
 
-      // Value exists so copy the word upto next delimeter
+      // Validate the character (if a validation rule has been setup)
+      if (cmdArg[i].cmdArgDomain->argDomainType != DOM_NULL_INFO)
+      {
+        retVal = cmdArgValidateChar(&cmdArg[i], *cmdLine->args[i]);
+        if (retVal != CMD_RET_OK)
+          return retVal;
+      }
+    }
+    else if (argType == ARG_UNUM || argType == ARG_NUM ||
+             argType == ARG_ASSIGN)
+    {
+      // Copy the flex/bison expression argument up to next delimeter.
+      // Validation is done at runtime when the expression is evaluated.
       j = strcspn(workPtr, " \t");
-      argWord[argWordIdx] = malloc(j + 1);
-      memcpy(argWord[argWordIdx], workPtr, j);
-      argWord[argWordIdx][j] = '\0';
-      workPtr = workPtr + j;
-      argWordIdx++;
+      cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_TRUE);
+    }
+    else if (argType == ARG_WORD)
+    {
+      // Copy the word argument up to next delimeter
+      j = strcspn(workPtr, " \t");
+      cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
 
       // Validate the word (if a validation rule has been setup)
-      if (cmdArg[i].argType == ARG_WORD)
+      if (argType == ARG_WORD)
       {
-        if (cmdArg[i].cmdArgDomain->argDomainType == DOM_WORD_LIST)
+        if (cmdArg[i].cmdArgDomain->argDomainType == DOM_WORD)
         {
-          retVal = cmdArgValidateWord(&cmdArg[i], argWord[argWordIdx - 1],
-            silent);
+          retVal = cmdArgValidateWord(&cmdArg[i], cmdLine->args[i]);
           if (retVal != CMD_RET_OK)
             return retVal;
         }
         else if (cmdArg[i].cmdArgDomain->argDomainType == DOM_VAR_NAME ||
             cmdArg[i].cmdArgDomain->argDomainType == DOM_VAR_NAME_ALL)
         {
-          retVal = cmdArgValidateVar(&cmdArg[i], argWord[argWordIdx - 1],
-            silent);
+          retVal = cmdArgValidateVar(&cmdArg[i], cmdLine->args[i]);
           if (retVal != CMD_RET_OK)
             return retVal;
         }
       }
-
-      // Skip to next argument element in string
-      workPtr = workPtr + strspn(workPtr, " \t");
-
-      // Next argument profile
-      i++;
     }
-    else if (cmdArg[i].argType == ARG_STRING ||
-             cmdArg[i].argType == ARG_STR_OPT)
+    else if (argType == ARG_STRING || argType == ARG_STR_OPT)
     {
-      // Scan a character string argument profile
-
-      // Verify end-of-string that will be an error only in case
-      // a string must be specified (is optional for comments)
-      if (c == '\0' && cmdArg[i].argType == ARG_STRING)
-      {
-        if (silent == GLCD_FALSE)
-          printf("%s? missing value\n", cmdArg[i].argName);
-        return CMD_RET_ERROR;
-      }
-
-      // As the remainder of the input string is to be considered
-      // the string argument we skip to the end of the input string
+      // Copy the remainder of the input string (that may be empty)
       j = strlen(workPtr);
-      argString = malloc(j + 1);
-      memcpy(argString, workPtr, j + 1);
-      workPtr = workPtr + j;
-
-      // Next argument profile
-      i++;
-    }
-    else if (cmdArg[i].argType == ARG_END)
-    {
-      // Scan an end-of-line argument profile
-
-      // Verify end-of-line
-      if (c != '\0')
-      {
-        if (silent == GLCD_FALSE)
-          printf("command %s? too many arguments\n", argWord[0]);
-        return CMD_RET_ERROR;
-      }
-
-      // Next argument profile
-      i++;
+      cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
     }
     else
     {
-      printf("internal: invalid element: %d %d\n", i, cmdArg[i].argType);
+      printf("internal: invalid element: %d %d\n", i, argType);
       return CMD_RET_ERROR;
     }
+
+    // Skip to next argument in input string
+    workPtr = workPtr + j;
+    workPtr = workPtr + strspn(workPtr, " \t");
+  }
+
+  // Verify end-of-line
+  if (*workPtr != '\0')
+  {
+    printf("command %s? too many arguments\n",
+      cmdLine->cmdCommand->cmdName);
+    return CMD_RET_ERROR;
   }
 
   // Successful scan
-  *input = workPtr;
+  cmdLine->initialized = GLCD_TRUE;
   return CMD_RET_OK;
 }
 
@@ -362,13 +398,13 @@ int cmdArgScan(cmdArg_t cmdArg[], int argCount, char **input, int silent)
 //
 // Validate a character argument with a validation profile
 //
-static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue, int silent)
+static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue)
 {
   int i = 0;
   int charFound = GLCD_FALSE;
   char *argCharList = cmdArg->cmdArgDomain->argTextList;
 
-  if (cmdArg->cmdArgDomain->argDomainType != DOM_CHAR_LIST)
+  if (cmdArg->cmdArgDomain->argDomainType != DOM_CHAR)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
     return CMD_RET_ERROR;
@@ -385,8 +421,7 @@ static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue, int silent)
   // Return error if not found
   if (charFound == GLCD_FALSE)
   {
-    if (silent == GLCD_FALSE)
-      printf("%s? unknown: %c\n", cmdArg->argName, argValue);
+    printf("%s? unknown: %c\n", cmdArg->argName, argValue);
     return CMD_RET_ERROR;
   }
 
@@ -398,7 +433,7 @@ static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue, int silent)
 //
 // Validate a numeric argument with a validation profile
 //
-static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue, int silent)
+static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
 {
   int argDomainType = cmdArg->cmdArgDomain->argDomainType;
 
@@ -415,12 +450,9 @@ static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue, int silent)
   {
     if (argValue < cmdArg->cmdArgDomain->argNumMin)
     {
-      if (silent == GLCD_FALSE)
-      {
-        printf("%s? invalid: ", cmdArg->argName);
-        cmdArgValuePrint(argValue, GLCD_FALSE);
-        printf("\n");
-      }
+      printf("%s? invalid: ", cmdArg->argName);
+      cmdArgValuePrint(argValue, GLCD_FALSE);
+      printf("\n");
       return CMD_RET_ERROR;
     }
   }
@@ -430,12 +462,9 @@ static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue, int silent)
   {
     if (argValue - cmdArg->cmdArgDomain->argNumMax >= 1)
     {
-      if (silent == GLCD_FALSE)
-      {
-        printf("%s? invalid: ", cmdArg->argName);
-        cmdArgValuePrint(argValue, GLCD_FALSE);
-        printf("\n");
-      }
+      printf("%s? invalid: ", cmdArg->argName);
+      cmdArgValuePrint(argValue, GLCD_FALSE);
+      printf("\n");
       return CMD_RET_ERROR;
     }
   }
@@ -447,14 +476,15 @@ static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue, int silent)
 // Function: cmdArgValidateVar
 //
 // Validate a variable name. When used in an expression, variable names are
-// validated in the expression evaluator. For commands 'vr' and 'lr' however
-// we take the variable name as a word input and we must validate ourselves
-// whether it consists of [a-zA-Z_] characters, and for ''vr' where it may also
+// validated in the expression evaluator. For commands 'vr' and 'lr' however we
+// take the variable name as a word input and we must validate ourselves
+// whether it consists of [a-zA-Z_] characters, and for 'vr' where it may also
 // be a '.'.
-// Note that when the scan profile for a variable name (as defined in expr.l
-// [firmware/emulator]) is modified, this function must be changed as well.
 //
-static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue, int silent)
+// NOTE: When the scan profile for a variable name, as defined in expr.l
+// [firmware/emulator], is modified, this function must be changed as well.
+//
+static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue)
 {
   regex_t regex;
   int status = 0;
@@ -476,8 +506,7 @@ static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue, int silent)
   if (status != 0)
   {
     // Invalid variable name character found
-    if (silent == GLCD_FALSE)
-      printf("%s? invalid\n", cmdArg->argName);
+    printf("%s? invalid\n", cmdArg->argName);
     return CMD_RET_ERROR;
   }
 
@@ -489,14 +518,14 @@ static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue, int silent)
 //
 // Validate a word argument with a validation profile
 //
-static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue, int silent)
+static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
 {
   int i = 0;
   int j = 0;
   int wordFound = GLCD_FALSE;
   char *argWordList = cmdArg->cmdArgDomain->argTextList;
 
-  if (cmdArg->cmdArgDomain->argDomainType != DOM_WORD_LIST)
+  if (cmdArg->cmdArgDomain->argDomainType != DOM_WORD)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
     return CMD_RET_ERROR;
@@ -539,16 +568,15 @@ static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue, int silent)
     }
   }
 
-  // In case we reached the end of the validation string we have a match
-  // when the input string also reached the end
+  // In case we reached the end of the validation string we have a match when
+  // the input string also reached the end
   if (wordFound == GLCD_FALSE && argValue[j] == '\0')
     wordFound = GLCD_TRUE;
 
   // Return error if not found
   if (wordFound == GLCD_FALSE)
   {
-    if (silent == GLCD_FALSE)
-      printf("%s? unknown: %s\n", cmdArg->argName, argValue);
+    printf("%s? unknown: %s\n", cmdArg->argName, argValue);
     return CMD_RET_ERROR;
   }
 
@@ -590,260 +618,10 @@ int cmdArgValuePrint(double value, int detail)
 }
 
 //
-// Function: cmdDictCmdGet
-//
-// Get the dictionary entry for an mchron command
-//
-int cmdDictCmdGet(char *cmd, cmdCommand_t **cmdCommand)
-{
-  int i;
-  int dictIdx = 0;
-  int retVal;
-
-  // Get index in dictionary for command group (#, a..z) or return an
-  // error when not a valid command group is provided
-  if (*cmd == '#')
-    dictIdx = 0;
-  else if (*cmd >= 'a' && *cmd <= 'z')
-    dictIdx = *cmd - 'a' + 1;
-  else
-    return CMD_RET_ERROR;
-
-  // Get first commmand in command group dictionary and loop
-  // through available commands
-  *cmdCommand = cmdDictMchron[dictIdx].cmdCommand;
-  for (i = 0; i < cmdDictMchron[dictIdx].commandCount; i++)
-  {
-    retVal = strcmp(cmd, (*cmdCommand)->cmdName);
-    if (retVal == 0)
-    {
-      // Found the command we're looking for
-      return CMD_RET_OK;
-    }
-    else if (retVal < 0)
-    {
-      // Not found and will not find it based on alphabetical order
-      return CMD_RET_ERROR;
-    }
-
-    // Not found yet; get next entry
-    (*cmdCommand)++;
-  }
-
-  // Dictionary entry not found
-  return CMD_RET_ERROR;
-}
-
-//
-// Function: cmdDictCmdPrint
-//
-// Print the dictionary contents of a command in the mchron command dictionary
-//
-static void cmdDictCmdPrint(cmdCommand_t *cmdCommand)
-{
-  int argCount = 0;
-  cmdArg_t *cmdArg;
-  cmdArgDomain_t *cmdArgDomain;
-  char *domainChar;
-
-  // Command name and description
-  printf("command: %s (%s)\n", cmdCommand->cmdName, cmdCommand->cmdNameDescr);
-
-  // Command usage
-  printf("usage  : %s ", cmdCommand->cmdName);
-  for (argCount = 0; argCount < cmdCommand->argCount; argCount++)
-  {
-    if (cmdCommand->cmdArg[argCount].argType != ARG_END)
-      printf("<%s> ", cmdCommand->cmdArg[argCount].argName);
-  }
-  printf("\n");
-
-  // Command argument info (name + domain)
-  for (argCount = 0; argCount < cmdCommand->argCount; argCount++)
-  {
-    // Get argument
-    cmdArg = &cmdCommand->cmdArg[argCount];
-
-    if (cmdArg->argType != ARG_END)
-    {
-      // Argument name
-      printf("         %s: ", cmdArg->argName);
-
-      // Get argument domain structure
-      cmdArgDomain = cmdArg->cmdArgDomain;
-
-      // Argument domain info
-      switch (cmdArg->argType)
-      {
-      case ARG_CHAR:
-        if (cmdArgDomain->argDomainType != DOM_NULL_INFO)
-        {
-          // Detailed domain profile
-          domainChar = cmdArgDomain->argTextList;
-          while (*domainChar != '\0')
-          {
-            printf("'%c'", *domainChar);
-            domainChar++;
-            if (*domainChar != '\0')
-              printf(",");
-          }
-        }
-        break;
-      case ARG_WORD:
-        if (cmdArgDomain->argDomainType == DOM_WORD_LIST)
-        {
-          // Detailed domain profile
-          printf("'");
-          domainChar = cmdArgDomain->argTextList;
-          while (*domainChar != '\0')
-          {
-            if (*domainChar == '\n')
-              printf("','");
-            else
-              printf("%c", *domainChar);
-            domainChar++;
-          }
-          printf("'");
-        }
-        break;
-      case ARG_UNUM:
-        if (cmdArgDomain->argDomainType != DOM_NULL_INFO)
-        {
-          // Detailed domain profile
-          switch (cmdArgDomain->argDomainType)
-          {
-          case DOM_NUM_RANGE:
-            if (fabs(cmdArgDomain->argNumMax - cmdArgDomain->argNumMin) == 1)
-              printf("%d, %d", (int)cmdArgDomain->argNumMin,
-                (int)cmdArgDomain->argNumMax);
-            else
-              printf("%d..%d", (int)cmdArgDomain->argNumMin,
-                (int)cmdArgDomain->argNumMax);
-            break;
-          case DOM_NUM_MAX:
-            if (cmdArgDomain->argNumMax == 1)
-              printf("0, %d", (int)cmdArgDomain->argNumMax);
-            else
-              printf("0..%d", (int)cmdArgDomain->argNumMax);
-            break;
-          case DOM_NUM_MIN:
-            printf(">=%d", (int)cmdArgDomain->argNumMin);
-            break;
-          default:
-            printf("*** internal: invalid domain profile");
-            break;
-          }
-        }
-        break;
-      case ARG_NUM:
-        if (cmdArgDomain->argDomainType != DOM_NULL_INFO)
-        {
-          switch (cmdArgDomain->argDomainType)
-          {
-          case DOM_NUM_RANGE:
-            if (fabs(cmdArgDomain->argNumMax - cmdArgDomain->argNumMin) == 1)
-              printf("%d, %d", (int)cmdArgDomain->argNumMin,
-                (int)cmdArgDomain->argNumMax);
-            else
-              printf("%d..%d", (int)cmdArgDomain->argNumMin,
-                (int)cmdArgDomain->argNumMax);
-            break;
-          case DOM_NUM_MAX:
-            printf("<=%d", (int)cmdArgDomain->argNumMax);
-            break;
-          case DOM_NUM_MIN:
-            printf(">=%d", (int)cmdArgDomain->argNumMin);
-            break;
-          default:
-            printf("*** internal: invalid domain profile");
-            break;
-          }
-        }
-        break;
-      case ARG_STRING:
-      case ARG_STR_OPT:
-      case ARG_ASSIGN:
-        // An (optional) string will only have an info domain profile
-        break;
-      default:
-        printf("*** internal: invalid domain profile");
-        break;
-      }
-
-      // Provide argument info
-      if (cmdArgDomain->argDomainType == DOM_NULL_INFO ||
-          cmdArgDomain->argDomainType == DOM_VAR_NAME ||
-          cmdArgDomain->argDomainType == DOM_VAR_NAME_ALL)
-      {
-        // Provide generic domain info
-        printf("%s", cmdArgDomain->argDomainInfo);
-      }
-      else if (cmdArgDomain->argDomainInfo != NULL)
-      {
-        // Provide detailed domain info when present
-        printf(" (%s)", cmdArgDomain->argDomainInfo);
-      }
-      printf("\n");
-    }
-  }
-
-  // Print the actual command handler function name
-  printf("handler: %s()\n", cmdCommand->cmdHandlerName);
-}
-
-//
-// Function: cmdDictPrint
-//
-// Print mchron command dictionary entries using a regexp pattern (where '.'
-// matches every command)
-//
-int cmdDictPrint(char *pattern)
-{
-  regex_t regex;
-  int status = 0;
-  int i;
-  int j;
-  int commandCount = 0;
-
-  // Validate regexp pattern
-  if (regcomp(&regex, pattern, REG_EXTENDED | REG_NOSUB) != 0)
-    return CMD_RET_ERROR;
-
-  // Loop through each command group
-  for (i = 0; i < cmdDictCount; i++)
-  {
-    // Loop through each command in the command group
-    for (j = 0; j < cmdDictMchron[i].commandCount; j++)
-    {
-      // See if command name matches regexp pattern
-      status = regexec(&regex, cmdDictMchron[i].cmdCommand[j].cmdName,
-        (size_t)0, NULL, 0);
-      if (status == 0)
-      {
-        // Print its dictionary
-        printf("------------------------\n");
-        cmdDictCmdPrint(&cmdDictMchron[i].cmdCommand[j]);
-        commandCount++;
-      }
-    }
-  }
-
-  // Statistics
-  if (commandCount > 0)
-    printf("------------------------\n");
-  printf("registered commands: %d\n", commandCount);
-
-  // Cleanup regexp
-  regfree(&regex);
-
-  return CMD_RET_OK;
-}
-
-//
 // Function: cmdInputCleanup
 //
-// Cleanup the input stream by free-ing the last malloc-ed data
-// and cleaning up the readline library interface (when used)
+// Cleanup the input stream by free-ing the last malloc-ed data and cleaning up
+// the readline library interface (when used)
 //
 void cmdInputCleanup(cmdInput_t *cmdInput)
 {
@@ -892,8 +670,8 @@ void cmdInputCleanup(cmdInput_t *cmdInput)
 //
 // Open an input stream in preparation to read its input line by line
 // regardless the line size.
-// Note: It is assumed that the readline method is used only once, being
-// the mchron command line.
+// Note: It is assumed that the readline method is used only once, being the
+// mchron command line.
 //
 void cmdInputInit(cmdInput_t *cmdInput)
 {
@@ -950,11 +728,10 @@ void cmdInputInit(cmdInput_t *cmdInput)
 //
 // Function: cmdInputRead
 //
-// Acquire a single command line by reading the input stream part by
-// part until a newline character is encountered indicating the
-// command end-of-line.
-// Note: The trailing newline character will NOT be copied to the
-// resulting input buffer.
+// Acquire a single command line by reading the input stream part by part until
+// a newline character is encountered indicating the command end-of-line.
+// Note: The trailing newline character will NOT be copied to the resulting
+// input buffer.
 //
 void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
 {
@@ -987,18 +764,17 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
   // Execute the requested input method
   if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
   {
-    // In case we use the readline library input method there's
-    // not much to do
+    // In case we use the readline library input method there's not much to do
     cmdInput->input = readline(prompt);
   }
   else
   {
-    // Use our own input mechanism to read an input line from a
-    // text file. Command line input uses the readline library.
+    // Use our own input mechanism to read an input line from a text file.
+    // Command line input uses the readline library.
     char inputCli[CMD_BUILD_LEN];
     int done = GLCD_FALSE;
     char *inputPtr = NULL;
-    char *mallocPtr = NULL;
+    char *mergePtr = NULL;
     char *buildPtr = NULL;
     int inputLen = 0;
     int inputLenTotal = 0;
@@ -1021,32 +797,32 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
       {
         // Prepare new combined input string
         inputLen = strlen(inputCli);
-        mallocPtr = malloc(inputLenTotal + inputLen + 1);
+        mergePtr = malloc(inputLenTotal + inputLen + 1);
 
         if (inputLenTotal > 0)
         {
-          // Copy string built up so far into new buffer and add
-          // the string that was read just now
-          strcpy(mallocPtr, (const char *)buildPtr);
-          strcpy(&mallocPtr[inputLenTotal], (const char *)inputCli);
+          // Copy string built up so far into new buffer and add the string
+          // that was read just now
+          strcpy(mergePtr, (const char *)buildPtr);
+          strcpy(&mergePtr[inputLenTotal], (const char *)inputCli);
           inputLenTotal = inputLenTotal + inputLen;
           free(buildPtr);
-          buildPtr = mallocPtr;
+          buildPtr = mergePtr;
         }
         else
         {
           // First batch of characters
-          strcpy(mallocPtr, (const char *)inputCli);
+          strcpy(mergePtr, (const char *)inputCli);
           inputLenTotal = inputLen;
-          buildPtr = mallocPtr;
+          buildPtr = mergePtr;
         }
 
         // See if we encountered the end of a line
         if (buildPtr[inputLenTotal - 1] == '\n')
         {
           // Terminating newline: EOL
-          // Remove the newline from input buffer for compatibility
-          // reasons with readline library functionality.
+          // Remove the newline from input buffer for compatibility reasons
+          // with readline library functionality.
           buildPtr[inputLenTotal - 1] = '\0';
           cmdInput->input = buildPtr;
           done = GLCD_TRUE;

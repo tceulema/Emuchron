@@ -4,7 +4,7 @@
 # Purpose: Consider this a performance test for the interpreter/CPU by running
 #          a time consuming loop.
 #          Run this test a few times to average out the result duration.
-#          On a decent Intel VM machine this script takes about 17 secs to run.
+#          On a decent Intel VM machine this script takes about 13 secs to run.
 #
 
 # Clear variables and report start time

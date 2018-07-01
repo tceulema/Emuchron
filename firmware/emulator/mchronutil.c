@@ -40,16 +40,6 @@ extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
 
-// From the variables that store the processed command line arguments
-// we only need the word arguments
-extern char *argWord[];
-
-// The command profile for an mchron command
-extern cmdArg_t argCmd[];
-
-// Current command file execution depth
-extern int fileExecDepth;
-
 // The mchron alarm time
 extern uint8_t emuAlarmH;
 extern uint8_t emuAlarmM;
@@ -60,18 +50,8 @@ extern FILE *stubDebugStream;
 // The command line input stream control structure
 extern cmdInput_t cmdInput;
 
-// The current command echo state
-extern int echoCmd;
-
 // This is me
 extern const char *__progname;
-
-// Data resulting from mchron startup command line processing
-emuArgcArgv_t emuArgcArgv;
-
-// The command list execution depth that is used to determine to
-// actively switch between keyboard line mode and keypress mode
-int listExecDepth = 0;
 
 // Flags indicating active state upon exit
 int invokeExit = GLCD_FALSE;
@@ -85,29 +65,29 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
 //
 // Process mchron startup command line arguments
 //
-int emuArgcArgvGet(int argc, char *argv[])
+int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 {
   FILE *fp;
   int argCount = 1;
-  char *tty = emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty;
+  char *tty = emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.tty;
 
   // Init references to command line argument positions
-  emuArgcArgv.argDebug = 0;
-  emuArgcArgv.argGlutGeometry = 0;
-  emuArgcArgv.argGlutPosition = 0;
-  emuArgcArgv.argTty = 0;
-  emuArgcArgv.argLcdType = 0;
+  emuArgcArgv->argDebug = 0;
+  emuArgcArgv->argGlutGeometry = 0;
+  emuArgcArgv->argGlutPosition = 0;
+  emuArgcArgv->argTty = 0;
+  emuArgcArgv->argLcdType = 0;
 
   // Init the lcd device data
-  emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_FALSE;
-  emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_TRUE;
-  emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty[0] = '\0';
-  emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.winClose = emuWinClose;
-  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posX = 100;
-  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posY = 100;
-  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeX = 520;
-  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeY = 264;
-  emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.winClose = emuWinClose;
+  emuArgcArgv->ctrlDeviceArgs.useNcurses = GLCD_FALSE;
+  emuArgcArgv->ctrlDeviceArgs.useGlut = GLCD_TRUE;
+  emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.tty[0] = '\0';
+  emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.winClose = emuShutdown;
+  emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.posX = 100;
+  emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.posY = 100;
+  emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.sizeX = 520;
+  emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.sizeY = 264;
+  emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.winClose = emuShutdown;
 
   // Do archaic command line processing to obtain the lcd output device(s),
   // lcd output configs and debug logfile
@@ -116,45 +96,45 @@ int emuArgcArgvGet(int argc, char *argv[])
     if (strncmp(argv[argCount], "-d", 4) == 0)
     {
       // Debug output file name
-      emuArgcArgv.argDebug = argCount + 1;
+      emuArgcArgv->argDebug = argCount + 1;
       argCount = argCount + 2;
     }
     else if (strncmp(argv[argCount], "-g", 4) == 0)
     {
       // Glut window geometry
-      emuArgcArgv.argGlutGeometry = argCount + 1;
+      emuArgcArgv->argGlutGeometry = argCount + 1;
       argCount = argCount + 2;
     }
     else if (strncmp(argv[argCount], "-l", 4) == 0)
     {
       // Lcd stub device type
-      emuArgcArgv.argLcdType = argCount + 1;
+      emuArgcArgv->argLcdType = argCount + 1;
       argCount = argCount + 2;
     }
     else if (strncmp(argv[argCount], "-p", 4) == 0)
     {
       // Glut window position
-      emuArgcArgv.argGlutPosition = argCount + 1;
+      emuArgcArgv->argGlutPosition = argCount + 1;
       argCount = argCount + 2;
     }
     else if (strncmp(argv[argCount], "-t", 4) == 0)
     {
       // Ncurses tty device
-      emuArgcArgv.argTty = argCount + 1;
+      emuArgcArgv->argTty = argCount + 1;
       argCount = argCount + 2;
     }
     else
     {
       // Anything else: force to quit
-      emuArgcArgv.argDebug = argc;
+      emuArgcArgv->argDebug = argc;
       argCount = argc;
     }
   }
 
   // Check result of command line processing
-  if (emuArgcArgv.argLcdType >= argc || emuArgcArgv.argDebug >= argc ||
-      emuArgcArgv.argGlutGeometry >= argc || emuArgcArgv.argTty >= argc ||
-      emuArgcArgv.argGlutPosition >= argc)
+  if (emuArgcArgv->argLcdType >= argc || emuArgcArgv->argDebug >= argc ||
+      emuArgcArgv->argGlutGeometry >= argc || emuArgcArgv->argTty >= argc ||
+      emuArgcArgv->argGlutPosition >= argc)
   {
     printf("Use: %s [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]\n", __progname);
     printf("            [-d <logfile>] [-h]\n");
@@ -179,37 +159,37 @@ int emuArgcArgvGet(int argc, char *argv[])
   }
 
   // Validate lcd stub output device
-  if (emuArgcArgv.argLcdType > 0)
+  if (emuArgcArgv->argLcdType > 0)
   {
-    if (strcmp(argv[emuArgcArgv.argLcdType], "glut") == 0)
+    if (strcmp(argv[emuArgcArgv->argLcdType], "glut") == 0)
     {
-      emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_TRUE;
-      emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_FALSE;
+      emuArgcArgv->ctrlDeviceArgs.useGlut = GLCD_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurses = GLCD_FALSE;
     }
-    else if (strcmp(argv[emuArgcArgv.argLcdType], "ncurses") == 0)
+    else if (strcmp(argv[emuArgcArgv->argLcdType], "ncurses") == 0)
     {
-      emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_FALSE;
-      emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useGlut = GLCD_FALSE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurses = GLCD_TRUE;
     }
-    else if (strcmp(argv[emuArgcArgv.argLcdType], "all") == 0)
+    else if (strcmp(argv[emuArgcArgv->argLcdType], "all") == 0)
     {
-      emuArgcArgv.ctrlDeviceArgs.useGlut = GLCD_TRUE;
-      emuArgcArgv.ctrlDeviceArgs.useNcurses = GLCD_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useGlut = GLCD_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurses = GLCD_TRUE;
     }
     else
     {
-      printf("%s: -l: Unknown lcd stub device type: %s\n", __progname,
-        argv[emuArgcArgv.argLcdType]);
+      printf("%s: -l: unknown lcd stub device type: %s\n", __progname,
+        argv[emuArgcArgv->argLcdType]);
       return CMD_RET_ERROR;
     }
   }
 
   // Validate glut window geometry
-  if (emuArgcArgv.argGlutGeometry > 0)
+  if (emuArgcArgv->argGlutGeometry > 0)
   {
     regex_t regex;
     int status;
-    char *input = argv[emuArgcArgv.argGlutGeometry];
+    char *input = argv[emuArgcArgv->argGlutGeometry];
     char *separator;
 
     // Scan the geometry argument using a regexp pattern
@@ -218,23 +198,23 @@ int emuArgcArgvGet(int argc, char *argv[])
     regfree(&regex);
     if (status != 0)
     {
-      printf("%s: -g: Invalid format glut geometry\n", __progname);
+      printf("%s: -g: invalid format glut geometry\n", __progname);
       return CMD_RET_ERROR;
     }
 
     // An 'x' separator splits the two numeric geometry arguments
     separator = strchr(input, 'x');
     *separator = '\0';
-    emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeX = atoi(input);
-    emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.sizeY = atoi(separator + 1);
+    emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.sizeX = atoi(input);
+    emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.sizeY = atoi(separator + 1);
   }
 
   // Validate glut window position
-  if (emuArgcArgv.argGlutPosition > 0)
+  if (emuArgcArgv->argGlutPosition > 0)
   {
     regex_t regex;
     int status;
-    char *input = argv[emuArgcArgv.argGlutPosition];
+    char *input = argv[emuArgcArgv->argGlutPosition];
     char *separator;
 
     // Scan the position argument using a regexp pattern
@@ -243,30 +223,30 @@ int emuArgcArgvGet(int argc, char *argv[])
     regfree(&regex);
     if (status != 0)
     {
-      printf("%s: -p: Invalid format glut position\n", __progname);
+      printf("%s: -p: invalid format glut position\n", __progname);
       return CMD_RET_ERROR;
     }
 
     // A ',' separator splits the two numeric position arguments
     separator = strchr(input, ',');
     *separator = '\0';
-    emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posX = atoi(input);
-    emuArgcArgv.ctrlDeviceArgs.lcdGlutInitArgs.posY = atoi(separator + 1);
+    emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.posX = atoi(input);
+    emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.posY = atoi(separator + 1);
   }
 
   // Get the ncurses output device
-  if (emuArgcArgv.argTty != 0)
+  if (emuArgcArgv->argTty != 0)
   {
     // Got it from the command line
-    if (strlen(argv[emuArgcArgv.argTty]) >= NCURSES_TTYLEN)
+    if (strlen(argv[emuArgcArgv->argTty]) >= NCURSES_TTYLEN)
     {
       printf("%s: -t: tty too long (max = %d chars)\n", __progname,
         NCURSES_TTYLEN - 1);
       return CMD_RET_ERROR;
     }
-    strcpy(tty, argv[emuArgcArgv.argTty]);
+    strcpy(tty, argv[emuArgcArgv->argTty]);
   }
-  else if (emuArgcArgv.ctrlDeviceArgs.useNcurses == 1)
+  else if (emuArgcArgv->ctrlDeviceArgs.useNcurses == 1)
   {
     // Get the tty device if not specified on the command line
     char *home;
@@ -277,8 +257,8 @@ int emuArgcArgvGet(int argc, char *argv[])
     home = getenv("HOME");
     if (home == NULL)
     {
-      printf("%s: Cannot get $HOME\n", __progname);
-      printf("Use switch '-t <tty>' to set lcd output device\n");
+      printf("%s: cannot get $HOME\n", __progname);
+      printf("use switch '-t <tty>' to set lcd output device\n");
       return CMD_RET_ERROR;
     }
     fullPath = malloc(strlen(home) + strlen(NCURSES_TTYFILE) + 1);
@@ -289,9 +269,9 @@ int emuArgcArgvGet(int argc, char *argv[])
     free(fullPath);
     if (fp == NULL)
     {
-      printf("%s: Cannot open file \"%s%s\".\n", __progname, "$HOME",
+      printf("%s: cannot open file \"%s%s\".\n", __progname, "$HOME",
         NCURSES_TTYFILE);
-      printf("Start a new Monochron ncurses terminal or use switch '-t <tty>' to set\n");
+      printf("start a new Monochron ncurses terminal or use switch '-t <tty>' to set\n");
       printf("mchron ncurses terminal tty\n");
       return CMD_RET_ERROR;
     }
@@ -305,6 +285,8 @@ int emuArgcArgvGet(int argc, char *argv[])
     {
       if (tty[ttyLen - 1] == '\n' || tty[ttyLen - 1] == '\r')
         tty[ttyLen - 1] = '\0';
+      else
+        break;
     }
 
     // Clean up our stuff
@@ -450,13 +432,13 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   // is killed by the application that is being aborted. Note that at this
   // point glut is still running in its own thread and will have its layout
   // constantly refreshed. This allows a glut screendump to be made if needed.
-  if (emuArgcArgv.ctrlDeviceArgs.useNcurses == GLCD_TRUE)
+  if (ctrlDeviceActive(CTRL_DEVICE_NCURSES) == GLCD_TRUE)
   {
     // Flush the ncurses device so we get its contents as-is at the time of
     // the forced coredump
     ctrlLcdFlush();
   }
-  else // emuArgcArgv.lcdDeviceParam.useGlut == GLCD_TRUE
+  else // glut device is used
   {
     // Have end-user confirm abort, allowing a screendump to be made prior to
     // actual coredump
@@ -483,228 +465,6 @@ u08 emuFontGet(char *fontName)
     return FONT_5X5P;
   else // fontName == "5x7n")
     return FONT_5X7N;
-}
-
-//
-// Function: emuLineExecute
-//
-// Process a single line input string.
-// This is the main command input handler that can be called recursively
-// via the 'e' command.
-//
-int emuLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
-{
-  char *input = cmdLine->input;
-  cmdCommand_t *cmdCommand;
-  int retVal = CMD_RET_OK;
-
-  // See if we have an empty command line
-  if (*input == '\0')
-  {
-    // Dump newline in the log only when we run at root command level
-    if (listExecDepth == 0)
-      DEBUGP("");
-    return retVal;
-  }
-
-  // Prepare command line argument scanner
-  cmdArgInit(&input);
-  if (*input == '\0')
-  {
-    // Input contains only white space chars
-    return retVal;
-  }
-
-  // We have non-whitespace characters so scan the command line with
-  // the command profile
-  retVal = cmdArgScan(argCmd, 1, &input, GLCD_FALSE);
-  if (retVal != CMD_RET_OK)
-    return retVal;
-
-  // In case this function is called from a list execution we already have
-  // a reference to the command dictionary. If it is called from the command
-  // line we need to get it ourselves.
-  if (cmdLine->cmdCommand == NULL)
-  {
-    retVal = cmdDictCmdGet(argWord[0], &cmdCommand);
-    if (retVal != CMD_RET_OK)
-    {
-      printf("%s? unknown: %s\n", argCmd[0].argName, argWord[0]);
-      return retVal;
-    }
-    cmdLine->cmdCommand = cmdCommand;
-  }
-  else
-  {
-    cmdCommand = cmdLine->cmdCommand;
-  }
-
-  // See what type of command we're dealing with
-  if (cmdCommand->cmdPcCtrlType == PC_CONTINUE)
-  {
-    // Single line command.
-    // Scan the command profile for the command using the input string.
-    retVal = cmdArgScan(cmdCommand->cmdArg, cmdCommand->argCount,
-      &input, GLCD_FALSE);
-    if (retVal != CMD_RET_OK)
-      return retVal;
-
-    // Execute the command handler for the command
-    retVal = (*cmdCommand->cmdHandler)(cmdLine);
-  }
-  else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR ||
-           cmdCommand->cmdPcCtrlType == PC_IF)
-  {
-    // The user has entered a program control block start command at
-    // command prompt level.
-    // Cache all keyboard input commands until this command is matched
-    // with a corresponding end command. Then execute the command list.
-    cmdLine_t *cmdLineRoot = NULL;
-    cmdPcCtrl_t *cmdPcCtrlRoot = NULL;
-
-    // Load keyboard command lines in a linked list.
-    // Warning: this will reset the cmd scan global variables.
-    retVal = cmdListKeyboardLoad(&cmdLineRoot, &cmdPcCtrlRoot, cmdInput,
-      fileExecDepth);
-    if (retVal == CMD_RET_OK)
-    {
-      // Execute the commands in the command list
-      int myEchoCmd = echoCmd;
-      echoCmd = CMD_ECHO_NO;
-      retVal = emuListExecute(cmdLineRoot, (char *)__progname);
-      echoCmd = myEchoCmd;
-    }
-
-    // We're done. Either all commands in the linked list have been
-    // executed successfullly or an error has occured. Do admin stuff
-    // by cleaning up the linked lists.
-    cmdListCleanup(cmdLineRoot, cmdPcCtrlRoot);
-  }
-  else
-  {
-    // All other control block types are invalid on the command line
-    // as they need to link to either a repeat-for or if-then command.
-    // As such, they can only be entered via multi line keyboard input
-    // or a command file.
-    printf("%s? cannot match this command: %s\n", argCmd[0].argName,
-      argWord[0]);
-    retVal = CMD_RET_ERROR;
-  }
-
-  return retVal;
-}
-
-//
-// Function: emuListExecute
-//
-// Execute the commands in the program list as loaded via a file or
-// interactively on the command line.
-// We have all command lines and control blocks available in linked lists.
-// The control block list has been checked on its integrity, meaning that
-// all pointers between command lines and control blocks are present and
-// validated so we don't need to worry about that.
-// Start at the top of the list and work our way down until we find a
-// runtime error or end up at the end of the list.
-// We may encounter program control blocks that will influence the program
-// counter by creating loops or jumps in the execution plan of the list.
-//
-int emuListExecute(cmdLine_t *cmdLineRoot, char *source)
-{
-  char ch = '\0';
-  cmdLine_t *cmdProgCounter = NULL;
-  cmdLine_t *cmdProgCounterNext = NULL;
-  int cmdPcCtrlType;
-  int i;
-  int retVal = CMD_RET_OK;
-
-  // See if we need to switch to keypress mode. We only need to do this
-  // at the top of nested list executions. Switching to keypress mode
-  // allows the end-user to interrupt the list execution using a 'q'
-  // keypress.
-  if (listExecDepth == 0)
-    kbModeSet(KB_MODE_SCAN);
-  listExecDepth++;
-
-  // We start at the root of the linked list. Let's see where we end up.
-  cmdProgCounter = cmdLineRoot;
-  while (cmdProgCounter != NULL)
-  {
-    // Echo command
-    if (echoCmd == CMD_ECHO_YES)
-    {
-      for (i = 1; i < fileExecDepth; i++)
-        printf(":   ");
-      printf(":%03d: %s\n", cmdProgCounter->lineNum, cmdProgCounter->input);
-    }
-
-    // Execute the command in the command line
-    if (cmdProgCounter->cmdCommand == NULL)
-    {
-      // Skip a blank command line
-      cmdPcCtrlType = PC_CONTINUE;
-      retVal = CMD_RET_OK;
-    }
-    else if (cmdProgCounter->cmdCommand->cmdPcCtrlType == PC_CONTINUE)
-    {
-      // Process regular command via the generic input handler
-      cmdPcCtrlType = PC_CONTINUE;
-      retVal = emuLineExecute(cmdProgCounter, NULL);
-    }
-    else
-    {
-      // This is a control block command from a repeat or if construct.
-      // Execute the associated program counter control block handler
-      // from the command dictionary.
-      cmdPcCtrlType = cmdProgCounter->cmdCommand->cmdPcCtrlType;
-      cmdProgCounterNext = cmdProgCounter;
-      retVal = (*cmdProgCounter->cmdCommand->cbHandler)(&cmdProgCounterNext);
-    }
-
-    // Verify if a command interrupt was requested
-    if (retVal == CMD_RET_OK)
-    {
-      ch = kbKeypressScan(GLCD_TRUE);
-      if (ch == 'q')
-      {
-        printf("quit\n");
-        retVal = CMD_RET_INTERRUPT;
-      }
-    }
-
-    // Check for error/interrupt
-    if (retVal == CMD_RET_ERROR || retVal == CMD_RET_INTERRUPT)
-    {
-      // Error/interrupt occured in current level
-      printf(CMD_STACK_TRACE);
-      // Report current stack level and cascade to upper level
-      printf(CMD_STACK_FMT, fileExecDepth, source, cmdProgCounter->lineNum,
-        cmdProgCounter->input);
-      retVal = CMD_RET_RECOVER;
-      break;
-    }
-    else if (retVal == CMD_RET_RECOVER)
-    {
-      // Error/interrupt occured at lower level.
-      // Report current stack level and cascade to upper level.
-      printf(CMD_STACK_FMT, fileExecDepth, source, cmdProgCounter->lineNum,
-        cmdProgCounter->input);
-      break;
-    }
-
-    // Move to next command in linked list
-    if (cmdPcCtrlType == PC_CONTINUE)
-      cmdProgCounter = cmdProgCounter->next;
-    else
-      cmdProgCounter = cmdProgCounterNext;
-  }
-
-  // End of list or encountered error/interrupt.
-  // Switch back to line mode when we're back at root level.
-  listExecDepth--;
-  if (listExecDepth == 0)
-    kbModeSet(KB_MODE_LINE);
-
-  return retVal;
 }
 
 //
@@ -765,14 +525,35 @@ u08 emuOrientationGet(char orientationId)
 }
 
 //
+// Function: emuShutdown
+//
+// This function is used in two ways. First, it is used to implement a graceful
+// shutdown when an lcd device window is closed, by using it as a callback
+// function. Second, it is used in non-standard shutdown circumstances, created
+// by system signal handlers such as ctrl-c.
+//
+void emuShutdown(void)
+{
+  kbModeSet(KB_MODE_LINE);
+  alarmSoundStop();
+  cmdInputCleanup(&cmdInput);
+  ctrlCleanup();
+  if (invokeExit == GLCD_FALSE && closeWinMsg == GLCD_FALSE)
+  {
+    closeWinMsg = GLCD_TRUE;
+    printf("\nlcd device closed - exit\n");
+  }
+  exit(-1);
+}
+
+//
 // Function: emuSigCatch
 //
-// Signal handler. Mainly used to implement a graceful shutdown so
-// we do not need to 'reset' the mchron shell, when it no longer echoes
-// input characters due to its keypress mode, or to kill the alarm
-// audio PID.
-// However, do not close the lcd device (works for ncurses only) since
-// we may want to keep the latest screen layout for analytic purposes.
+// Signal handler. Mainly used to implement a graceful shutdown so we do not
+// need to 'reset' the mchron shell, when it no longer echoes input characters
+// due to its keypress mode, or to kill the alarm audio PID.
+// However, do not close the lcd device (works for ncurses only) since we may
+// want to keep the latest screen layout for analytic purposes.
 //
 static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
 {
@@ -784,32 +565,24 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
   if (sig == SIGINT)
   {
     // Keyboard: "^C"
-    kbModeSet(KB_MODE_LINE);
-    alarmSoundStop();
-    invokeExit = GLCD_TRUE;
     printf("\n<ctrl>c - interrupt\n");
-    exit(-1);
+    invokeExit = GLCD_TRUE;
+    emuShutdown();
   }
   else if (sig == SIGTSTP)
   {
     // Keyboard: "^Z"
-    kbModeSet(KB_MODE_LINE);
-    alarmSoundStop();
-    invokeExit = GLCD_TRUE;
     printf("\n<ctrl>z - stop\n");
-    exit(-1);
+    invokeExit = GLCD_TRUE;
+    emuShutdown();
   }
   else if (sig == SIGABRT)
   {
     struct sigaction sigAction;
 
-    kbModeSet(KB_MODE_LINE);
-    alarmSoundStop();
-    invokeExit = GLCD_TRUE;
-
-    // We must clear the sighandler for SIGABRT or else we'll get an
-    // infinite recursive loop due to abort() below that triggers a new
-    // SIGABRT that triggers a new (etc)...
+    // We must clear the sighandler for SIGABRT or else we'll get an infinite
+    // recursive loop due to abort() below that triggers a new SIGABRT that
+    // triggers a new (etc)...
     memset(&sigAction, '\0', sizeof(sigaction));
     sigAction.sa_sigaction = NULL;
     sigAction.sa_flags = SA_SIGINFO;
@@ -822,14 +595,17 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
 
     // Let's abort and optionally coredump. Note that in order to get a
     // coredump it requires to run shell command "ulimit -c unlimited"
-    // once in the mchron shell.
+    // once in the mchron shell prior to starting mchron.
     abort();
   }
   else if (sig == SIGQUIT)
   {
     // Keyboard: "^\"
     // Note that abort() below will trigger a SIGABRT that will be handled
-    // separately and will take care of a graceful shutdown
+    // separately, eventually causing the program to coredump
+    kbModeSet(KB_MODE_LINE);
+    alarmSoundStop();
+    invokeExit = GLCD_TRUE;
     printf("\n<ctrl>\\ - quit\n");
     abort();
   }
@@ -874,12 +650,12 @@ void emuSigSetup(void)
 //
 // Get the requested start mode
 //
-int emuStartModeGet(char startId)
+u08 emuStartModeGet(char startId)
 {
   if (startId == 'c')
-    return CYCLE_REQ_WAIT;
+    return GLCD_TRUE;
   else // startId == 'n'
-    return CYCLE_REQ_NOWAIT;
+    return GLCD_FALSE;
 }
 
 //
@@ -911,35 +687,4 @@ void emuTimeSync(void)
   DEBUGP("Clear time event");
   rtcTimeEvent = GLCD_FALSE;
   rtcMchronTimeInit();
-}
-
-//
-// Function: emuWinClose
-//
-// Callback function for the lcd device when the end user closes its
-// window.
-// It is primarily used to implement a graceful shutdown in case the glut
-// window is closed.
-// When that occurs it will kill both the glut thread and the mchron
-// application unless a glut handler is setup to exit gracefully.
-// We need such a handler, or else our mchron terminal may need to be
-// 'reset' when it no longer echoes characters due to an active keypress
-// mode or an incorrectly closed readline session. In addition to that,
-// audible alarm may keep playing. So, this handler should attempt to exit
-// gracefully.
-//
-void emuWinClose(void)
-{
-  kbModeSet(KB_MODE_LINE);
-  alarmSoundStop();
-  cmdInputCleanup(&cmdInput);
-  if (invokeExit == GLCD_FALSE)
-  {
-    if (closeWinMsg == GLCD_FALSE)
-    {
-      closeWinMsg = GLCD_TRUE;
-      printf("\nlcd device closed - exit\n");
-    }
-  }
-  exit(-1);
 }

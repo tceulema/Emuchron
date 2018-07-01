@@ -25,12 +25,11 @@
 #define ARG_STRING		4
 #define ARG_STR_OPT		5
 #define ARG_ASSIGN		6
-#define ARG_END			7
 
 // The argument value domain validation types
 #define DOM_NULL_INFO		0
-#define DOM_CHAR_LIST		1
-#define DOM_WORD_LIST		2
+#define DOM_CHAR		1
+#define DOM_WORD		2
 #define DOM_NUM_RANGE		3
 #define DOM_NUM_MAX		4
 #define DOM_NUM_MIN		5
@@ -71,6 +70,8 @@ typedef struct _cmdLine_t
 {
   int lineNum;				// Line number
   char *input;				// The malloc-ed command from file/prompt
+  char **args;				// The command arguments
+  int initialized;			// Are command arguments initialized
   struct _cmdCommand_t *cmdCommand;	// The associated command dictionary entry
   struct _cmdPcCtrl_t *cmdPcCtrlParent;	// Control block completed by this line
   struct _cmdPcCtrl_t *cmdPcCtrlChild;	// Control block started by this line
@@ -82,11 +83,7 @@ typedef struct _cmdLine_t
 typedef struct _cmdPcCtrl_t
 {
   int cmdPcCtrlType;			// The program counter control block type
-  int initialized;			// Are control block arguments initialized
   int active;				// Is current block the active code block
-  char *cbArg1;				// Malloc-ed control block argument 1
-  char *cbArg2;				// Malloc-ed control block argument 2
-  char *cbArg3;				// Malloc-ed control block argument 3
   cmdLine_t *cmdLineParent;		// Pointer to associated parent command
   cmdLine_t *cmdLineChild;		// Pointer to associated child command
   struct _cmdPcCtrl_t *prev;		// Pointer to previous list element

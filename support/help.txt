@@ -54,7 +54,7 @@ Commands:
           Arguments: <day> <month> <year>
               day: 1..31
               month: 1..12
-              year: 0..99
+              year: 0..99 (year in 20xx)
   'e'   - Execute commands from file
           Arguments: <echo> <filename>
               echo: 'e' = echo commands, 'i' = inherit, 's' = silent
@@ -68,7 +68,7 @@ Commands:
               number: expression
   'hm'  - Show help message
           Argument: <message>
-              message: ascii text
+              message: optional ascii text
   'iei' - If else if
           Argument: <condition>
               condition: expression determining block execution
@@ -94,7 +94,7 @@ Commands:
   'lgg' - Set glut graphics options
           Argument: <pixelbezel> <markerlines>
               pixelbezel: 0 = off, 1 = on
-              markerlines: 0 = off, 1 = on
+              gridlines: 0 = off, 1 = on
   'li'  - Inverse lcd display
   'lng' - Set ncurses graphics options
           Argument: <backlight>
@@ -228,12 +228,12 @@ Examples:
   le
     Erase lcd display
   pr f 10 20 15 18
-    Paint rectangle -> Foreground color -> Position 10,20 with size 15x18
+    Paint rectangle in foreground color at position 10,20 with size 15x18
   pcf f 64 32 20 1
-    Paint circle with fill pattern -> Foreground color -> Center 64,32 with
+    Paint filled circle in foreground color with center at position 64,32 and
     radius 20 using fill pattern 'half'  
   ts 19 12 34
-    Set mchron time -> 19:12:34
+    Set mchron time to 19:12:34
 
 Reminders:
   - Use keypress 'q' to interrupt execution of command or command file

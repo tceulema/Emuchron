@@ -25,8 +25,8 @@
 #define GLCD_ON		1
 
 // HD61202/KS0108 command set:
-// Note that GLCD_SET_PAGE and GLCD_SET_Y_ADDR are utterly confusing
-// when used in Monochron.
+// Note that GLCD_SET_PAGE and GLCD_SET_Y_ADDR are utterly confusing when used
+// in Monochron.
 // GLCD_SET_PAGE   - This is actually the vertical y-byte address (0..7)
 // GLCD_SET_Y_ADDR - This is actually the horizontal x address (0..63)
 #define GLCD_ON_CTRL		0x3E	// 0011111X: lcd on/off control
@@ -37,9 +37,9 @@
 #define GLCD_OFF_DISPLAY	0x00	// DB0: turn display off
 #define GLCD_ON_DISPLAY		0x01	// DB0: turn display on
 
-#define GLCD_STATUS_BUSY	0x80	// (1) -> Lcd is busy
-#define GLCD_STATUS_ONOFF	0x20	// (0) -> Lcd is on
-#define GLCD_STATUS_RESET	0x10	// (1) -> Lcd is reset
+#define GLCD_STATUS_BUSY	0x80	// (1) -> lcd is busy
+#define GLCD_STATUS_ONOFF	0x20	// (0) -> lcd is on
+#define GLCD_STATUS_RESET	0x10	// (1) -> lcd is reset
 
 // Determine the number of controllers
 // (make sure we round up for partial use of more than one controller)

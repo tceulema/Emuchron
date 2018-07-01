@@ -1,5 +1,5 @@
 #
-# Emuchron emulator and mchron command line tool makefile
+# Emuchron emulator (with mchron command line tool and alarm audio) makefile
 #
 
 # Disable built-in make rules for lex/yacc as we'll be using flex/bison
@@ -20,24 +20,34 @@ REMOVE = rm --force
 STUB = -DEMULIN
 
 # Uncomment this to get bison runtime trace output.
-# This also requires a code section in expr.y [firmware/emulator] to be
+# This also requires a code section in expr.c [firmware/emulator] to be
 # uncommented. Keep the flag below and that code section in sync.
 #BDEBUG = --debug
 
-# The clock and emulator source files and target
+# Emulator with mchron, base monochron, and all clock source files
 CSRC = emulator/stub.c emulator/controller.c emulator/lcdglut.c \
-  emulator/lcdncurses.c emulator/scanutil.c emulator/mchronutil.c \
-  emulator/listutil.c emulator/varutil.c emulator/mchron.c \
+  emulator/lcdncurses.c emulator/dictutil.c emulator/listutil.c \
+  emulator/mchronutil.c emulator/scanutil.c emulator/varutil.c \
+  emulator/mchron.c \
   monomain.c ks0108.c glcd.c config.c anim.c \
   clock/analog.c clock/barchart.c clock/bigdigit.c clock/crosstable.c \
   clock/digital.c clock/example.c clock/linechart.c clock/mosquito.c \
   clock/nerd.c clock/piechart.c clock/perftest.c clock/pong.c clock/puzzle.c \
   clock/qr.c clock/qrencode.c clock/slider.c clock/spotfire.c clock/cascade.c \
   clock/speeddial.c clock/spiderplot.c clock/thermometer.c clock/trafficlight.c
+
+# Expression evaluator source files
 FSRC = emulator/expr.l
 BSRC = emulator/expr.y
 EVALSRC = emulator/expr.c
-TARGET = mchron
+
+# Audio alarm source file and resulting tool
+ALMSRC = emulator/genalarm.c
+GENALARM = emulator/genalarm
+
+# All final targets
+TGT_MCHRON = mchron
+TGT_ALARM = emulator/alarm.au
 
 # Define object and dependency files using source files
 COBJ = $(CSRC:.c=.o)
@@ -47,29 +57,28 @@ BOBJ = $(BSRC:.y=.tab.c)
 BOBJH = $(BSRC:.y=.tab.h)
 EVALOBJ = $(EVALSRC:.c=.o)
 EVALDEP = $(EVALSRC:.c=.d)
+ALMOBJ = $(ALMSRC:.c=.o)
+ALMDEP = $(ALMSRC:.c=.d)
 
 # ---------------------------------------------------------------------------
 
-# Build project (= emuchron with mchron)
-all:	$(TARGET)
+# Build project targets (= emuchron with mchron and alarm audio)
+all:	$(TGT_MCHRON) $(TGT_ALARM)
 
 # Clean project
 clean:
-	$(REMOVE) $(TARGET);
-	$(REMOVE) $(COBJ) $(EVALOBJ);
-	$(REMOVE) $(CDEP) $(EVALDEP);
-	$(REMOVE) $(FOBJ) $(BOBJ) $(BOBJH);
+	$(REMOVE) $(TGT_MCHRON) $(TGT_ALARM) $(GENALARM)
+	$(REMOVE) $(COBJ) $(EVALOBJ) $(ALMOBJ)
+	$(REMOVE) $(CDEP) $(EVALDEP) $(ALMDEP)
+	$(REMOVE) $(FOBJ) $(BOBJ) $(BOBJH)
 
 # Rebuild project
 rebuild:	clean all
 
-# Build expression evaluator
-expr:	$(EVALOBJ)
-
 # Report relevant compiler and tool version information
 version:
-	@echo "- $(CC)"; $(CC) --version;
-	@echo "- $(FLEX)"; $(FLEX) --version; echo;
+	@echo "- $(CC)"; $(CC) --version
+	@echo "- $(FLEX)"; $(FLEX) --version; echo
 	@echo "- $(BISON)"; $(BISON) --version
 
 # ---------------------------------------------------------------------------
@@ -84,19 +93,24 @@ version:
 
 # Create scanner/parser object file from generated source files
 $(EVALOBJ):	$(BOBJ) $(FOBJ) $(EVALSRC)
-	$(CC) -c $(EVALFLAGS) -o $(EVALOBJ) $(EVALSRC)
+	$(CC) -c $(EVALFLAGS) -o $@ $(EVALSRC)
 
 # Create c object file for c source file
 %.o:	%.c
 	$(CC) -c $(CFLAGS) $(STUB) -o $@ $<
 
 # Create mchron out of object files and libraries
-$(TARGET):	$(COBJ) $(EVALOBJ)
-	$(CC) -o $(TARGET) $(COBJ) $(CLIB) $(EVALOBJ) $(FLIB)
+$(TGT_MCHRON):	$(COBJ) $(EVALOBJ)
+	$(CC) -o $@ $(COBJ) $(CLIB) $(EVALOBJ) $(FLIB)
+
+# Create alarm audio file using genalarm tool
+$(TGT_ALARM):	$(ALMOBJ)
+	$(CC) -o $(GENALARM) $(ALMOBJ)
+	./$(GENALARM) $@
 
 # Pull in dependencies created by gcc flag -MMD
--include $(CDEP) $(EVALDEP)
+-include $(CDEP) $(EVALDEP) $(ALMDEP)
 
 # Listing of phony targets
-.PHONY : all clean rebuild expr version
+.PHONY : all clean rebuild version
 

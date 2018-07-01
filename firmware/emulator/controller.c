@@ -10,6 +10,7 @@
 // Monochron and emuchron defines
 #include "../monomain.h"
 #include "../ks0108.h"
+#include "interpreter.h"
 #include "mchronutil.h"
 #include "controller.h"
 
@@ -286,6 +287,7 @@ static ctrlController_t ctrlControllers[GLCD_NUM_CONTROLLERS];
 // Identifiers to indicate what lcd stub devices are used
 static u08 useGlut = GLCD_FALSE;
 static u08 useNcurses = GLCD_FALSE;
+static u08 useDevice = 0;
 
 // Statistics counters on glcd interface. The ncurses and glut devices
 // have their own dedicated statistics counters that are administered
@@ -423,7 +425,7 @@ u08 ctrlExecute(u08 method, u08 controller, u08 data)
   //  method, controller, data, command, payload);
 
   // Execute the state-event handler and assign new machine state to controller
-  lcdUpdate = (*ctrlSEDiagram[event][state].handler)(ctrlController, payload);
+  lcdUpdate = ctrlSEDiagram[event][state].handler(ctrlController, payload);
   ctrlController->state = ctrlSEDiagram[event][state].stateNext;
 
   // Update the lcd devices if needed
@@ -598,15 +600,19 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
 // Initialize the data, registers and state of all controllers and
 // the lcd stub device(s)
 //
-u08 ctrlInit(ctrlDeviceArgs_t ctrlDeviceArgs)
+u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 {
   u08 i;
-  int initFail = GLCD_FALSE;
-  int retVal;
+  int initOk = GLCD_TRUE;
 
   // Administer which lcd stub devices are used
-  useGlut = ctrlDeviceArgs.useGlut;
-  useNcurses = ctrlDeviceArgs.useNcurses;
+  useGlut = ctrlDeviceArgs->useGlut;
+  useNcurses = ctrlDeviceArgs->useNcurses;
+  useDevice = 0;
+  if (useNcurses == GLCD_TRUE)
+    useDevice = useDevice | CTRL_DEVICE_NCURSES;
+  if (useGlut == GLCD_TRUE)
+    useDevice = useDevice | CTRL_DEVICE_GLUT;
 
   // Initialize the controller data, registers and state
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
@@ -616,24 +622,16 @@ u08 ctrlInit(ctrlDeviceArgs_t ctrlDeviceArgs)
     ctrlControllers[i].state = CTRL_STATE_CURSOR;
   }
 
-  // Initialize the lcd stub device(s)
+  // Init the ncurses device when requested
   if (useNcurses == GLCD_TRUE)
-  {
-    // Init the ncurses device
-    retVal = lcdNcurInit(&ctrlDeviceArgs.lcdNcurInitArgs);
-    if (retVal != 0)
-      initFail = GLCD_TRUE;
-  }
-  if (useGlut == GLCD_TRUE && initFail == GLCD_FALSE)
-  {
-    // Init the OpenGL2/GLUT device
-    retVal = lcdGlutInit(&ctrlDeviceArgs.lcdGlutInitArgs);
-    if (retVal != 0)
-      initFail = GLCD_TRUE;
-  }
+    initOk = lcdNcurInit(&ctrlDeviceArgs->lcdNcurInitArgs);
+
+  // Init the OpenGL2/GLUT device when requested
+  if (useGlut == GLCD_TRUE && initOk == GLCD_TRUE)
+    initOk = lcdGlutInit(&ctrlDeviceArgs->lcdGlutInitArgs);
 
   // Cleanup in case there was a failure
-  if (initFail == GLCD_TRUE)
+  if (initOk == GLCD_FALSE)
   {
     ctrlCleanup();
     return CMD_RET_ERROR;
@@ -645,7 +643,7 @@ u08 ctrlInit(ctrlDeviceArgs_t ctrlDeviceArgs)
 //
 // Function: ctrlCleanup
 //
-// Shut down the lcd display in stub device
+// Shut down the lcd display in stub device(s)
 //
 void ctrlCleanup(void)
 {
@@ -653,6 +651,22 @@ void ctrlCleanup(void)
     lcdNcurCleanup();
   if (useGlut == GLCD_TRUE)
     lcdGlutCleanup();
+  useNcurses = GLCD_FALSE;
+  useGlut = GLCD_FALSE;
+  useDevice = 0;
+}
+
+//
+// Function: ctrlDeviceActive
+//
+// Returns whether lcd device(s) is/are active
+//
+u08 ctrlDeviceActive(u08 device)
+{
+  if ((useDevice & device) != device)
+    return GLCD_FALSE;
+
+  return GLCD_TRUE;
 }
 
 //

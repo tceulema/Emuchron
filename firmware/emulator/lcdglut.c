@@ -130,7 +130,8 @@ static unsigned char lcdGlutImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 // The glut window thread we create that opens and manages the OpenGL/Glut
 // window and processes messages in the lcd message queue
 static pthread_t threadGlut;
-static int deviceActive = GLCD_FALSE;
+static unsigned char deviceActive = GLCD_FALSE;
+static int winGlutWin;
 
 // Start and end of lcd message queue
 static lcdGlutMsg_t *queueStart = NULL;
@@ -143,14 +144,14 @@ static pthread_mutex_t mutexQueue = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mutexStats = PTHREAD_MUTEX_INITIALIZER;
 
 // Identifiers to signal certain glut tasks
-static int winExit = GLCD_FALSE;
-static int winRedraw = GLCD_TRUE;
+static unsigned char winExit = GLCD_FALSE;
+static unsigned char winRedraw = GLCD_TRUE;
 
 // Identifiers controlling temporary display of window pixel size
 // info after a window resize
-static int winRedrawFirst = GLCD_FALSE;
-static int winResize = GLCD_FALSE;
-static int winShowWinSize = GLCD_FALSE;
+static unsigned char winRedrawFirst = GLCD_FALSE;
+static unsigned char winResize = GLCD_FALSE;
+static unsigned char winShowWinSize = GLCD_FALSE;
 static struct timeval tvWinReshapeLast;
 
 // The init parameters
@@ -167,13 +168,14 @@ static lcdGlutStats_t lcdGlutStats;
 
 // Window keyboard hit timestamp and key counter
 static struct timeval tvWinKbLastHit;
-static int winKbKeyCount;
+static unsigned char winKbKeyCount;
 
 // Indicator to draw window pixel bezels and gridlines
 static unsigned char winGridLines = GLCD_FALSE;
 static unsigned char winPixelBezel = GLCD_FALSE;
 
 // Local function prototypes
+static void lcdGlutClose(void);
 static void lcdGlutDelay(int x);
 static void lcdGlutKeyboard(unsigned char key, int x, int y);
 static void *lcdGlutMain(void *ptr);
@@ -213,6 +215,20 @@ void lcdGlutCleanup(void)
   // Wait for glut thread to exit
   pthread_join(threadGlut, NULL);
   deviceActive = GLCD_FALSE;
+}
+
+//
+// Function: lcdGlutClose
+//
+// Callback for glut window close event
+//
+static void lcdGlutClose(void)
+{
+  // Attempt to shutdown gracefully
+  glutCloseFunc(NULL);
+  glutDestroyWindow(winGlutWin);
+  deviceActive = GLCD_FALSE;
+  lcdGlutInitArgs.winClose();
 }
 
 //
@@ -281,7 +297,7 @@ int lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
 {
   // Nothing to do if the glut environment is already initialized
   if (deviceActive == GLCD_TRUE)
-    return 0;
+    return GLCD_TRUE;
 
   // Reset the glut statistics
   lcdGlutStatsReset();
@@ -293,7 +309,7 @@ int lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
   (void)pthread_create(&threadGlut, NULL, lcdGlutMain, (void *)createMsg);
   deviceActive = GLCD_TRUE;
 
-  return 0;
+  return GLCD_TRUE;
 }
 
 //
@@ -387,11 +403,11 @@ static void *lcdGlutMain(void *ptr)
   glutInitDisplayMode(GLUT_DOUBLE);
   glutInitWindowSize(lcdGlutInitArgs.sizeX, lcdGlutInitArgs.sizeY);
   glutInitWindowPosition(lcdGlutInitArgs.posX, lcdGlutInitArgs.posY);
-  glutCreateWindow((char *)ptr);
+  winGlutWin = glutCreateWindow((char *)ptr);
   glutDisplayFunc(lcdGlutRenderPrepare);
   glutKeyboardFunc(lcdGlutKeyboard);
   glutReshapeFunc(lcdGlutReshape);
-  glutCloseFunc(lcdGlutInitArgs.winClose);
+  glutCloseFunc(lcdGlutClose);
 
   // Statistics
   pthread_mutex_lock(&mutexStats);
@@ -433,6 +449,7 @@ static void *lcdGlutMain(void *ptr)
   // device and the readline library it may cause a race condition in readline
   // library cleanup, potentially leading to an mchron coredump.
   glutCloseFunc(NULL);
+  glutDestroyWindow(winGlutWin);
 
   return NULL;
 }
@@ -445,23 +462,23 @@ static void *lcdGlutMain(void *ptr)
 static void lcdGlutMsgQueueAdd(unsigned char cmd, unsigned char arg1,
   unsigned char arg2, unsigned char arg3)
 {
-  void *mallocPtr;
+  lcdGlutMsg_t *lcdGlutMsg;
 
   // Get exclusive access to the message queue
   pthread_mutex_lock(&mutexQueue);
 
   // Create new message and add it to the end of the queue
-  mallocPtr = malloc(sizeof(lcdGlutMsg_t));
+  lcdGlutMsg = malloc(sizeof(lcdGlutMsg_t));
   if (queueStart == NULL)
   {
     // Start of new queue
-    queueStart = (lcdGlutMsg_t *)mallocPtr;
+    queueStart = lcdGlutMsg;
     queueEnd = queueStart;
   }
   else
   {
     // The queue is at least of size one: link last queue member to next
-    queueEnd->next = (lcdGlutMsg_t *)mallocPtr;
+    queueEnd->next = lcdGlutMsg;
     queueEnd = queueEnd->next;
   }
 
@@ -605,66 +622,6 @@ static void lcdGlutMsgQueueProcess(void)
   // Release exclusive access to the statistics counters and message queue
   pthread_mutex_unlock(&mutexStats);
   pthread_mutex_unlock(&mutexQueue);
-}
-
-//
-// Function: lcdGlutReshape
-//
-// Event handler for glut window end-user resize event.
-// A resize event triggers displaying window pixel size info in a
-// textbox.
-//
-void lcdGlutReshape(int x, int y)
-{
-  if (winRedrawFirst == GLCD_FALSE)
-  {
-    // At startup ignore the first resize event
-    winRedrawFirst = GLCD_TRUE;
-  }
-  else
-  {
-    // Signal a resize event to show window pixel size info
-    gettimeofday(&tvWinReshapeLast, NULL);
-    winResize = GLCD_TRUE;
-  }
-
-  // Default glut behavior for dealing with window resize by end-user
-  glViewport(0, 0, x, y);
-  glutPostRedisplay();
-}
-
-//
-// Function: lcdGlutReshapeProcess
-//
-// Process events ocurring after a glut window resize
-//
-void lcdGlutReshapeProcess(void)
-{
-  struct timeval tvNow;
-  suseconds_t timeDiff;
-
-  if (winResize == GLCD_TRUE)
-  {
-    // There has been a glut resize event. Clear it and begin showing
-    // window pixel size info
-    winResize = GLCD_FALSE;
-    winShowWinSize = GLCD_TRUE;
-    winRedraw = GLCD_TRUE;
-  }
-  else if (winShowWinSize == GLCD_TRUE)
-  {
-    // We are currently showing window pixel size info.
-    // Stop doing so after a timeout.
-    gettimeofday(&tvNow, NULL);
-    timeDiff = (tvNow.tv_sec - tvWinReshapeLast.tv_sec) * 1E6 +
-      tvNow.tv_usec - tvWinReshapeLast.tv_usec;
-    if (timeDiff / 1000 > GLUT_SHOW_PIXSIZE_MS)
-    {
-      // Timeout on showing the info so we must remove it
-      winShowWinSize = GLCD_FALSE;
-      winRedraw = GLCD_TRUE;
-    }
-  }
 }
 
 //
@@ -940,7 +897,7 @@ static void lcdGlutRender(void)
     glEnd();
   }
 
-  // Draw  gridlines for testing purposes
+  // Draw gridlines for testing purposes
   if (winGridLines == GLCD_TRUE)
   {
     int i;
@@ -1038,6 +995,65 @@ static void lcdGlutRender(void)
 static void lcdGlutRenderPrepare(void)
 {
   winRedraw = GLCD_TRUE;
+}
+
+//
+// Function: lcdGlutReshape
+//
+// Event handler for glut window end-user resize event.
+// A resize event triggers displaying window pixel size info in a textbox.
+//
+void lcdGlutReshape(int x, int y)
+{
+  if (winRedrawFirst == GLCD_FALSE)
+  {
+    // At startup ignore the first resize event
+    winRedrawFirst = GLCD_TRUE;
+  }
+  else
+  {
+    // Signal a resize event to show window pixel size info
+    gettimeofday(&tvWinReshapeLast, NULL);
+    winResize = GLCD_TRUE;
+  }
+
+  // Default glut behavior for dealing with window resize by end-user
+  glViewport(0, 0, x, y);
+  glutPostRedisplay();
+}
+
+//
+// Function: lcdGlutReshapeProcess
+//
+// Process events ocurring after a glut window resize
+//
+void lcdGlutReshapeProcess(void)
+{
+  struct timeval tvNow;
+  suseconds_t timeDiff;
+
+  if (winResize == GLCD_TRUE)
+  {
+    // There has been a glut resize event. Clear it and begin showing
+    // window pixel size info
+    winResize = GLCD_FALSE;
+    winShowWinSize = GLCD_TRUE;
+    winRedraw = GLCD_TRUE;
+  }
+  else if (winShowWinSize == GLCD_TRUE)
+  {
+    // We are currently showing window pixel size info.
+    // Stop doing so after a timeout.
+    gettimeofday(&tvNow, NULL);
+    timeDiff = (tvNow.tv_sec - tvWinReshapeLast.tv_sec) * 1E6 +
+      tvNow.tv_usec - tvWinReshapeLast.tv_usec;
+    if (timeDiff / 1000 > GLUT_SHOW_PIXSIZE_MS)
+    {
+      // Timeout on showing the info so we must remove it
+      winShowWinSize = GLCD_FALSE;
+      winRedraw = GLCD_TRUE;
+    }
+  }
 }
 
 //

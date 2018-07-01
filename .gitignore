@@ -9,6 +9,7 @@
 *.map
 *.sym
 *.lst
+*.au
 
 # Libraries
 *.lib
@@ -34,4 +35,5 @@ core
 /firmware/emulator/expr.tab.c
 /firmware/emulator/expr.tab.h
 /firmware/emulator/expr.yy.c
+/firmware/emulator/genalarm
 /.vscode

@@ -6,8 +6,9 @@
 #          controller auto-increments its x cursor
 #
 
-# Clear lcd and reset statistics
+# Clear lcd, let glut clear its message buffers, and then reset statistics
 le
+w 50
 sr
 
 # Fill the lcd display
@@ -26,7 +27,8 @@ rn
 lw 0 0x55
 lw 1 0x55
 
-# Show the stats
+# Show the stats after letting glut clear its message buffer
+w 50
 sp
 
 # Reset and sync hardware with glcd software cursor to (0,0)

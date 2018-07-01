@@ -67,8 +67,8 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType,
 void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
   u08 color);
 
-// Write a standard ascii character (values 20-127)
-// to the display at current cursor location
+// Write a standard ascii character (values 20-127) to the display at current
+// cursor location
 void glcdWriteChar(unsigned char c, u08 color);
 void glcdWriteCharFg(unsigned char c);
 

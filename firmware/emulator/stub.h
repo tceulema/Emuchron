@@ -54,13 +54,6 @@
 // Delay stub
 #define _delay_ms(x)		stubDelay((x))
 
-// Emulator timer stub cycle state
-#define CYCLE_NOWAIT		0
-#define CYCLE_WAIT		1
-#define CYCLE_WAIT_STATS	2
-#define CYCLE_REQ_NOWAIT	3
-#define CYCLE_REQ_WAIT		4
-
 // Keyboard input mode
 #define KB_MODE_LINE		0
 #define KB_MODE_SCAN		1
@@ -103,7 +96,7 @@ void wdt_reset();
 // Below is emulator oriented stub functionality
 // Monochron emulator stubs
 char stubEventGet(void);
-void stubEventInit(int startMode, void (*stubHelpHandler)(void));
+void stubEventInit(u08 startWait, void (*stubHelpHandler)(void));
 
 // Alarm sound and switch stubs
 void alarmSoundReset(void);

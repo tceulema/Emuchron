@@ -7,27 +7,7 @@
 // All calculations in bison are done in type double
 #define YYSTYPE double
 
-// The following expression evaluator objects are the only ones that are
-// externally accessible
-double exprValue;		// The resulting expression value
-unsigned char exprAssign;	// Indicates if input expression is an assignment
-
-// Variable error status flag (variable is not active)
-static int varError;
-
-// Dummy value to be used in c library math functions
-static double myDummy;
-
-// Prototypes of expr.yy.c local functions. They are either copied from
-// within this module or are bison generated parser functions. They are
-// added to satisfy gcc.
-static double exprCompare(double valLeft, double valRight, int cond);
-static struct yy_buffer_state *yy_scan_string(const char[]);
-static void yy_delete_buffer(struct yy_buffer_state *b);
-static int yyerror(char *s);
-static int yylex(void);
-
-// The comparison logic conditions in exprCompare()
+// Expression comparison logic conditions
 #define COND_LT		0	// <
 #define COND_GT		1	// >
 #define COND_LET	2	// <=
@@ -40,6 +20,27 @@ static int yylex(void);
 // but for our mchron purpose it is accurate enough.
 #define EPSILON		1E-7L
 
+// The following expression evaluator objects are the only ones that are
+// externally accessible
+double exprValue;		// The resulting expression value
+unsigned char exprAssign;	// Indicates if input expression is an assignment
+
+// Variable error status flag (variable is not active)
+static int varError;
+
+// Dummy value to be used in c library math functions
+static double myDummy;
+
+// Prototypes of bison generated expr.yy.c parser functions that must be added
+// here to satisfy gcc (why doesn't bison generate this for me?)
+struct yy_buffer_state *yy_scan_string(const char[]);
+void yy_delete_buffer(struct yy_buffer_state *b);
+int yylex(void);
+
+// Local function prototypes
+static double exprCompare(double valLeft, double valRight, int cond);
+static int yyerror(char *s);
+
 //
 // Function: exprCompare
 //
@@ -47,10 +48,13 @@ static int yylex(void);
 // It is partly based on information in the following web resource:
 // http://warp.povusers.org/programming/floating_point_caveats.html
 //
-// When comparing type double values, the slightest inaccuracy in the
-// mantisse will cause undesired comparison results. This is an inherent
-// issue for non-integer data types, We will therefor compare values
-// based on their relative delta using accuracy cutoff value EPSILON.
+// When comparing type double values, the slightest inaccuracy in the mantisse
+// will cause undesired comparison results. This is an inherent issue for
+// non-integer data types, We will therefor compare values based on their
+// relative delta using accuracy cutoff value EPSILON. However, when one of
+// the arguments is 0, we must resort to using a comparison method based on
+// the absolute delta between the two arguments, again using accuracy cutoff
+// value EPSILON.
 //
 // Returns: 0 - comparison condition fails
 //          1 - comparison condition passes
@@ -62,25 +66,26 @@ static double exprCompare(double valLeft, double valRight, int cond)
   // Determine if left and right values are considered equal
   if (valLeft == 0 || valRight == 0)
   {
-    // In case valLeft is 0: cannot divide by zero as done in 'else' branch
-    // so we have to use the comparison expression in this section.
-    // In case valRight is 0: yes, we could compare based on relative delta
-    // in the 'else' branch, but we won't. Think about swapping the left and
-    // right values: comparing (0 vs <low number>) is likely to yield a
-    // different result than when comparing (<low number> vs 0).
+    // In case valLeft is 0: cannot divide by zero as done in 'else' branch so
+    // we must use something else, in this case make a comparison based on the
+    // absolute delta between the two arguments.
+    // In case valRight is 0: yes, we could compare based on relative delta in
+    // the 'else' branch, but we won't. Think about swapping the left and right
+    // values: comparing (0 vs <low number>) is likely to yield a different
+    // result than when comparing (<low number> vs 0).
     // Example:
     // Using logic in this 'then' branch: (0 == 1e-16) --> true
     // Using logic in the 'else' branch : (1e-16 == 0) --> false
     // That is nasty!
-    // Hence, in case either one of the left or right values is 0, always
-    // use the expression below for consistent comparison results.
+    // Hence, in case either one of the left or right values is 0 always use a
+    // comparison based on the absolute delta between the two arguments.
     if (fabs(valLeft - valRight) < EPSILON)
       isEqual = 1;
   }
   else
   {
-    // Determine relative delta between the left and right value
-    // and compare that with cutoff value epsilon
+    // Determine relative delta between the left and right value and compare
+    // that with cutoff value epsilon
     if (fabs((valLeft - valRight) / valLeft) < EPSILON)
       isEqual = 1;
   }
@@ -107,6 +112,13 @@ static double exprCompare(double valLeft, double valRight, int cond)
     else
       return 0;
   }
+}
+
+// Generic parser error handling
+static int yyerror(char *s)
+{
+  //printf("%d %s\n", varError, s);
+  return 0;
 }
 %}
 
@@ -149,13 +161,12 @@ Input:
 ;
 
 Line:
-    END
-    | Assignment END { exprValue = $1;
-        /*printf("Result   : %f\n", $1);
-        printf("varError : %d\n", varError);*/ }
+    Assignment END { exprValue = $1;
+        /*printf("result   : %f\n", exprValue);
+        printf("isExpr   : %d\n", (int)exprAssign);*/ }
     | Expression END { exprValue = $1;
-        /*printf("Result   : %f\n", $1);
-        printf("varError : %d\n", varError);*/ }
+        /*printf("result   : %f\n", exprValue);
+        printf("isExpr   : %d\n", (int)exprAssign);*/ }
 ;
 
 Assignment:
@@ -216,83 +227,8 @@ Expression:
     | Expression LET Expression { $$ = exprCompare($1, $3, COND_LET); }
     | Expression EQ Expression { $$ = exprCompare($1, $3, COND_EQ); }
     | Expression NEQ Expression { $$ = exprCompare($1, $3, COND_NEQ); }
-    // Can't handle unknown stuff so it should fail
+    // Cannot handle unknown stuff so it should fail
     | UNKNOWN { YYERROR; }
 ;
 
 %%
-// Generic parser error handling
-static int yyerror(char *s)
-{
-  //printf("%d %s\n", varError, s);
-  return 0;
-}
-
-//
-// Function: exprEvaluate
-//
-// The entry point to the generated flex/bison expression evaluator
-//
-int exprEvaluate(char *argName, char *exprString, int exprStringLen)
-{
-  struct yy_buffer_state *buf;
-  char yyInput[exprStringLen + 1];
-  int parseResult;
-
-  // Uncomment this to get bison runtime trace output.
-  // This requires the bison compiler to use the --debug option.
-  // For this, uncomment flag BDEBUG in MakefileEmu [firmware].
-  // Keep the code section below and that build flag in sync.
-  //extern int yydebug;
-  //yydebug = 1;
-
-  // Reset previous error and assignment expression indicator
-  varError = 0;
-  exprAssign = 0;
-
-  // Copy input as scan/parse may alter original string
-  strcpy(yyInput, exprString);
-
-  // Scan the expression
-  buf = yy_scan_string(yyInput);
-
-  // Parse the expression
-  parseResult = yyparse();
-
-  // Cleanup (including returning malloc-ed memory during scan/parse)
-  yy_delete_buffer(buf);
-
-  // Handle all kinds of erroneous end result situations
-  if (varError == 1)
-  {
-    // Inactive variable
-    printf("%s? parse error\n", argName);
-    return CMD_RET_ERROR;
-  }
-  else if (varError == 2)
-  {
-    // Variable bucket overflow
-    printf("%s? internal: bucket overflow\n", argName);
-    return CMD_RET_ERROR;
-  }
-  else if (parseResult == 1)
-  {
-    // Error occured in scanning/parsing the expression string
-    printf("%s? syntax error\n", argName);
-    return CMD_RET_ERROR;
-  }
-  else if (isnan(exprValue) != 0)
-  {
-    // Result is not a number
-    printf("%s? invalid (NaN)\n", argName);
-    return CMD_RET_ERROR;
-  }
-  else if (isfinite(exprValue) == 0)
-  {
-    // Result is infinite
-    printf("%s? overflow (inf)\n", argName);
-    return CMD_RET_ERROR;
-  }
-
-  return CMD_RET_OK;
-}

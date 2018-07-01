@@ -8,7 +8,6 @@
 #include "util.h"
 #else
 #include "emulator/stub.h"
-#include "emulator/stubrefs.h"
 #include "emulator/controller.h"
 #endif
 #include "ks0108.h"

@@ -6,7 +6,6 @@
 #ifndef MCHRONUTIL_H
 #define MCHRONUTIL_H
 
-#include "interpreter.h"
 #include "controller.h"
 
 // The coredump origin types
@@ -34,18 +33,14 @@ typedef struct _emuArgcArgv_t
 u08 emuColorGet(char colorId);
 u08 emuFontGet(char *fontName);
 u08 emuOrientationGet(char orientationId);
-int emuStartModeGet(char startId);
+u08 emuStartModeGet(char startId);
 
 // mchron environment functions
-int emuArgcArgvGet(int argc, char *argv[]);
+int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv);
 void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   int arg3, int arg4);
 void emuSigSetup(void);
-void emuWinClose(void);
-
-// mchron interpreter command line/list functions
-int emuLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput);
-int emuListExecute(cmdLine_t *cmdLineRoot, char *source);
+void emuShutdown(void);
 
 // mchron interpreter support functions
 void emuClockRelease(int echoCmd);

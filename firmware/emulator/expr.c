@@ -20,3 +20,73 @@
 // built using standard makefile dependency rules.
 #include "expr.tab.c"
 #include "expr.yy.c"
+
+//
+// Function: exprEvaluate
+//
+// The entry point to the generated flex/bison expression evaluator.
+//
+// Return values:
+// CMD_RET_OK		- Successful evalution of expression
+// CMD_RET_ERROR	- Error in evaluation of expression
+//
+// Global variables containing evaluator results upon successful evaluation:
+// extern double exprValue;         - The resulting expression value
+// extern unsigned char exprAssign; - The expression is an assignment (0 or 1)
+//
+int exprEvaluate(char *argName, char *exprString)
+{
+  struct yy_buffer_state *buf;
+  int parseResult;
+
+  // Uncomment this to get bison runtime trace output.
+  // This requires the bison compiler to use the --debug option.
+  // For this, uncomment flag BDEBUG in MakefileEmu [firmware].
+  // Keep the code section below and that build flag in sync.
+  //extern int yydebug;
+  //yydebug = 1;
+
+  // Reset previous error and assignment expression indicator
+  varError = 0;
+  exprAssign = 0;
+
+  // Scan and parse the expression and cleanup flex/bison
+  buf = yy_scan_string(exprString);
+  parseResult = yyparse();
+  yy_delete_buffer(buf);
+
+  // Handle all kinds of erroneous end result situations
+  if (varError == 1)
+  {
+    // Inactive variable
+    printf("%s? parse error\n", argName);
+    return CMD_RET_ERROR;
+  }
+  else if (varError == 2)
+  {
+    // Variable bucket overflow
+    printf("%s? internal: bucket overflow\n", argName);
+    return CMD_RET_ERROR;
+  }
+  else if (parseResult == 1)
+  {
+    // Error occured in scanning/parsing the expression string
+    printf("%s? syntax error\n", argName);
+    return CMD_RET_ERROR;
+  }
+  else if (isnan(exprValue) != 0)
+  {
+    // Result is not a number
+    printf("%s? invalid (NaN)\n", argName);
+    return CMD_RET_ERROR;
+  }
+  else if (isfinite(exprValue) == 0)
+  {
+    // Result is infinite
+    printf("%s? overflow (inf)\n", argName);
+    return CMD_RET_ERROR;
+  }
+
+  // Successful expression evaluation completed
+  return CMD_RET_OK;
+}

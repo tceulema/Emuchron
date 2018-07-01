@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'listutil.c'
-// Title    : Command list utility routines for emuchron emulator
+// Title    : Command list and execution utility routines for emuchron emulator
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
@@ -11,121 +11,34 @@
 
 // Monochron and emuchron defines
 #include "../ks0108.h"
+#include "../monomain.h"
+#include "stub.h"
 #include "scanutil.h"
 #include "listutil.h"
 
-// From the variables that store the processed command line arguments
-// we only need the word arguments
-extern char *argWord[];
+// Current command file execution depth
+extern int fileExecDepth;
 
-// The command profile for an mchron command
-extern cmdArg_t argCmd[];
+// The current command echo state
+extern int echoCmd;
 
 // This is me
 extern const char *__progname;
 
+// The command list execution depth that is used to determine to actively
+// switch between keyboard line mode and keypress mode
+int listExecDepth = 0;
+
 // Local function prototypes
-static int cmdLineComplete(cmdPcCtrl_t **cmdPcCtrlLast,
-  cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLineLast);
 static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast,
   cmdLine_t **cmdLineRoot);
+static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
+  cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine);
+static int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
+  cmdPcCtrl_t **cmdPcCtrlRoot, cmdInput_t *cmdInput, int fileExecDepth);
 static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine);
 static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine);
-
-//
-// Function: cmdLineComplete
-//
-// Complete a single command line and, if needed, add or find a program
-// counter control block and associate it with the command line.
-// Return values:
-// -1 : invalid command
-//  0 : success
-// >0 : starting line number of block in which command cannot be matched
-//
-static int cmdLineComplete(cmdPcCtrl_t **cmdPcCtrlLast, cmdPcCtrl_t **cmdPcCtrlRoot,
-  cmdLine_t *cmdLineLast)
-{
-  int retVal;
-  int lineNumErr = 0;
-  cmdCommand_t *cmdCommand;
-  char *input;
-
-  // Scan the command name in this command line
-  input = cmdLineLast->input;
-  cmdArgInit(&input);
-  cmdArgScan(argCmd, 1, &input, GLCD_TRUE);
-  if (argWord[0] == NULL)
-  {
-    // Most likely an empty/whitespace line, which is not an error.
-    // It also means we're done.
-    cmdLineLast->cmdCommand = NULL;
-    return 0;
-  }
-
-  // Get the dictionary entry for the command
-  retVal = cmdDictCmdGet(argWord[0], &cmdCommand);
-  if (retVal != CMD_RET_OK)
-  {
-    // Unknown command
-    cmdLineLast->cmdCommand = NULL;
-    return -1;
-  }
-
-  // Set the control block type and based on that optionally
-  // link it a (new) program control block
-  cmdLineLast->cmdCommand = cmdCommand;
-
-  // Only in case of a program counter control block command
-  // we need to administer control blocks
-  if (cmdCommand->cmdPcCtrlType != PC_CONTINUE)
-  {
-    if (cmdCommand->cmdPcCtrlType == PC_REPEAT_NEXT)
-    {
-      // We must find a repeat-for command to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLineLast);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR)
-    {
-      // Create new control block and link it to the repeat command
-      *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-        cmdLineLast);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF_ELSE_IF)
-    {
-      // We must find an if or else-if command to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLineLast);
-
-      // Create new control block and link it to the if-else-if command
-      if (lineNumErr == 0)
-        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-          cmdLineLast);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF_END)
-    {
-      // We must find an if, else-if or else command to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLineLast);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF_ELSE)
-    {
-      // We must find an if or else-if command to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLineLast);
-
-      // Create new control block and link it to the if-else command
-      if (lineNumErr == 0)
-        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-          cmdLineLast);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF)
-    {
-      // Create new control block and link it to the if-then command
-      *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-        cmdLineLast);
-    }
-  }
-
-  return lineNumErr;
-}
 
 //
 // Function: cmdLineCreate
@@ -137,7 +50,7 @@ static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
   cmdLine_t *cmdLine = NULL;
 
   // Allocate the new command line
-  cmdLine = (cmdLine_t *)malloc(sizeof(cmdLine_t));
+  cmdLine = malloc(sizeof(cmdLine_t));
 
   // Take care of some administrative pointers
   if (*cmdLineRoot == NULL)
@@ -154,12 +67,180 @@ static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
   // Init the new structure
   cmdLine->lineNum = 0;
   cmdLine->input = NULL;
+  cmdLine->args = NULL;
+  cmdLine->initialized = GLCD_FALSE;
   cmdLine->cmdCommand = NULL;
   cmdLine->cmdPcCtrlParent = NULL;
   cmdLine->cmdPcCtrlChild = NULL;
   cmdLine->next = NULL;
 
   return cmdLine;
+}
+
+//
+// Function: cmdLineExecute
+//
+// Process a single line input string.
+// This is the main command input handler that can be called recursively via
+// the mchron 'e' command.
+//
+int cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
+{
+  char *input = cmdLine->input;
+  cmdCommand_t *cmdCommand;
+  int retVal = CMD_RET_OK;
+
+  // Have we scanned the command line arguments yet
+  if (cmdLine->initialized == GLCD_FALSE)
+  {
+    // Start command line scanner by getting command and its dictionary entry
+    retVal = cmdArgInit(&input, cmdLine);
+    if (retVal != CMD_RET_OK)
+      return CMD_RET_ERROR;
+    if (*cmdLine->input == '\0')
+    {
+      // Input contains only white space chars.
+      // Dump newline in the log only when we run at root command level.
+      if (listExecDepth == 0)
+        DEBUGP("");
+      return CMD_RET_OK;
+    }
+
+    // Scan command arguments (and validate non-numeric arguments)
+    retVal = cmdArgRead(input, cmdLine);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+  }
+
+  // See what type of command we're dealing with
+  cmdCommand = cmdLine->cmdCommand;
+  if (cmdCommand->cmdPcCtrlType == PC_CONTINUE)
+  {
+    // For a standard command publish the commandline argument variables and
+    // execute its command handler function
+    retVal = cmdArgPublish(cmdLine);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+    retVal = cmdCommand->cmdHandler(cmdLine);
+  }
+  else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR ||
+    cmdCommand->cmdPcCtrlType == PC_IF)
+  {
+    // The user has entered a program control block start command at command
+    // prompt level.
+    // Cache all keyboard input commands until this command is matched with a
+    // corresponding end command. Then execute the command list.
+    cmdLine_t *cmdLineRoot = NULL;
+    cmdPcCtrl_t *cmdPcCtrlRoot = NULL;
+
+    // Load keyboard command lines in a command list
+    retVal = cmdListKeyboardLoad(&cmdLineRoot, &cmdPcCtrlRoot, cmdInput,
+      fileExecDepth);
+    if (retVal == CMD_RET_OK)
+    {
+      // Execute the commands in the command list
+      int myEchoCmd = echoCmd;
+      echoCmd = CMD_ECHO_NO;
+      retVal = cmdListExecute(cmdLineRoot, (char *)__progname);
+      echoCmd = myEchoCmd;
+    }
+
+    // We're done. Either all commands in the linked list have been executed
+    // successfully or an error has occured. Do admin stuff by cleaning up the
+    // linked lists.
+    cmdListCleanup(cmdLineRoot, cmdPcCtrlRoot);
+  }
+  else
+  {
+    // All other control block types are invalid on the command line as they
+    // need to link to either a repeat-for or if-then command. As such, they
+    // can only be entered via multi line keyboard input or a command file.
+    printf("command? cannot match this command: %s\n", cmdCommand->cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+
+  return retVal;
+}
+
+//
+// Function: cmdLineValidate
+//
+// Validate a single command line for use in a command list and, if needed,
+// add or find a program counter control block and associate it with the
+// command line.
+// Return values:
+// -1 : invalid command
+//  0 : success (with valid command or only white space without command)
+// >0 : starting line number of block in which command cannot be matched
+//
+static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
+  cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine)
+{
+  int lineNumErr = 0;
+  cmdCommand_t *cmdCommand;
+  char *input;
+  int retVal;
+
+  // Start command line scanner by getting command and its dictionary entry
+  input = cmdLine->input;
+  retVal = cmdArgInit(&input, cmdLine);
+  // Command not found
+  if (retVal != CMD_RET_OK)
+    return -1;
+  // Empty command
+  if (*cmdLine->input == '\0')
+    return 0;
+
+  // Get the control block type and based on that optionally link it to a (new)
+  // program control block
+  cmdCommand = cmdLine->cmdCommand;
+  if (cmdCommand->cmdPcCtrlType != PC_CONTINUE)
+  {
+    if (cmdCommand->cmdPcCtrlType == PC_REPEAT_NEXT)
+    {
+      // We must find a repeat-for command to associate with
+      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
+    }
+    else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR)
+    {
+      // Create new control block and link it to the repeat command
+      *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
+        cmdLine);
+    }
+    else if (cmdCommand->cmdPcCtrlType == PC_IF_ELSE_IF)
+    {
+      // We must find an if or else-if command to associate with
+      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
+
+      // Create new control block and link it to the if-else-if command
+      if (lineNumErr == 0)
+        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
+          cmdLine);
+    }
+    else if (cmdCommand->cmdPcCtrlType == PC_IF_END)
+    {
+      // We must find an if, else-if or else command to associate with
+      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
+    }
+    else if (cmdCommand->cmdPcCtrlType == PC_IF_ELSE)
+    {
+      // We must find an if or else-if command to associate with
+      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
+
+      // Create new control block and link it to the if-else command
+      if (lineNumErr == 0)
+        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
+          cmdLine);
+    }
+    else if (cmdCommand->cmdPcCtrlType == PC_IF)
+    {
+      // Create new control block and link it to the if-then command
+      *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
+        cmdLine);
+    }
+  }
+
+  return lineNumErr;
 }
 
 //
@@ -176,11 +257,13 @@ void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot)
   nextLine = cmdLineRoot;
   while (nextLine != NULL)
   {
-    // Return the malloc-ed command line
-    free(nextLine->input);
-    nextLine = cmdLineRoot->next;
+    // Return the malloc-ed scanned command line arguments in the command and
+    // the command itself
+    cmdArgCleanup(cmdLineRoot);
+    free(cmdLineRoot->input);
 
-    // Return the malloc-ed list element itself
+    // Return the malloc-ed command line
+    nextLine = cmdLineRoot->next;
     free(cmdLineRoot);
     cmdLineRoot = nextLine;
   }
@@ -189,19 +272,134 @@ void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot)
   nextPcCtrl = cmdPcCtrlRoot;
   while (nextPcCtrl != NULL)
   {
-    // Return the malloc-ed control block argument expressions
-    if (nextPcCtrl->cbArg1 != NULL)
-      free(nextPcCtrl->cbArg1);
-    if (nextPcCtrl->cbArg2 != NULL)
-      free(nextPcCtrl->cbArg2);
-    if (nextPcCtrl->cbArg3 != NULL)
-      free(nextPcCtrl->cbArg3);
     nextPcCtrl = cmdPcCtrlRoot->next;
-
-    // Return the malloc-ed list element itself
     free(cmdPcCtrlRoot);
     cmdPcCtrlRoot = nextPcCtrl;
   }
+}
+
+//
+// Function: cmdListExecute
+//
+// Execute the commands in the command list as loaded from a file or entered
+// interactively on the command line.
+// We have all command lines and control blocks available in linked lists. The
+// control block list has been checked on its integrity, meaning that all
+// pointers between command lines and control blocks are present and validated
+// so we don't need to worry about that.
+// Start at the top of the list and work our way down until we find a runtime
+// error or end up at the end of the list.
+// We may encounter program control blocks that will influence the program
+// counter by creating loops or jumps in the execution plan of the list.
+//
+int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
+{
+  char ch = '\0';
+  cmdLine_t *cmdProgCounter = NULL;
+  cmdLine_t *cmdProgCounterNext = NULL;
+  cmdCommand_t *cmdCommand;
+  char *input;
+  int cmdPcCtrlType;
+  int i;
+  int retVal = CMD_RET_OK;
+
+  // See if we need to switch to keypress mode. We only need to do this at the
+  // top of nested list executions. Switching to keypress mode allows the
+  // end-user to interrupt the list execution using a 'q' keypress.
+  if (listExecDepth == 0)
+    kbModeSet(KB_MODE_SCAN);
+  listExecDepth++;
+
+  // We start at the root of the linked list. Let's see where we end up.
+  cmdProgCounter = cmdLineRoot;
+  while (cmdProgCounter != NULL)
+  {
+    // Echo command
+    if (echoCmd == CMD_ECHO_YES)
+    {
+      for (i = 1; i < fileExecDepth; i++)
+        printf(":   ");
+      printf(":%03d: %s\n", cmdProgCounter->lineNum, cmdProgCounter->input);
+    }
+
+    // Execute the command in the command line
+    cmdCommand = cmdProgCounter->cmdCommand;
+    if (cmdCommand == NULL)
+    {
+      // Skip a blank command line
+      cmdPcCtrlType = PC_CONTINUE;
+      retVal = CMD_RET_OK;
+    }
+    else if (cmdCommand->cmdPcCtrlType == PC_CONTINUE)
+    {
+      // Execute a regular command via the generic handler
+      cmdPcCtrlType = PC_CONTINUE;
+      retVal = cmdLineExecute(cmdProgCounter, NULL);
+    }
+    else
+    {
+      // This is a control block command from a repeat or if construct. Get the
+      // command arguments (if not already done) and execute the associated
+      // program counter control block handler from the command dictionary.
+      input = cmdProgCounter->input;
+      if (cmdProgCounter->initialized == GLCD_FALSE)
+      {
+        cmdArgInit(&input, cmdProgCounter);
+        retVal = cmdArgRead(input, cmdProgCounter);
+      }
+      if (retVal == CMD_RET_OK)
+      {
+        cmdPcCtrlType = cmdCommand->cmdPcCtrlType;
+        cmdProgCounterNext = cmdProgCounter;
+        retVal = cmdCommand->cbHandler(&cmdProgCounterNext);
+      }
+    }
+
+    // Verify if a command interrupt was requested
+    if (retVal == CMD_RET_OK)
+    {
+      ch = kbKeypressScan(GLCD_TRUE);
+      if (ch == 'q')
+      {
+        printf("quit\n");
+        retVal = CMD_RET_INTERRUPT;
+      }
+    }
+
+    // Check for error/interrupt
+    if (retVal == CMD_RET_ERROR || retVal == CMD_RET_INTERRUPT)
+    {
+      // Error/interrupt occured in current level
+      printf(CMD_STACK_TRACE);
+      // Report current stack level and cascade to upper level
+      printf(CMD_STACK_FMT, fileExecDepth, source, cmdProgCounter->lineNum,
+        cmdProgCounter->input);
+      retVal = CMD_RET_RECOVER;
+      break;
+    }
+    else if (retVal == CMD_RET_RECOVER)
+    {
+      // Error/interrupt occured at lower level.
+      // Report current stack level and cascade to upper level.
+      printf(CMD_STACK_FMT, fileExecDepth, source, cmdProgCounter->lineNum,
+        cmdProgCounter->input);
+      break;
+    }
+
+    // Move to next command in linked list
+    if (cmdPcCtrlType == PC_CONTINUE)
+      cmdProgCounter = cmdProgCounter->next;
+    else
+      cmdProgCounter = cmdProgCounterNext;
+  }
+
+  // End of list or encountered error/interrupt.
+  // Switch back to line mode when we're back at root level.
+  listExecDepth--;
+  if (listExecDepth == 0)
+    kbModeSet(KB_MODE_LINE);
+
+  return retVal;
 }
 
 //
@@ -242,8 +440,8 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   // Add each line in the command file in a command linked list
   while (cmdInput.input != NULL)
   {
-    // Create new command line, add it to the linked list, and fill in
-    // its functional payload
+    // Create new command line, add it to the linked list, and fill in its
+    // functional payload
     cmdLineLast = cmdLineCreate(cmdLineLast, cmdLineRoot);
     cmdLineLast->lineNum = lineNum;
     cmdLineLast->input = malloc(strlen(cmdInput.input) + 1);
@@ -251,7 +449,7 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
 
     // Scan and validate the command name (but not its arguments) as well as
     // validating matching control blocks
-    lineNumErr = cmdLineComplete(&cmdPcCtrlLast, cmdPcCtrlRoot, cmdLineLast);
+    lineNumErr = cmdLineValidate(&cmdPcCtrlLast, cmdPcCtrlRoot, cmdLineLast);
     if (lineNumErr != 0)
       break;
 
@@ -306,8 +504,8 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
     }
   }
 
-  // The file contents have been read into linked lists and is verified for
-  // its integrity on matching program counter control block constructs
+  // The file contents have been read into linked lists and is verified for its
+  // integrity on matching program counter control block constructs
   return CMD_RET_OK;
 }
 
@@ -316,8 +514,8 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
 //
 // Load keyboard commands interactively in a linked list structure
 //
-int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
-  cmdInput_t *cmdInput, int fileExecDepth)
+static int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
+  cmdPcCtrl_t **cmdPcCtrlRoot, cmdInput_t *cmdInput, int fileExecDepth)
 {
   cmdLine_t *cmdLineLast = NULL;	// The last cmdline in linked list
   cmdPcCtrl_t *cmdPcCtrlLast = NULL;	// The last cmdPcCtrl in linked list
@@ -331,18 +529,16 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   *cmdLineRoot = NULL;
   *cmdPcCtrlRoot = NULL;
 
-  // Do not read from the keyboard yet as we already have the first
-  // command in the input buffer. Once we've processed that one we'll
-  // continue reading the input stream using the control structure we've
-  // been handed over.
+  // Do not read from the keyboard yet as we already have the first command in
+  // the input buffer. Once we've processed that one we'll continue reading the
+  // input stream using the control structure we've been handed over.
 
   // Add each line entered via keyboard in a command linked list.
-  // The list is complete when the program control block start command
-  // (rf/iif) is matched with a corresponding program control block end
-  // command (rn/ien) command.
-  // List build-up is interrupted when the user enters ^D on a blank line,
-  // when a control block command cannot be matched or when a non-existing
-  // command is entered.
+  // The list is complete when the program control block start command (rf/iif)
+  // is matched with a corresponding end command (rn/ien).
+  // List build-up is interrupted when the user enters ^D on a blank line, when
+  // a control block command cannot be matched or when a non-existing command
+  // is entered.
   while (GLCD_TRUE)
   {
     // Create new command line, add it to the linked list, and fill in
@@ -354,7 +550,7 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
 
     // Scan and validate the command name (but not its arguments) as well as
     // validating matching control blocks
-    lineNumErr = cmdLineComplete(&cmdPcCtrlLast, cmdPcCtrlRoot, cmdLineLast);
+    lineNumErr = cmdLineValidate(&cmdPcCtrlLast, cmdPcCtrlRoot, cmdLineLast);
     if (lineNumErr != 0)
       break;
 
@@ -427,68 +623,42 @@ int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
 static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine)
 {
-  cmdPcCtrl_t *cmdPcCtrlMalloc = NULL;
+  cmdPcCtrl_t *cmdPcCtrl = NULL;
 
   // Allocate the new control block runtime
-  cmdPcCtrlMalloc = (cmdPcCtrl_t *)malloc(sizeof(cmdPcCtrl_t));
+  cmdPcCtrl = malloc(sizeof(cmdPcCtrl_t));
 
   // Take care of administrative pointers
   if (*cmdPcCtrlRoot == NULL)
   {
     // First structure in the list
-    *cmdPcCtrlRoot = cmdPcCtrlMalloc;
+    *cmdPcCtrlRoot = cmdPcCtrl;
   }
   if (cmdPcCtrlLast != NULL)
   {
     // Not the first in the list
-    cmdPcCtrlLast->next = cmdPcCtrlMalloc;
+    cmdPcCtrlLast->next = cmdPcCtrl;
   }
 
   // Init the new program counter control block
-  cmdPcCtrlMalloc->cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
-  cmdPcCtrlMalloc->initialized = GLCD_FALSE;
-  cmdPcCtrlMalloc->active = GLCD_FALSE;
-  cmdPcCtrlMalloc->cbArg1 = NULL;
-  cmdPcCtrlMalloc->cbArg2 = NULL;
-  cmdPcCtrlMalloc->cbArg3 = NULL;
-  cmdPcCtrlMalloc->cmdLineParent = cmdLine;
-  cmdPcCtrlMalloc->cmdLineChild = NULL;
-  cmdPcCtrlMalloc->prev = cmdPcCtrlLast;
-  cmdPcCtrlMalloc->next = NULL;
+  cmdPcCtrl->cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
+  cmdPcCtrl->active = GLCD_FALSE;
+  cmdPcCtrl->cmdLineParent = cmdLine;
+  cmdPcCtrl->cmdLineChild = NULL;
+  cmdPcCtrl->prev = cmdPcCtrlLast;
+  cmdPcCtrl->next = NULL;
 
   // Link the program counter control block to the current command line
-  cmdLine->cmdPcCtrlChild = cmdPcCtrlMalloc;
+  cmdLine->cmdPcCtrlChild = cmdPcCtrl;
 
-  return cmdPcCtrlMalloc;
-}
-
-//
-// Function: cmdPcCtrlArgCreate
-//
-// Allocate memory of a program counter control block argument and copy
-// the argument expression into it.
-// Note that a '\n' is added at the end of the expression as per
-// expression evaluator requirement.
-//
-char *cmdPcCtrlArgCreate(char *argExpr)
-{
-  int argExprLen = 0;
-  char *mallocPtr = NULL;
-
-  argExprLen = strlen(argExpr) + 2;
-  mallocPtr = malloc(argExprLen);
-  strcpy(mallocPtr, argExpr);
-  mallocPtr[argExprLen - 2] = '\n';
-  mallocPtr[argExprLen - 1] = '\0';
-
-  return mallocPtr;
+  return cmdPcCtrl;
 }
 
 //
 // Function: cmdPcCtrlLink
 //
-// Find an unlinked control block and verify if it can match the control
-// block type of the current command line.
+// Find an unlinked control block and verify if it can match the control block
+// type of the current command line.
 // Return values:
 //  0 : success
 // >0 : starting line number of block in which command cannot be matched
@@ -501,8 +671,8 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
   {
     if (searchPcCtrl->cmdLineChild == NULL)
     {
-      // Found an unlinked control block. Verify if its control block type
-      // is compatible with the control block type of the command line.
+      // Found an unlinked control block. Verify if its control block type is
+      // compatible with the control block type of the command line.
       if (cmdLine->cmdCommand->cmdPcCtrlType == PC_REPEAT_NEXT &&
           searchPcCtrl->cmdPcCtrlType != PC_REPEAT_FOR)
         return searchPcCtrl->cmdLineParent->lineNum;
@@ -521,8 +691,8 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
         return searchPcCtrl->cmdLineParent->lineNum;
 
       // There's a valid match between the control block types of the current
-      // command and the last open control block. Make a cross link between
-      // the two.
+      // command and the last open control block. Make a cross link between the
+      // two.
       cmdLine->cmdPcCtrlParent = searchPcCtrl;
       searchPcCtrl->cmdLineChild = cmdLine;
       return 0;

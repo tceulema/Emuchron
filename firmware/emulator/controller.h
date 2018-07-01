@@ -18,9 +18,16 @@
 #define CTRL_STATS_GLCD		0x1	// glcd stats
 #define CTRL_STATS_CTRL		0x2	// Controller stats
 #define CTRL_STATS_LCD		0x4	// Lcd (glut/ncurses) stats
-#define CTRL_STATS_FULL		\
-  (CTRL_STATS_GLCD + CTRL_STATS_CTRL + CTRL_STATS_LCD)
+#define CTRL_STATS_ALL		\
+  (CTRL_STATS_GLCD | CTRL_STATS_CTRL | CTRL_STATS_LCD)
 					// All stats
+
+// The mergeable lcd devices types
+#define CTRL_DEVICE_NCURSES	0x1	// Ncurses device
+#define CTRL_DEVICE_GLUT	0x2	// Glut device
+#define CTRL_DEVICE_ALL		\
+  (CTRL_DEVICE_NCURSES | CTRL_DEVICE_GLUT)
+					// All devices
 
 // Definition of a structure holding lcd device init related data
 typedef struct _ctrlDeviceArgs_t
@@ -33,9 +40,10 @@ typedef struct _ctrlDeviceArgs_t
 
 // Controller device support methods
 void ctrlCleanup(void);
-u08 ctrlInit(ctrlDeviceArgs_t ctrlDeviceArgs);
+u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs);
 
-// Controller status and device statistics methods
+// Controller and device status and statistics methods
+u08 ctrlDeviceActive(u08 device);
 void ctrlRegPrint(void);
 void ctrlStatsPrint(int type);
 void ctrlStatsReset(int type);

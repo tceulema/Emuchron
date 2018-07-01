@@ -40,7 +40,7 @@
 // requiring only 150 bytes. By applying this approach on both the tone and
 // durations arrays below we'll save a total of 290 data bytes. A nice side
 // effect of this is that because the array size is now less than 255 elements
-// we now can use uint8_t array indices instead of uint16_t indices, leading t
+// we now can use uint8_t array indices instead of uint16_t indices, leading to
 // a substantial save in generated object code. The downside of this is that we
 // need a master table that defines the sequence of unique tones+durations sets
 // to be played, and that the logic to play these sets becomes slightly more
