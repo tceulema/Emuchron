@@ -59,6 +59,7 @@ extern char animYear[];
 // Local function prototypes
 static void sliderAlarmAreaUpdate(void);
 static void sliderElementInit(u08 x, u08 y, u08 factor, char *label);
+static void sliderElementInvert(u08 x, u08 y, u08 element);
 static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
   u08 init);
 
@@ -78,31 +79,21 @@ void sliderCycle(void)
 
   DEBUGP("Update Slider");
 
-  // Verify changes in hour
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_HOUR_Y_START,
-      mcClockOldTH, mcClockNewTH, mcClockInit);
-  // Verify changes in min
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_MIN_Y_START,
-      mcClockOldTM, mcClockNewTM, mcClockInit);
-  // Verify changes in sec
-  if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_SEC_Y_START,
-      mcClockOldTS, mcClockNewTS, mcClockInit);
+  // Verify changes in hour + min + sec
+  sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_HOUR_Y_START, mcClockOldTH,
+    mcClockNewTH, mcClockInit);
+  sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_MIN_Y_START, mcClockOldTM,
+    mcClockNewTM, mcClockInit);
+  sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_SEC_Y_START, mcClockOldTS,
+    mcClockNewTS, mcClockInit);
 
-  // Verify changes in day
-  if (mcClockNewDD != mcClockOldDD || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_DAY_Y_START,
-      mcClockOldDD, mcClockNewDD, mcClockInit);
-  // Verify changes in month
-  if (mcClockNewDM != mcClockOldDM || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_MON_Y_START,
-      mcClockOldDM, mcClockNewDM, mcClockInit);
-  // Verify changes in year
-  if (mcClockNewDY != mcClockOldDY || mcClockInit == GLCD_TRUE)
-    sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START,
-      mcClockOldDY, mcClockNewDY, mcClockInit);
+  // Verify changes in day + mon + year
+  sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_DAY_Y_START, mcClockOldDD,
+    mcClockNewDD, mcClockInit);
+  sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_MON_Y_START, mcClockOldDM,
+    mcClockNewDM, mcClockInit);
+  sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START, mcClockOldDY,
+    mcClockNewDY, mcClockInit);
 }
 
 //
@@ -133,6 +124,19 @@ static void sliderElementInit(u08 x, u08 y, u08 factor, char *label)
 }
 
 //
+// Function: sliderElementInvert
+//
+// Invert a value marker for a time/date/alarm element
+//
+static void sliderElementInvert(u08 x, u08 y, u08 element)
+{
+  glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
+    element * (SLIDER_MARKER_WIDTH + 1),
+    y + SLIDER_MARKER_Y_OFFSET, SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT,
+    ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+}
+
+//
 // Function: sliderElementValueSet
 //
 // Set the value markers for a time/date/alarm element
@@ -140,10 +144,19 @@ static void sliderElementInit(u08 x, u08 y, u08 factor, char *label)
 static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
   u08 init)
 {
-  u08 valLowOld = oldVal % 10;
-  u08 valHighOld = oldVal / 10;
-  u08 valLowNew = newVal % 10;
-  u08 valHighNew = newVal / 10;
+  u08 valLowOld;
+  u08 valHighOld;
+  u08 valLowNew;
+  u08 valHighNew;
+
+  // See if we need to update the time element
+  if (oldVal == newVal && init == GLCD_FALSE)
+    return;
+
+  valLowOld = oldVal % 10;
+  valHighOld = oldVal / 10;
+  valLowNew = newVal % 10;
+  valHighNew = newVal / 10;
 
   if (valHighOld != valHighNew || init == GLCD_TRUE)
   {
@@ -151,16 +164,10 @@ static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
     if (init == GLCD_FALSE)
     {
       // Restore previous marker
-      glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
-        valHighOld * (SLIDER_MARKER_WIDTH + 1),
-        y + SLIDER_MARKER_Y_OFFSET, SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT,
-        ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+      sliderElementInvert(x, y, valHighOld);
     }
     // Draw new marker
-    glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
-      valHighNew * (SLIDER_MARKER_WIDTH + 1),
-      y + SLIDER_MARKER_Y_OFFSET, SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT,
-      ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+    sliderElementInvert(x, y, valHighNew);
   }
 
   if (valLowOld != valLowNew || init == GLCD_TRUE)
@@ -169,18 +176,10 @@ static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
     if (init == GLCD_FALSE)
     {
       // Restore previous marker
-      glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
-        valLowOld * (SLIDER_MARKER_WIDTH + 1),
-        y + SLIDER_MARKER_Y_OFFSET + 1 + SLIDER_MARKER_HEIGHT,
-        SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT, ALIGN_AUTO, FILL_INVERSE,
-        mcBgColor);
+      sliderElementInvert(x, y + 1 + SLIDER_MARKER_HEIGHT, valLowOld);
     }
     // Draw new marker
-    glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
-      valLowNew * (SLIDER_MARKER_WIDTH + 1),
-      y + SLIDER_MARKER_Y_OFFSET + 1 + SLIDER_MARKER_HEIGHT,
-      SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT, ALIGN_AUTO, FILL_INVERSE,
-      mcFgColor);
+    sliderElementInvert(x, y + 1 + SLIDER_MARKER_HEIGHT, valLowNew);
   }
 }
 
@@ -230,12 +229,9 @@ void sliderInit(u08 mode)
 //
 static void sliderAlarmAreaUpdate(void)
 {
-  u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
 
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
+  // Detect change in displaying alarm
   if (mcUpdAlarmSwitch == GLCD_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
@@ -262,28 +258,15 @@ static void sliderAlarmAreaUpdate(void)
     }
   }
 
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm text when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm text when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
+  // Set alarm blinking state in case we're alarming
+  if (mcAlarming == GLCD_TRUE && (mcCycleCounter & 0x08) == 8)
+    newAlmDisplayState = GLCD_TRUE;
 
-  // Inverse the alarm text if needed
-  if (inverseAlarmArea == GLCD_TRUE)
+  // Make alarm area blink during alarm or cleanup after end of alarm
+  if (newAlmDisplayState != mcU8Util1)
   {
+    // Inverse the alarm area
+    mcU8Util1 = newAlmDisplayState;
     glcdFillRectangle2(SLIDER_LEFT_X_START - 1, SLIDER_ALARM_Y_START - 1, 17,
       7, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
     glcdFillRectangle2(SLIDER_RIGHT_X_START - 1, SLIDER_ALARM_Y_START - 1, 14,

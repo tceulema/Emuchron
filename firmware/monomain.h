@@ -9,7 +9,7 @@
 #include "global.h"
 
 // Version of our emuchron code base
-#define EMUCHRON_VERSION	"v4.1"
+#define EMUCHRON_VERSION	"v4.2"
 
 // Debugging macros.
 // Note that DEBUGGING is the master switch for generating debug output.
@@ -72,31 +72,31 @@
 //          eeprom will be in when totally erased.
 #define EE_SIZE		1024
 #define EE_OFFSET	0
-#define EE_INITIALIZED	0xC3
+#define EE_INITIALIZED	0x5a
 
 // The configuration items below are stored in eeprom. An atmega328p has 1 KB
 // of eeprom available.
 // Instructions for adding a new entry/entries:
 // 1 - Add new define(s) at bottom of the list.
 // 2 - Add default value(s) in eepDefault[] in monomain.c [firmware].
-// Warning: Keep defines EE_ALARM_HOUR2..EE_ALARM_MIN4 together in a single
+// Warning: Keep defines EE_ALARM_HOUR1..EE_ALARM_MIN4 together in a single
 //          range block and in sequential order.
 #define EE_INIT		(EE_OFFSET + 0)
-#define EE_ALARM_HOUR	(EE_OFFSET + 1)
-#define EE_ALARM_MIN	(EE_OFFSET + 2)
-#define EE_BRIGHT	(EE_OFFSET + 3)
-#define EE_VOLUME	(EE_OFFSET + 4)
-#define EE_REGION	(EE_OFFSET + 5)
-#define EE_TIME_FORMAT	(EE_OFFSET + 6)
-#define EE_SNOOZE	(EE_OFFSET + 7)
-#define EE_BGCOLOR	(EE_OFFSET + 8)
-#define EE_ALARM_HOUR2	(EE_OFFSET + 9)
-#define EE_ALARM_MIN2	(EE_OFFSET + 10)
-#define EE_ALARM_HOUR3	(EE_OFFSET + 11)
-#define EE_ALARM_MIN3	(EE_OFFSET + 12)
-#define EE_ALARM_HOUR4	(EE_OFFSET + 13)
-#define EE_ALARM_MIN4	(EE_OFFSET + 14)
-#define EE_ALARM_SELECT (EE_OFFSET + 15)
+#define EE_BRIGHT	(EE_OFFSET + 1)
+#define EE_VOLUME	(EE_OFFSET + 2)
+#define EE_REGION	(EE_OFFSET + 3)
+#define EE_TIME_FORMAT	(EE_OFFSET + 4)
+#define EE_SNOOZE	(EE_OFFSET + 5)
+#define EE_BGCOLOR	(EE_OFFSET + 6)
+#define EE_ALARM_SELECT (EE_OFFSET + 7)
+#define EE_ALARM_HOUR1	(EE_OFFSET + 8)
+#define EE_ALARM_MIN1	(EE_OFFSET + 9)
+#define EE_ALARM_HOUR2	(EE_OFFSET + 10)
+#define EE_ALARM_MIN2	(EE_OFFSET + 11)
+#define EE_ALARM_HOUR3	(EE_OFFSET + 12)
+#define EE_ALARM_MIN3	(EE_OFFSET + 13)
+#define EE_ALARM_HOUR4	(EE_OFFSET + 14)
+#define EE_ALARM_MIN4	(EE_OFFSET + 15)
 
 // Structure that defines the date and time
 typedef struct _rtcDateTime_t
@@ -113,8 +113,7 @@ typedef struct _rtcDateTime_t
 void almStateSet(void);
 void almTimeGet(uint8_t alarmId, volatile uint8_t *hour,
   volatile uint8_t *min);
-void almTimeSet(uint8_t alarmId, volatile uint8_t hour,
-  volatile uint8_t min);
+void almTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min);
 
 // Function prototypes for the real time clock
 uint8_t rtcDotw(uint8_t mon, uint8_t day, uint8_t year);
@@ -122,8 +121,7 @@ uint8_t rtcLeapYear(uint16_t year);
 void rtcMchronTimeInit(void);
 void rtcTimeInit(void);
 uint8_t rtcTimeRead(void);
-void rtcTimeWrite(uint8_t sec, uint8_t min, uint8_t hour, uint8_t day,
-  uint8_t mon, uint8_t year);
+void rtcTimeWrite(void);
 
 #ifdef EMULIN
 // Function prototypes for Emuchron renamed functions and interrupt handlers

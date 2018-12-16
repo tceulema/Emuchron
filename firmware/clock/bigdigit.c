@@ -56,10 +56,10 @@ extern volatile uint8_t mcU8Util2;
 static char labelTime[] = "HH:MM:SS";
 static char labelDate[] = "DD:MM:YYYY";
 
-// The y offsets for each of the 14 elements in time+date for the
-// bigdigit clock.
-// Yes, we can apply logic to calculate them at runtime but this
-// cost us lots of code logic when compared to this very small array.
+// The y offsets for each of the 14 elements in time+date for the bigdigit
+// clock.
+// Yes, we can apply logic to calculate them at runtime but this costs us lots
+// of code logic when compared to this very small array.
 static const unsigned char __attribute__ ((progmem)) bigdigYPos[] =
 {
   /* H   X. */ BIGDIG_HMS_Y_START - 0 * (BIGDIG_FONT_WIDTH + 1),
@@ -78,11 +78,11 @@ static const unsigned char __attribute__ ((progmem)) bigdigYPos[] =
   /* Y ...X */ BIGDIG_DMY_Y_START + 9 * (BIGDIG_FONT_WIDTH + 1)
 };
 
-// Store the item identifier per clock. This allows to re-init on the
-// last active item upon re-initializing a big digit clock. You will
-// appreciate it mostly when returning from the configuration menu.
-static uint8_t bigDigOneState = 0;
-static uint8_t bigDigTwoState = 0;
+// Store the item identifier per clock. This allows to re-init on the last
+// active item upon re-initializing a big digit clock. You will appreciate it
+// mostly when returning from the configuration menu.
+static u08 bigDigOneState = 0;
+static u08 bigDigTwoState = 0;
 
 // Local function prototypes
 static void bigDigItemInvert(void);
@@ -101,7 +101,7 @@ void bigDigButton(u08 pressedButton)
   if (mcU8Util2 == CHRON_BIGDIG_ONE)
   {
     bigDigOneState = bigDigOneState + 1;
-    if (bigDigOneState == (uint8_t)sizeof(bigdigYPos))
+    if (bigDigOneState == (u08)sizeof(bigdigYPos))
     {
       // Restart at beginning
       bigDigOneState = 0;
@@ -110,7 +110,7 @@ void bigDigButton(u08 pressedButton)
   else
   {
     bigDigTwoState = bigDigTwoState + 2;
-    if (bigDigTwoState == (uint8_t)sizeof(bigdigYPos))
+    if (bigDigTwoState == (u08)sizeof(bigdigYPos))
     {
       // Restart at beginning
       bigDigTwoState = 0;
@@ -130,14 +130,14 @@ void bigDigCycle(void)
 {
   u08 oldVal = 0;
   u08 newVal = 0;
-  uint8_t bigdigState;
+  u08 bigdigState;
 
   // Update alarm/date info in clock
   animADAreaUpdate(BIGDIG_ALARM_X_START, BIGDIG_ALARM_Y_START,
     AD_AREA_ALM_ONLY);
 
-  // Only if a time event or init or force (due to button press) is flagged
-  // we need to update the clock
+  // Only if a time event or init or force (due to button press) is flagged we
+  // need to update the clock
   if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE &&
       mcU8Util1 == GLCD_FALSE)
     return;
@@ -251,15 +251,15 @@ void bigDigInit(u08 mode)
   // Draw static clock layout
   if (mode == DRAW_INIT_PARTIAL && mcU8Util2 == CHRON_BIGDIG_ONE)
   {
-    // Clear the most left part of the two digit area. The rest is
-    // overwritten by the single digit clock
+    // Clear the most left part of the two digit area. The rest is overwritten
+    // by the single digit clock
     glcdFillRectangle(BIGDIG_TWO_X_START, BIGDIG_TWO_Y_START,
-      BIGDIG_ONE_X_START - BIGDIG_TWO_X_START, BIGDIG_FONT_HEIGHT * BIGDIG_TWO_Y_SCALE,
-      mcBgColor);
+      BIGDIG_ONE_X_START - BIGDIG_TWO_X_START,
+      BIGDIG_FONT_HEIGHT * BIGDIG_TWO_Y_SCALE, mcBgColor);
   }
 
-  // (Re)draw the labels. Redrawing is needed for a partial init to clear
-  // an inverted clock item
+  // (Re)draw the labels. Redrawing is needed for a partial init to clear an
+  // inverted clock item
   labelLen = glcdPutStr3v(BIGDIG_HMS_X_START, BIGDIG_HMS_Y_START, FONT_5X7N,
     ORI_VERTICAL_BU, labelTime, 1, 1, mcFgColor);
   if (mode == DRAW_INIT_PARTIAL)
@@ -273,8 +273,8 @@ void bigDigInit(u08 mode)
   if (mode == DRAW_INIT_PARTIAL)
   {
     // Clear the rim of any inverted DMY clock item
-    glcdRectangle(BIGDIG_DMY_X_START - BIGDIG_FONT_HEIGHT, BIGDIG_DMY_Y_START - 1,
-      BIGDIG_FONT_HEIGHT + 2, labelLen + 2, mcBgColor);
+    glcdRectangle(BIGDIG_DMY_X_START - BIGDIG_FONT_HEIGHT,
+      BIGDIG_DMY_Y_START - 1, BIGDIG_FONT_HEIGHT + 2, labelLen + 2, mcBgColor);
   }
 
   // Invert the current selected item
@@ -284,17 +284,17 @@ void bigDigInit(u08 mode)
 //
 // Function: bigDigItemInvert
 //
-// Invert time/date item.
+// Invert time/date item
 //
 static void bigDigItemInvert(void)
 {
   u08 x;
   u08 y;
   u08 sizeAdd;
-  uint8_t bigdigState;
+  u08 bigdigState;
 
-  // Get pointer to current state and define extra size to (un)invert
-  // per single or two digit clock
+  // Get pointer to current state and define extra size to (un)invert per
+  // single or two digit clock
   if (mcU8Util2 == CHRON_BIGDIG_ONE)
   {
     bigdigState = bigDigOneState;
@@ -321,8 +321,8 @@ static void bigDigItemInvert(void)
   }
 
   // Invert item
-  glcdFillRectangle2(x, y, BIGDIG_FONT_HEIGHT + 2, BIGDIG_FONT_WIDTH + 2 + sizeAdd,
-    ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+  glcdFillRectangle2(x, y, BIGDIG_FONT_HEIGHT + 2,
+    BIGDIG_FONT_WIDTH + 2 + sizeAdd, ALIGN_AUTO, FILL_INVERSE, mcFgColor);
 
   // And force the digit to be drawn
   mcU8Util1 = GLCD_TRUE;

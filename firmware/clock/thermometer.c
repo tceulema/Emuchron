@@ -47,19 +47,12 @@ void spotThermCycle(void)
 
   DEBUGP("Update Thermometer");
 
-  // Verify changes in sec
-  if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-    spotThermUpdate(THERM_BOX_X_START + 2 * THERM_BOX_X_OFFSET_SIZE,
-      mcClockOldTS, mcClockNewTS);
-
-  // Verify changes in min
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-    spotThermUpdate(THERM_BOX_X_START + THERM_BOX_X_OFFSET_SIZE,
-      mcClockOldTM, mcClockNewTM);
-
-  // Verify changes in hour
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-    spotThermUpdate(THERM_BOX_X_START, mcClockOldTH, mcClockNewTH);
+  // Verify changes in sec + min + hour
+  spotThermUpdate(THERM_BOX_X_START + 2 * THERM_BOX_X_OFFSET_SIZE,
+    mcClockOldTS, mcClockNewTS);
+  spotThermUpdate(THERM_BOX_X_START + THERM_BOX_X_OFFSET_SIZE,
+    mcClockOldTM, mcClockNewTM);
+  spotThermUpdate(THERM_BOX_X_START, mcClockOldTH, mcClockNewTH);
 }
 
 //
@@ -76,8 +69,7 @@ void spotThermInit(u08 mode)
   // Draw Spotfire form layout
   spotCommonInit("thermometer", mode);
 
-  // Draw static part of thermometer.
-  // There are three thermometers.
+  // Draw static part of three thermometers
   for (i = 0; i <= 2; i++)
   {
     x = THERM_BOX_X_START + i * THERM_BOX_X_OFFSET_SIZE;
@@ -90,6 +82,8 @@ void spotThermInit(u08 mode)
     glcdCircle2(x + THERM_BOX_X_OFFSET_MID, THERM_BULB_Y_START,
       THERM_BULB_RADIUS, CIRCLE_FULL, mcFgColor);
   }
+
+  // Draw static axis part of thermometer
   spotAxisInit(CHRON_THERMOMETER);
 }
 
@@ -108,6 +102,10 @@ static void spotThermUpdate(u08 x, u08 oldVal, u08 newVal)
   u08 height;
   u08 i;
   char thermValue[3];
+
+  // See if we need to update the needle
+  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+    return;
 
   // Get thermometer 30-step fill level of old and new value
   if (mcClockInit == GLCD_TRUE)
@@ -135,7 +133,7 @@ static void spotThermUpdate(u08 x, u08 oldVal, u08 newVal)
         continue;
 
       // Determine how to draw
-      if (i == 0 || (i == 1 && x % 2 == 1))
+      if (i == 0 || (i == 1 && (x & 0x1) == 1))
         color = mcBgColor;
       else
         color = mcFgColor;

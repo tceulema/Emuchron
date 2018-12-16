@@ -45,7 +45,6 @@ static u08 startQ;	// Arc startpoint quadrant
 static s08 endX;	// Arc endpoint X relative to center
 static s08 endY;	// Arc endpoint Y relative to center
 static u08 endQ;	// Arc endpoint quadrant
-static u08 color;	// Color of the arc to draw
 
 // Local function prototypes
 static void pieArc(void);
@@ -65,17 +64,10 @@ void spotPieChartCycle(void)
 
   DEBUGP("Update PieChart");
 
-  // Verify changes in sec
-  if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-    pieLineUpdate(PIE_SEC_X_START, mcClockOldTS, mcClockNewTS);
-
-  // Verify changes in min
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-    pieLineUpdate(PIE_MIN_X_START, mcClockOldTM, mcClockNewTM);
-
-  // Verify changes in hour
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-    pieLineUpdate(PIE_HOUR_X_START, mcClockOldTH, mcClockNewTH);
+  // Verify changes in sec + min + hour
+  pieLineUpdate(PIE_SEC_X_START, mcClockOldTS, mcClockNewTS);
+  pieLineUpdate(PIE_MIN_X_START, mcClockOldTM, mcClockNewTM);
+  pieLineUpdate(PIE_HOUR_X_START, mcClockOldTH, mcClockNewTH);
 }
 
 //
@@ -97,16 +89,17 @@ void spotPieChartInit(u08 mode)
     mcFgColor);
   glcdCircle2(PIE_HOUR_X_START, PIE_Y_START, PIE_RADIUS, CIRCLE_THIRD,
     mcFgColor);
+
+  // Draw static axis part of piechart
   spotAxisInit(CHRON_PIECHART);
 }
 
 //
 // Function: pieArc
 //
-// Draw an arc between two circle points. It is basically the
-// method to paint a circle but with additional functionality to
-// determine for each individual point whether it is to be drawn
-// or not.
+// Draw an arc between two circle points. It is basically the method to oaint a
+// circle but with additional functionality to determine for each individual
+// point whether it is to be drawn or not.
 //
 static void pieArc(void)
 {
@@ -181,8 +174,8 @@ static void pieArcPoint(s08 deltaX, s08 deltaY)
       // The point must be located after the arc startpoint
       if ((((quadrant == 0 || quadrant == 3) && deltaX >= startX) ||
           ((quadrant == 1 || quadrant == 2) && deltaX <= startX)) &&
-          (((quadrant == 0 || quadrant == 1) && deltaY >= startY) ||
-          ((quadrant == 2 || quadrant == 3) && deltaY <= startY)))
+          ((quadrant < 2 && deltaY >= startY) ||
+          (quadrant > 1 && deltaY <= startY)))
         startOk = GLCD_TRUE;
     }
 
@@ -199,8 +192,8 @@ static void pieArcPoint(s08 deltaX, s08 deltaY)
         // The point must be located before the arc endpoint
         if ((((quadrant == 0 || quadrant == 3) && deltaX <= endX) ||
             ((quadrant == 1 || quadrant == 2) && deltaX >= endX)) &&
-            (((quadrant == 0 || quadrant == 1) && deltaY <= endY) ||
-            ((quadrant == 2 || quadrant == 3) && deltaY >= endY)))
+            ((quadrant < 2 && deltaY <= endY) ||
+            (quadrant > 1 && deltaY >= endY)))
           drawPoint = GLCD_TRUE;
       }
     }
@@ -208,7 +201,7 @@ static void pieArcPoint(s08 deltaX, s08 deltaY)
 
   // If we're between the piechart startline and endline draw the dot
   if (drawPoint == GLCD_TRUE)
-    glcdDot(centerX + deltaX, PIE_Y_START + deltaY, color);
+    glcdDot(centerX + deltaX, PIE_Y_START + deltaY, mcFgColor);
 }
 
 //
@@ -223,6 +216,10 @@ static void pieLineUpdate(u08 x, u08 oldVal, u08 newVal)
   s08 oldValDx, newValDx, oldValDy, newValDy;
   float arcValOld, arcValNew;
   char pieValue[3];
+
+  // See if we need to update the time element
+  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+    return;
 
   // Calculate changes in pie line
   arcLineOld = PIE_LINE_RADIAL_SIZE / PIE_LINE_RADIAL_STEPS * oldVal +
@@ -242,7 +239,7 @@ static void pieLineUpdate(u08 x, u08 oldVal, u08 newVal)
   arcValNew = (arcLineNew - PIE_LINE_RADIAL_START)/2L + PIE_LINE_RADIAL_START;
   newValDx = (s08)(sin(arcValNew) * (PIE_VALUE_RADIUS + 0.5L));
   newValDy =
-   (s08)(-cos(arcValNew) * (PIE_VALUE_RADIUS + 0.5L) * PIE_VALUE_ELLIPS_Y);
+    (s08)(-cos(arcValNew) * (PIE_VALUE_RADIUS + 0.5L) * PIE_VALUE_ELLIPS_Y);
 
   // Remove old pie line
   glcdLine(x, PIE_Y_START, x + oldLineDx, PIE_Y_START + oldLineDy, mcBgColor);
@@ -279,27 +276,18 @@ static void pieLineUpdate(u08 x, u08 oldVal, u08 newVal)
   // Add new pie value
   animValToStr(newVal, pieValue);
   glcdPutStr2(x + PIE_VALUE_X_OFFSET + newValDx,
-    PIE_Y_START + PIE_VALUE_Y_OFFSET + newValDy,
-    FONT_5X5P, pieValue, mcFgColor);
+    PIE_Y_START + PIE_VALUE_Y_OFFSET + newValDy, FONT_5X5P, pieValue,
+    mcFgColor);
   glcdRectangle(x + PIE_VALUE_X_OFFSET + newValDx - 1,
     PIE_Y_START + PIE_VALUE_Y_OFFSET + newValDy - 1, 9, 7, mcBgColor);
 
-  // Get the starting and ending quadrant of the circle and their arc
-  // positions to prepare for drawing the pie arc.
-  // Re-use some floats to save precious stack space.
-  startQ = (u08)(arcLineOld * 4 / PIE_LINE_RADIAL_SIZE);
-  endQ = (u08)(arcLineNew * 4 / PIE_LINE_RADIAL_SIZE);
-  oldLineDx = (s08)(sin(arcLineOld) * (PIE_RADIUS + 0.5L));
-  newLineDx = (s08)(sin(arcLineNew) * (PIE_RADIUS + 0.5L));
-  oldLineDy = (s08)(-cos(arcLineOld) * (PIE_RADIUS + 0.5L));
-  newLineDy = (s08)(-cos(arcLineNew) * (PIE_RADIUS + 0.5L));
-
-  // Update the pie arc
+  // Update the global pie arc info that is used to draw the arc
   centerX = x;
-  startX = oldLineDx;
-  startY = oldLineDy;
-  endX = newLineDx;
-  endY = newLineDy;
-  color = mcFgColor;
+  startX = (s08)(sin(arcLineOld) * (PIE_RADIUS + 0.5L));
+  startY = (s08)(-cos(arcLineOld) * (PIE_RADIUS + 0.5L));
+  startQ = (u08)(arcLineOld * 4 / PIE_LINE_RADIAL_SIZE);
+  endX = (s08)(sin(arcLineNew) * (PIE_RADIUS + 0.5L));
+  endY = (s08)(-cos(arcLineNew) * (PIE_RADIUS + 0.5L));
+  endQ = (u08)(arcLineNew * 4 / PIE_LINE_RADIAL_SIZE);
   pieArc();
 }

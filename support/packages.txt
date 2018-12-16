@@ -89,7 +89,7 @@ then
   fi
   echo "Installing/replacing glibc source symbolic links"
   # When needed add new symbolic link entries below
-  for i in p3Km7c
+  for i in p3Km7c yWQXbR
   do
     rm -f /build/glibc-$i
     ln -s /build/glibc /build/glibc-$i

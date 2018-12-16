@@ -30,9 +30,10 @@
 // - The layout of the code has been modified so it adheres more to the coding
 //   standards used within Emuchron. Not really needed, but just a matter of
 //   Emuchron project coding taste.
-// Apart from this, the QR logic in this module has remained untouched. It just
-// works. And this includes the use of __AVR__, PROGMEM, memcpy_P and __LPM
-// that is not seen anywhere else in Emuchron. If it ain't broke, don't fix it.
+// Apart from this, the QR logic in this module has remained untouched apart
+// from an occasional optimization. It just works. And this includes the use of
+// __AVR__, PROGMEM, memcpy_P and __LPM that is not seen anywhere else in
+// Emuchron. If it ain't broke, don't fix it.
 //
 // Please note that the code below is not intended to run on anything else than
 // Monochron for a L,l2 QR. So, if you want to use QR encoding functionality in
@@ -488,29 +489,27 @@ static void applymask(unsigned char m)
 {
   unsigned char x, y, r3x, r3y;
 
-  switch (m)
+  if (m == 0 || m == 1)
   {
-  case 0:
     for (y = 0; y < WD; y++)
     {
       for (x = 0; x < WD; x++)
       {
-        if (!((x + y) & 1) && !ismasked(x, y))
-          TOGQRBIT(x, y);
+        if (m == 0)
+        {
+          if (!((x + y) & 1) && !ismasked(x, y))
+            TOGQRBIT(x, y);
+        }
+        else
+        {
+          if (!(y & 1) && !ismasked(x, y))
+            TOGQRBIT(x, y);
+        }
       }
     }
-    break;
-  case 1:
-    for (y = 0; y < WD; y++)
-    {
-      for (x = 0; x < WD; x++)
-      {
-        if (!(y & 1) && !ismasked(x, y))
-          TOGQRBIT(x, y);
-      }
-    }
-    break;
-  case 2:
+  }
+  else if (m == 2)
+  {
     for (y = 0; y < WD; y++)
     {
       for (r3x = 0, x = 0; x < WD; x++, r3x++)
@@ -521,8 +520,9 @@ static void applymask(unsigned char m)
           TOGQRBIT(x, y);
       }
     }
-    break;
-  case 3:
+  }
+  else if (m == 3)
+  {
     for (r3y = 0, y = 0; y < WD; y++, r3y++)
     {
       if (r3y == 3)
@@ -535,8 +535,9 @@ static void applymask(unsigned char m)
           TOGQRBIT(x, y);
       }
     }
-    break;
-  case 4:
+  }
+  else if (m == 4)
+  {
     for (y = 0; y < WD; y++)
     {
       for (r3x = 0, r3y = ((y >> 1) & 1), x = 0; x < WD; x++, r3x++)
@@ -550,8 +551,9 @@ static void applymask(unsigned char m)
           TOGQRBIT(x, y);
       }
     }
-    break;
-  case 5:
+  }
+  else if (m == 5)
+  {
     for (r3y = 0, y = 0; y < WD; y++, r3y++)
     {
       if (r3y == 3)
@@ -564,37 +566,30 @@ static void applymask(unsigned char m)
           TOGQRBIT(x, y);
       }
     }
-    break;
-  case 6:
-    for (r3y = 0, y = 0; y < WD; y++, r3y++)
-    {
-      if (r3y == 3)
-        r3y = 0;
-      for (r3x = 0, x = 0; x < WD; x++, r3x++)
-      {
-        if (r3x == 3)
-          r3x = 0;
-        if (!(((x & y & 1) + (r3x && (r3x == r3y))) & 1) && !ismasked(x, y))
-          TOGQRBIT(x, y);
-      }
-    }
-    break;
-  case 7:
-    for (r3y = 0, y = 0; y < WD; y++, r3y++)
-    {
-      if (r3y == 3)
-        r3y = 0;
-      for (r3x = 0, x = 0; x < WD; x++, r3x++)
-      {
-        if (r3x == 3)
-          r3x = 0;
-        if (!(((r3x && (r3x == r3y)) + ((x + y) & 1)) & 1) && !ismasked(x, y))
-          TOGQRBIT(x, y);
-      }
-    }
-    break;
   }
-  return;
+  else // m == 6 || m == 7
+  {
+    for (r3y = 0, y = 0; y < WD; y++, r3y++)
+    {
+      if (r3y == 3)
+        r3y = 0;
+      for (r3x = 0, x = 0; x < WD; x++, r3x++)
+      {
+        if (r3x == 3)
+          r3x = 0;
+        if (m == 6)
+        {
+          if (!(((x & y & 1) + (r3x && (r3x == r3y))) & 1) && !ismasked(x, y))
+            TOGQRBIT(x, y);
+        }
+        else
+        {
+          if (!(((r3x && (r3x == r3y)) + ((x + y) & 1)) & 1) && !ismasked(x, y))
+            TOGQRBIT(x, y);
+        }
+      }
+    }
+  }
 }
 
 static unsigned badruns(unsigned char length)

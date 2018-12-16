@@ -7,12 +7,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <termios.h>
 #include <unistd.h>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <signal.h>
+#include <errno.h>
 
 // Monochron and emuchron defines
 #include "../monomain.h"
@@ -68,6 +69,9 @@ extern uint16_t almTickerSnooze;
 extern int16_t almTickerAlarm;
 extern volatile rtcDateTime_t rtcDateTime;
 extern volatile uint8_t mcAlarming;
+
+// This is me
+extern const char *__progname;
 
 // Stubbed button data
 volatile uint8_t btnPressed = BTN_NONE;
@@ -132,41 +136,12 @@ static int minSleep = ANIM_TICK_CYCLE_MS + 1;
 
 // Terminal settings for stdin keypress mode data
 static struct termios termOld, termNew;
-static int kbMode = KB_MODE_LINE;
-static struct timeval tvKbThen;
+static u08 kbMode = KB_MODE_LINE;
 
 // Local function prototypes
-static int kbHit(void);
 static void alarmPidStart(void);
 static void alarmPidStop(void);
-
-//
-// Function: alarmSoundReset
-//
-// Stub to reset the internal alarm settings. It is needed to prevent the alarm
-// to restart when the clock feed or Monochron command is quit while alarming
-// and is later restarted with the same or different settings.
-//
-void alarmSoundReset(void)
-{
-  mcAlarming = GLCD_FALSE;
-  almAlarming = GLCD_FALSE;
-  almTickerSnooze = 0;
-  almTickerAlarm = -1;
-}
-
-//
-// Function: alarmSoundStop
-//
-// Stub to stop playing the alarm and reset the alarm triggers.
-// Audible alarm may resume later upon request.
-//
-void alarmSoundStop(void)
-{
-  alarmPidStop();
-  mcAlarming = GLCD_FALSE;
-  almTickerSnooze = 0;
-}
+static int kbHit(void);
 
 //
 // Function: alarmPidStart
@@ -229,6 +204,34 @@ static void alarmPidStop(void)
     system(msg);
   }
   alarmPid = -1;
+}
+
+//
+// Function: alarmSoundReset
+//
+// Stub to reset the internal alarm settings. It is needed to prevent the alarm
+// to restart when the clock feed or Monochron command is quit while alarming
+// and is later restarted with the same or different settings.
+//
+void alarmSoundReset(void)
+{
+  mcAlarming = GLCD_FALSE;
+  almAlarming = GLCD_FALSE;
+  almTickerSnooze = 0;
+  almTickerAlarm = -1;
+}
+
+//
+// Function: alarmSoundStop
+//
+// Stub to stop playing the alarm and reset the alarm triggers.
+// Audible alarm may resume later upon request.
+//
+void alarmSoundStop(void)
+{
+  alarmPidStop();
+  mcAlarming = GLCD_FALSE;
+  almTickerSnooze = 0;
 }
 
 //
@@ -302,57 +305,47 @@ void alarmSwitchToggle(uint8_t show)
 //
 // Get keypress (if any)
 //
+// WARNING: Prior to using this function make sure the keyboard is set to scan
+// mode using kbModeGet()/kbModeSet().
+//
 static int kbHit(void)
 {
-  struct timeval tv;
+  struct timeval tvWait;
   fd_set rdfs;
 
-  tv.tv_sec = 0;
-  tv.tv_usec = 0;
+  tvWait.tv_sec = 0;
+  tvWait.tv_usec = 0;
 
   FD_ZERO(&rdfs);
   FD_SET(STDIN_FILENO, &rdfs);
 
-  select(STDIN_FILENO + 1, &rdfs, NULL, NULL, &tv);
+  // The keyboard scan result of an interrupted select is unreliable and will
+  // cause a false positive keyboard hit. An interrupted select will happen
+  // every now and then. Keep trying until select properly completes.
+  while (select(STDIN_FILENO + 1, &rdfs, NULL, NULL, &tvWait) < 0);
+
   return FD_ISSET(STDIN_FILENO, &rdfs);
 }
 
 //
 // Function: kbKeypressScan
 //
-// Scan keyboard for keypress. The last key in the keyboard buffer is returned.
+// Scan keyboard for keypress. The lowercase value of the last key in the
+// keyboard buffer is returned.
 // However, if a search for the quit key is requested and that key was pressed,
-// the quit character is returned instead.
+// the quit character 'q' is returned instead.
 // No keypress returns the null character.
 //
 char kbKeypressScan(u08 quitFind)
 {
   char ch = '\0';
   u08 quitFound = GLCD_FALSE;
-  int myKbMode = KB_MODE_LINE;
-  struct timeval tvKbNow;
-  suseconds_t timeDiff;
+  u08 myKbMode = KB_MODE_LINE;
 
   // Switch to keyboard scan mode if needed
   myKbMode = kbModeGet();
   if (myKbMode == KB_MODE_LINE)
-  {
-    // When switching force keyboard scan
     kbModeSet(KB_MODE_SCAN);
-    gettimeofday(&tvKbNow, NULL);
-    tvKbThen = tvKbNow;
-  }
-  else
-  {
-    // For next keyboard scan wait at least 50 msec since last one
-    gettimeofday(&tvKbNow, NULL);
-    timeDiff = (tvKbNow.tv_sec - tvKbThen.tv_sec) * 1E6 +
-      tvKbNow.tv_usec - tvKbThen.tv_usec;
-    if (timeDiff >= 50000)
-      tvKbThen = tvKbNow;
-    else
-      return '\0';
-  }
 
   // Read pending input buffer
   while (kbHit())
@@ -366,9 +359,11 @@ char kbKeypressScan(u08 quitFind)
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_LINE);
 
-  // If we found the quit key return that one
+  // Return quit key or lowercase keypress
   if (quitFound == GLCD_TRUE)
     ch = 'q';
+  else if (ch >= 'A' && ch <= 'Z')
+    ch = ch - 'A' + 'a';
 
   return ch;
 }
@@ -378,7 +373,7 @@ char kbKeypressScan(u08 quitFind)
 //
 // Get keyboard input mode (line or keypress)
 //
-int kbModeGet(void)
+u08 kbModeGet(void)
 {
   return kbMode;
 }
@@ -388,10 +383,10 @@ int kbModeGet(void)
 //
 // Set keyboard input mode
 //
-void kbModeSet(int dir)
+void kbModeSet(u08 mode)
 {
   // Only change mode if needed to avoid weird keyboard behavior
-  if (dir == KB_MODE_SCAN && kbMode != KB_MODE_SCAN)
+  if (mode == KB_MODE_SCAN && kbMode != KB_MODE_SCAN)
   {
     // Setup keyboard scan (signal keypress)
     tcgetattr(STDIN_FILENO, &termOld);
@@ -399,9 +394,8 @@ void kbModeSet(int dir)
     termNew.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &termNew);
     kbMode = KB_MODE_SCAN;
-    gettimeofday(&tvKbThen, NULL);
   }
-  else if (dir == KB_MODE_LINE && kbMode != KB_MODE_LINE)
+  else if (mode == KB_MODE_LINE && kbMode != KB_MODE_LINE)
   {
     // Setup line scan (signal cr/lf)
     tcsetattr(STDIN_FILENO, TCSANOW, &termOld);
@@ -447,7 +441,7 @@ void stubBeep(uint16_t hz, uint16_t msec)
 //
 void stubDelay(int x)
 {
-  struct timeval sleepThis;
+  struct timeval tvWait;
 
   // This is ugly....
   // When we're asked to sleep for KEYPRESS_DLY_1 msec assume we're called
@@ -458,9 +452,9 @@ void stubDelay(int x)
   // KEYPRESS_DLY_1 msec requests I will make you, dear user, very happy.
   if (x == KEYPRESS_DLY_1)
     return;
-  sleepThis.tv_sec = 0;
-  sleepThis.tv_usec = x * 1000;
-  select(0, NULL, NULL, NULL, &sleepThis);
+  tvWait.tv_sec = 0;
+  tvWait.tv_usec = x * 1000;
+  select(0, NULL, NULL, NULL, &tvWait);
 }
 
 //
@@ -500,13 +494,13 @@ void stubEepWrite(uint8_t *eprombyte, uint8_t value)
 //
 // Function: stubEventGet
 //
-// Get an mchron event. It is a combination of a 75msec timer wait event since
+// Get an mchron event. It is a combination of a 75 msec timer wait event since
 // previous call, an optional keyboard event emulating the three buttons
 // (m,s,+) and alarm switch (a), and misc emulator commands.
 //
 char stubEventGet(void)
 {
-  char c = '\0';
+  char ch = '\0';
   uint8_t keypress = GLCD_FALSE;
   suseconds_t remaining;
 
@@ -549,9 +543,6 @@ char stubEventGet(void)
   if (eventCycleState == CYCLE_REQ_WAIT || eventCycleState == CYCLE_WAIT ||
       eventCycleState == CYCLE_WAIT_STATS)
   {
-    struct timeval t;
-    char waitChar = '\0';
-
     // Statistics
     singleCycleCount++;
 
@@ -583,21 +574,15 @@ char stubEventGet(void)
     }
 
     // Wait for keypress every 75 msec interval
-    while (!kbHit())
+    ch = kbKeypressScan(GLCD_FALSE);
+    while (ch == '\0')
     {
-      t.tv_sec = 0;
-      t.tv_usec = 75 * 1000;
-      select(0, NULL, NULL, NULL, &t);
+      waitSleep(75);
+      ch = kbKeypressScan(GLCD_FALSE);
     }
 
-    // Clear buffer and make uppercase char a lowercase char
-    while (kbHit())
-      waitChar = getchar();
-    if (waitChar >= 'A' && waitChar <= 'Z')
-      waitChar = waitChar - 'A' + 'a';
-
     // Verify keypress and its impact on the wait state
-    if (waitChar != 'c' && waitChar != 'p')
+    if (ch != 'c' && ch != 'p')
     {
       // Not a 'c' or 'p' character: resume to normal mode state
       eventCycleState = CYCLE_REQ_NOWAIT;
@@ -606,18 +591,18 @@ char stubEventGet(void)
       // Resume alarm audio (when needed)
       alarmPid = -1;
     }
-    else if (eventCycleState == CYCLE_WAIT && waitChar == 'p')
+    else if (eventCycleState == CYCLE_WAIT && ch == 'p')
     {
       // Move from wait state to wait with statistics
       eventCycleState = CYCLE_WAIT_STATS;
       ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
     }
-    else if (eventCycleState == CYCLE_WAIT_STATS && waitChar == 'c')
+    else if (eventCycleState == CYCLE_WAIT_STATS && ch == 'c')
     {
       // Move from wait with statistics state back to wait
       eventCycleState = CYCLE_WAIT;
     }
-    waitChar = '\0';
+    ch = '\0';
   }
   else if (eventCycleState == CYCLE_REQ_NOWAIT)
   {
@@ -635,8 +620,8 @@ char stubEventGet(void)
     // Start playing the alarm sound
     alarmPidStart();
   }
-  else if (alarmPid >= 0 && (almAlarming == GLCD_FALSE || almTickerSnooze > 0 ||
-      eventCycleState == CYCLE_WAIT))
+  else if (alarmPid >= 0 && (almAlarming == GLCD_FALSE ||
+      almTickerSnooze > 0 || eventCycleState == CYCLE_WAIT))
   {
     // Stop playing the alarm sound
     alarmPidStop();
@@ -648,34 +633,34 @@ char stubEventGet(void)
   {
     // Get keyboard character and make uppercase char a lowercase char
     keypress = GLCD_TRUE;
-    c = getchar();
-    if (c >= 'A' && c <= 'Z')
-      c = c - 'A' + 'a';
+    ch = getchar();
+    if (ch >= 'A' && ch <= 'Z')
+      ch = ch - 'A' + 'a';
 
     // Detect button hold start/end
-    if (c == lastChar)
+    if (ch == lastChar)
     {
       hold = GLCD_TRUE;
     }
     else
     {
-      lastChar = c;
+      lastChar = ch;
       hold = GLCD_FALSE;
     }
 
-    if (c == 'a')
+    if (ch == 'a')
     {
       // Toggle the alarm switch
       printf("\n");
       alarmSwitchToggle(GLCD_TRUE);
     }
-    else if (c == 'c')
+    else if (ch == 'c')
     {
       // Init single timer cycle
       if (eventCycleState == CYCLE_NOWAIT)
         eventCycleState = CYCLE_REQ_WAIT;
     }
-    else if (c == 'h')
+    else if (ch == 'h')
     {
       // Provide help
       printf("\n");
@@ -684,37 +669,37 @@ char stubEventGet(void)
       else
         printf("no help available\n");
     }
-    else if (c == 'm')
+    else if (ch == 'm')
     {
       // Menu button
       btnPressed = BTN_MENU;
     }
-    else if (c == 'p')
+    else if (ch == 'p')
     {
       // Print stub and glcd/lcd performance statistics
       printf("\nstatistics:\n");
       stubStatsPrint();
       ctrlStatsPrint(CTRL_STATS_ALL);
     }
-    else if (c == 'r')
+    else if (ch == 'r')
     {
       // Reset stub and glcd/lcd performance statistics
       stubStatsReset();
       ctrlStatsReset(CTRL_STATS_ALL);
       printf("\nstatistics reset\n");
     }
-    else if (c == 's')
+    else if (ch == 's')
     {
       // Set button
       btnPressed = BTN_SET;
     }
-    else if (c == 't')
+    else if (ch == 't')
     {
       // Print time/date/alarm
       printf("\n");
       emuTimePrint(ALM_MONOCHRON);
     }
-    else if (c == '+')
+    else if (ch == '+')
     {
       // + button
       if (hold == GLCD_FALSE)
@@ -722,7 +707,7 @@ char stubEventGet(void)
       else
         btnHold = BTN_PLUS;
     }
-    else if (c == '\n')
+    else if (ch == '\n')
     {
       // Maybe the user wants to see a blank line, so echo it
       printf("\n");
@@ -741,7 +726,7 @@ char stubEventGet(void)
     }
   }
 
-  return c;
+  return ch;
 }
 
 //
@@ -871,6 +856,52 @@ u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
   }
 
   return retVal;
+}
+
+//
+// Function: stubLogfileClose
+//
+// Close the debug logfile
+//
+void stubLogfileClose(void)
+{
+  if (stubDebugStream != NULL)
+    fclose(stubDebugStream);
+}
+
+//
+// Function: stubLogfileOpen
+//
+// Open the debug logfile
+//
+int stubLogfileOpen(char fileName[])
+{
+  if (!DEBUGGING)
+  {
+    printf("%s: -d: master debugging is off\n", __progname);
+    printf("assign value 1 to \"#define DEBUGGING\" in monomain.h [firmware] and rebuild\n");
+    printf("mchron.\n");
+    return CMD_RET_ERROR;
+  }
+  else
+  {
+    stubDebugStream = fopen(fileName, "a");
+    if (stubDebugStream == NULL)
+    {
+      // Something went wrong opening the logfile
+      int error = errno;
+      printf("%s: -d: error opening debug output file: %s\n", __progname,
+        strerror(error));
+      return CMD_RET_ERROR;
+    }
+    else
+    {
+      // Disable buffering so we can properly 'tail -f' the file
+      setbuf(stubDebugStream, NULL);
+      DEBUGP("**** logging started");
+      return CMD_RET_OK;
+    }
+  }
 }
 
 //
@@ -1081,203 +1112,6 @@ void stubUartPutDec(int x, char *format)
     fprintf(stubDebugStream, format, x);
   return;
 }
-
-//
-// Function: waitDelay
-//
-// Wait amount of time (in msec) while allowing a 'q' keypress interrupt
-//
-char waitDelay(int delay)
-{
-  char ch = '\0';
-  struct timeval tvWait;
-  struct timeval tvNow;
-  struct timeval tvThen;
-  suseconds_t timeDiff;
-  int myKbMode = KB_MODE_LINE;
-
-  // Set offset for wait period
-  gettimeofday(&tvNow, NULL);
-  gettimeofday(&tvThen, NULL);
-
-  // Set end timestamp based current time plus delay
-  tvThen.tv_usec = tvThen.tv_usec + delay * 1000;
-
-  // Get the total time to wait
-  timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 +
-    tvThen.tv_usec - tvNow.tv_usec;
-
-  // Switch to keyboard scan mode if needed
-  myKbMode = kbModeGet();
-  if (myKbMode == KB_MODE_LINE)
-    kbModeSet(KB_MODE_SCAN);
-
-  // Wait till end of delay or a 'q' keypress and ignore a remaining wait time
-  // that is less than 0.5 msec
-  while (ch != 'q' && timeDiff > 500)
-  {
-    // Split time to delay up in parts of max 250msec
-    tvWait.tv_sec = 0;
-    if (timeDiff >= 250000)
-      tvWait.tv_usec = 250000;
-    else
-      tvWait.tv_usec = timeDiff;
-
-    // Wait
-    select(0, NULL, NULL, NULL, &tvWait);
-
-    // Did anything happen on the keyboard
-    while (kbHit())
-    {
-      ch = getchar();
-      if (ch == 'q' || ch == 'Q')
-      {
-        ch = 'q';
-        break;
-      }
-      stubDelay(2);
-    }
-
-    // Based on last wait and keypress delays get time left to wait
-    gettimeofday(&tvNow, NULL);
-    timeDiff = (tvThen.tv_sec - tvNow.tv_sec) * 1E6 +
-      tvThen.tv_usec - tvNow.tv_usec;
-  }
-
-  // Return to line mode if needed
-  if (myKbMode == KB_MODE_LINE)
-    kbModeSet(KB_MODE_LINE);
-
-  // Clear return character for consistent interface
-  if (ch != 'q')
-    ch = '\0';
-
-  return ch;
-}
-
-//
-// Function: waitKeypress
-//
-// Wait for keyboard keypress
-//
-char waitKeypress(int allowQuit)
-{
-  char ch = '\0';
-  int myKbMode = KB_MODE_LINE;
-  struct timeval t;
-
-  // Switch to keyboard scan mode if needed
-  myKbMode = kbModeGet();
-  if (myKbMode == KB_MODE_LINE)
-    kbModeSet(KB_MODE_SCAN);
-
-  // Clear input buffer
-  while (kbHit())
-    ch = getchar();
-
-  // Wait for single keypress
-  if (allowQuit == GLCD_FALSE)
-    printf("<wait: press key to continue> ");
-  else
-    printf("<wait: q = quit, other key = continue> ");
-  fflush(stdout);
-  while (!kbHit())
-  {
-    // Wait 150 msec
-    t.tv_sec = 0;
-    t.tv_usec = 150 * 1000;
-    select(0, NULL, NULL, NULL, &t);
-  }
-  ch = getchar();
-  if (ch >= 'A' && ch <= 'Z')
-    ch = ch - 'A' + 'a';
-
-  // Return to line mode if needed
-  if (myKbMode == KB_MODE_LINE)
-    kbModeSet(KB_MODE_LINE);
-
-  printf("\n");
-
-  return ch;
-}
-
-//
-// Function: waitTimerExpiry
-//
-// Wait amount of time (in msec) after a timer (re)start while optionally
-// allowing a 'q' keypress interrupt. Restart the timer when timer has already
-// expired upon entering this function or has expired after the remaining timer
-// period. When pressing the 'q' key the timer will not be restarted.
-// Return parameter remaining will indicate the remaining timer time in usec
-// upon entering this function, or -1 in case the timer had already expired.
-//
-char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
-  suseconds_t *remaining)
-{
-  char ch = '\0';
-  struct timeval tvNow;
-  struct timeval tvSleep;
-  suseconds_t timeDiff;
-
-  // Get the total time to wait based on timer expiry
-  gettimeofday(&tvNow, NULL);
-  timeDiff = (tvTimer->tv_sec - tvNow.tv_sec) * 1E6 +
-    tvTimer->tv_usec - tvNow.tv_usec + expiry * 1000;
-
-  // See if timer has already expired
-  if (timeDiff < 0)
-  {
-    // Get next timer offset using current time as reference, so do not even
-    // attempt to compensate
-    *remaining = -1;
-    *tvTimer = tvNow;
-  }
-  else
-  {
-    // Wait the remaining time of the timer, defaulting to at least 1 msec
-    *remaining = timeDiff;
-    if (allowQuit == GLCD_TRUE)
-    {
-      if ((int)(*remaining / 1000) == 0)
-        ch = waitDelay(1);
-      else
-        ch = waitDelay((int)(timeDiff / 1000 + (float)0.5));
-    }
-    else
-    {
-      tvSleep.tv_sec = 0;
-      tvSleep.tv_usec = timeDiff;
-      select(0, NULL, NULL, NULL, &tvSleep);
-    }
-
-    // Get next timer offset by adding expiry to current timer offset
-    if (ch != 'q')
-    {
-      // Add expiry to current timer offset
-      tvTimer->tv_sec = tvTimer->tv_sec + expiry / 1000;
-      tvTimer->tv_usec = tvTimer->tv_usec + (expiry % 1000) * 1000;
-      if (tvTimer->tv_usec > 1E6)
-      {
-        tvTimer->tv_sec++;
-        tvTimer->tv_usec = tvTimer->tv_usec - 1E6;
-      }
-    }
-  }
-
-  return ch;
-}
-
-//
-// Function: waitTimerStart
-//
-// (Re)set wait timer to current time
-//
-void waitTimerStart(struct timeval *tvTimer)
-{
-  // Set timer to current timestamp
-  gettimeofday(tvTimer, NULL);
-}
-
 
 //
 // Several empty stubs for unlinked hardware related functions

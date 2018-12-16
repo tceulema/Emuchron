@@ -52,19 +52,12 @@ void spotSpeedDialCycle(void)
 
   DEBUGP("Update SpeedDial");
 
-  // Verify changes in sec
-  if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-    spotSpeedNeedleUpdate(SPEED_X_START + 2 * SPEED_X_OFFSET_SIZE,
-      mcClockOldTS, mcClockNewTS);
-
-  // Verify changes in min
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-    spotSpeedNeedleUpdate(SPEED_X_START + SPEED_X_OFFSET_SIZE, mcClockOldTM,
-      mcClockNewTM);
-
-  // Verify changes in hour
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-    spotSpeedNeedleUpdate(SPEED_X_START, mcClockOldTH, mcClockNewTH);
+  // Verify changes in sec + min + hour
+  spotSpeedNeedleUpdate(SPEED_X_START + 2 * SPEED_X_OFFSET_SIZE,
+    mcClockOldTS, mcClockNewTS);
+  spotSpeedNeedleUpdate(SPEED_X_START + SPEED_X_OFFSET_SIZE, mcClockOldTM,
+    mcClockNewTM);
+  spotSpeedNeedleUpdate(SPEED_X_START, mcClockOldTH, mcClockNewTH);
 }
 
 //
@@ -92,6 +85,8 @@ void spotSpeedDialInit(u08 mode)
     for (j = 0; j < 7; j++)
       spotSpeedDialMarkerUpdate(SPEED_X_START + i * SPEED_X_OFFSET_SIZE, j);
   }
+
+  // Draw static axis part of speeddial
   spotAxisInit(CHRON_SPEEDDIAL);
 }
 
@@ -105,6 +100,10 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
   s08 oldDx, newDx, oldDy, newDy;
   float tmp;
   char needleValue[3];
+
+  // See if we need to update the needle
+  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+    return;
 
   // Calculate changes in needle
   tmp = sin(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * oldVal +

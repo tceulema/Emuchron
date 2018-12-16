@@ -71,9 +71,9 @@ const unsigned char __attribute__ ((progmem)) MarioTones[] =
 //
 // The Arduino firmware stores the 295 beats as floats, which is 4 bytes per
 // beat. To reduce the program space footprint and to avoid the use of floating
-// point arithmetic we want put a single beat in a byte. A densed Mario beat is
-// put in a byte using division factor MAR_BEATFACTOR. This approach saves us
-// CPU expensive floating point arithmetic and lots of data space. And, as
+// point arithmetic we want to put a single beat in a byte. A densed Mario beat
+// is put in a byte using division factor MAR_BEATFACTOR. This approach saves
+// us CPU expensive floating point arithmetic and lots of data space. And, as
 // noted above, by cutting out data redundancy as well, instead of 1180 data
 // bytes (295 floats) we'll only need 150. Nice!
 // Concerning inaccuracies in reproducing durations, here's the worst-case

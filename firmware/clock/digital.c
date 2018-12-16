@@ -66,7 +66,7 @@ static u08 digiDateYStart;
 
 // Local function prototypes
 static void digitalInit(u08 mode);
-static void digitalTimeValDraw(u08 val, u08 factor);
+static void digitalTimeValDraw(u08 oldVal, u08 newVal, u08 factor);
 #ifdef DIGI_GLITCH
 static void digiPeriodSet(void);
 static void digiRandGet(void);
@@ -126,13 +126,10 @@ void digitalCycle(void)
   }
 
   // Verify changes in time
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-    digitalTimeValDraw(mcClockNewTH, 0);
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-    digitalTimeValDraw(mcClockNewTM, 1);
-  if (digiSecShow == GLCD_TRUE &&
-      (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE))
-    digitalTimeValDraw(mcClockNewTS, 2);
+  digitalTimeValDraw(mcClockOldTH, mcClockNewTH, 0);
+  digitalTimeValDraw(mcClockOldTM, mcClockNewTM, 1);
+  if (digiSecShow == GLCD_TRUE)
+    digitalTimeValDraw(mcClockOldTS, mcClockNewTS, 2);
 
 #ifdef DIGI_HM_BLINK
   // For the CHRON_DIGITAL_HM clock make the bottom dot ":" separator blink
@@ -256,15 +253,14 @@ static void digitalInit(u08 mode)
 {
   DEBUGP("Init Digital");
 
-  // Draw static clock layout
-  // On partial init clear digital clock area but leave alarm area unharmed
+  // Draw static clock layout.
+  // On partial init clear digital clock area but leave alarm area unharmed.
   if (mode == DRAW_INIT_PARTIAL)
     glcdFillRectangle(0, 0, GLCD_XPIXELS, DIGI_ALARM_Y_START - 1, mcBgColor);
 
   // Draw the ":" separators between hour:min(:sec)
   glcdPutStr3(digiTimeXStart + 2 * 6 * digiTimeXScale + digiTimeXScale,
-    digiTimeYStart, FONT_5X7N, ":", digiTimeXScale, digiTimeYScale,
-    mcFgColor);
+    digiTimeYStart, FONT_5X7N, ":", digiTimeXScale, digiTimeYScale, mcFgColor);
   if (digiSecShow == GLCD_TRUE)
     glcdPutStr3(digiTimeXStart + 5 * 6 * digiTimeXScale + 2 * digiTimeXScale,
       digiTimeYStart, FONT_5X7N, ":", digiTimeXScale, digiTimeYScale,
@@ -282,11 +278,15 @@ static void digitalInit(u08 mode)
 //
 // Draw a time element (hh, mm or ss)
 //
-static void digitalTimeValDraw(u08 val, u08 factor)
+static void digitalTimeValDraw(u08 oldVal, u08 newVal, u08 factor)
 {
   char clockInfo[3];
 
-  animValToStr(val, clockInfo);
+  // See if we need to update the time element
+  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+    return;
+
+  animValToStr(newVal, clockInfo);
   glcdPutStr3(digiTimeXStart + factor * 19 * digiTimeXScale, digiTimeYStart,
     FONT_5X7N, clockInfo, digiTimeXScale, digiTimeYScale, mcFgColor);
 }

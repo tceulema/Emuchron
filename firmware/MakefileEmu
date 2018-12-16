@@ -10,7 +10,7 @@
 CC = gcc
 CFLAGS = -g -std=gnu99 -Wall -MMD
 EVALFLAGS = -g -MMD
-CLIB = -lm -lncurses -lreadline -lglut -lGLU -lGL -lpthread
+CLIB = -lm -lncurses -lreadline -lglut -lGLU -lGL -lrt -lpthread
 FLEX = flex
 FLIB = -lfl
 BISON = bison

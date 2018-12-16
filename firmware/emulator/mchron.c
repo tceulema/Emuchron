@@ -184,6 +184,14 @@ int main(int argc, char *argv[])
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
 
+  // Open debug logfile when requested
+  if (emuArgcArgv.argDebug != 0)
+  {
+    retVal = stubLogfileOpen(argv[emuArgcArgv.argDebug]);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+  }
+
   // Init the lcd controllers and display stub device(s)
   retVal = ctrlInit(&emuArgcArgv.ctrlDeviceArgs);
   if (retVal != CMD_RET_OK)
@@ -205,10 +213,6 @@ int main(int argc, char *argv[])
   glcdPutStr2(1, 1, FONT_5X5P, "* Welcome to Emuchron Emulator *", mcFgColor);
   glcdPutStr2(1, 8, FONT_5X5P, "Enter 'h' for help", mcFgColor);
   ctrlLcdFlush();
-
-  // Open debug logfile when requested
-  if (emuArgcArgv.argDebug != 0)
-    emuLogfileOpen(argv[emuArgcArgv.argDebug]);
 
   // Show process id and (optional) ncurses output device
   printf("process id  : %d\n", getpid());
@@ -296,7 +300,7 @@ int main(int argc, char *argv[])
 
   // Stop debug output
   DEBUGP("**** logging stopped");
-  emuLogfileClose();
+  stubLogfileClose();
 
   // Goodbye
   return CMD_RET_OK;
@@ -466,7 +470,7 @@ int doClockFeed(cmdLine_t *cmdLine)
 {
   char ch = '\0';
   int startWait = GLCD_FALSE;
-  int myKbMode = KB_MODE_LINE;
+  u08 myKbMode = KB_MODE_LINE;
 
   // Get the start mode
   startWait = emuStartModeGet(argChar[0]);
@@ -654,35 +658,45 @@ int doExecute(cmdLine_t *cmdLine)
   else if (argChar[0] == 's')
     echoCmd = CMD_ECHO_NO;
 
-  // Copy filename
-  fileName = malloc(strlen(argString) + 1);
-  sprintf(fileName, "%s", argString);
-
-  // Valid command file and stack level: increase stack level
+  // Let's start: increase stack level
   fileExecDepth++;
 
   // Load the lines from the command file in a linked list.
   // Warning: this will reset the cmd scan global variables.
   // When ok execute the list. If an error occured prepare for completing a
   // stack trace.
+  fileName = malloc(strlen(argString) + 1);
+  sprintf(fileName, "%s", argString);
   retVal = cmdListFileLoad(&cmdLineRoot, &cmdPcCtrlRoot, fileName,
     fileExecDepth);
   if (retVal == CMD_RET_OK)
+  {
+    // Start command list statistics when at root level and execute the command
+    // list
+    if (listExecDepth == 0)
+      cmdListStatsInit();
     retVal = cmdListExecute(cmdLineRoot, fileName);
+  }
   else if (retVal == CMD_RET_ERROR)
+  {
     retVal = CMD_RET_RECOVER;
+  }
 
   // We're done: decrease stack level
   fileExecDepth--;
 
   // Either all commands in the linked list have been executed successfully or
-  // an error has occured. Do some admin stuff by cleaning up the linked lists.
+  // an error has occured. Do some admin stuff by cleaning up the linked list.
   free(fileName);
   cmdListCleanup(cmdLineRoot, cmdPcCtrlRoot);
 
   // Final stack trace element for error/interrupt that occured at lower level
   if (retVal == CMD_RET_RECOVER && listExecDepth == 0)
     printf(CMD_STACK_ROOT_FMT, fileExecDepth, __progname, cmdLine->input);
+
+  // Print command list statistics when back at root level
+  if (listExecDepth == 0)
+    cmdListStatsPrint();
 
   // Restore original command echo state
   echoCmd = myEchoCmd;
@@ -1119,7 +1133,7 @@ int doLcdRead(cmdLine_t *cmdLine)
   {
     varName = malloc(strlen(argWord[1]) + 3);
     sprintf(varName, "^%s$", argWord[1]);
-    varPrint(varName, GLCD_TRUE);
+    varPrint(varName, GLCD_FALSE);
     free(varName);
   }
 
@@ -1168,7 +1182,7 @@ int doMonochron(cmdLine_t *cmdLine)
 {
   u08 myBacklight = 16;
   u08 startWait = GLCD_FALSE;
-  int myKbMode = KB_MODE_LINE;
+  u08 myKbMode = KB_MODE_LINE;
 
   // Get the start mode
   startWait = emuStartModeGet(argChar[0]);
@@ -1655,7 +1669,7 @@ int doVarPrint(cmdLine_t *cmdLine)
   int retVal;
 
   // Print all variables matching a regexp pattern where '.' is all
-  retVal = varPrint(argWord[1], GLCD_FALSE);
+  retVal = varPrint(argWord[1], GLCD_TRUE);
   if (retVal != CMD_RET_OK)
     printf("%s? invalid\n", cmdLine->cmdCommand->cmdArg[0].argName);
 
@@ -1670,12 +1684,15 @@ int doVarPrint(cmdLine_t *cmdLine)
 int doVarReset(cmdLine_t *cmdLine)
 {
   int varId;
+  int varInUse;
   int retVal;
 
   // Clear all variables
   if (strcmp(argWord[1], ".") == 0)
   {
-    varReset();
+    varInUse = varReset();
+    if (echoCmd == CMD_ECHO_YES)
+      printf("reset variables: %d\n", varInUse);
     return CMD_RET_OK;
   }
 

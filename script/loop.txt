@@ -4,12 +4,13 @@
 # Purpose: Consider this a performance test for the interpreter/CPU by running
 #          a time consuming loop.
 #          Run this test a few times to average out the result duration.
-#          On a decent Intel VM machine this script takes about 13 secs to run.
+#          On a decent Intel VM machine this script takes about 12 secs to run.
 #
 
-# Clear variables and report start time
+hm -- wait for the script to complete or abort with 'q' --
+
+# Clear variables
 vr .
-tp
 
 # Loop 8 million times
 rf x=0 x<8000000 x=x+1
@@ -17,9 +18,8 @@ rf x=0 x<8000000 x=x+1
   vs y=x+1
 rn
 
-# Report end time and print variables
+# Print resulting variables
 # Values reported must be 8*10^6 for both x and y
-tp
 hm Variables x and y:
 he x
 he y

@@ -20,6 +20,7 @@
 #define NERD_CLOCK_BINARY	0
 #define NERD_CLOCK_OCTAL	1
 #define NERD_CLOCK_HEX		2
+#define NERD_ITEM_LEN		14
 
 // Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
@@ -33,7 +34,7 @@ extern volatile uint8_t mcFgColor;
 // Structure defining the lcd element locations for a single clock
 typedef struct _nerdLocation_t
 {
-  uint8_t base;		// Base representation of numbers
+  uint8_t maskLen;	// Number mask length (representing the number base)
   uint8_t locYHms;	// Start y location of h:m:s
   uint8_t locXTH;	// Start x location of time h
   uint8_t digitsTH;	// Number of digits of time h
@@ -53,30 +54,33 @@ typedef struct _nerdLocation_t
 // Location definitions for the binary, octal and hex clock elements
 static nerdLocation_t nerdLocation[] =
 {
-  // Binary clock
   {
-    2,
+    1, // Binary clock
     17, 28, 5, 28 + 5 * 4 + 2, 6, 28 + 11 * 4 + 2 * 2,  6,
     24, 18, 5, 18 + 6 * 4    , 4, 18 + 11 * 4        , 12
   },
-  // Octal clock
   {
-    8,
+    3, // Octal clock
     33, 48, 2, 48 + 3 * 4 + 2, 2, 48 +  6 * 4 + 2 * 2,  2,
     40, 42, 2, 42 + 4 * 4    , 2, 42 +  8 * 4        ,  4
   },
-  // Hex clock
   {
-    16,
+    4, // Hex clock
     49, 46, 2, 46 + 4 * 4 + 2, 2, 46 +  8 * 4 + 2 * 2,  2,
     56, 44, 2, 44 + 5 * 4    , 1, 44 +  9 * 4        ,  3
   }
 };
 
+// The clock digit characters
+static const unsigned char __attribute__ ((progmem)) nerdDigit[] =
+{
+  'o','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'
+};
+
 // Local function prototypes
 static void nerdBaseClockUpdate(uint8_t clock);
-static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
-  uint16_t oldVal, char *numberStr);
+static void nerdPrintNumber(uint8_t maskLen, uint8_t digits, uint16_t oldVal,
+  uint16_t newVal, uint8_t x, uint8_t y);
 
 //
 // Function: nerdCycle
@@ -109,7 +113,7 @@ void nerdInit(u08 mode)
 {
   DEBUGP("Init Nerd");
 
-  // Draw clock header and fixed elements for the individual nerd clocks.
+  // Draw clock header and fixed elements for the individual nerd clocks
   glcdPutStr2(9,   1, FONT_5X5P, "*** binary/octal/hex clock ***", mcFgColor);
   glcdPutStr2(37,  8, FONT_5X5P, "(h:m:s - d/m/y)", mcFgColor);
   glcdPutStr2(48, 17, FONT_5X5P, ":            :", mcFgColor);
@@ -127,145 +131,76 @@ void nerdInit(u08 mode)
 //
 static void nerdBaseClockUpdate(uint8_t clock)
 {
-  char numberStr[13];
-  uint8_t digitOffset = 0;
   nerdLocation_t thisClock = nerdLocation[clock];
 
-  // Hour
-  if (mcClockOldTH != mcClockNewTH || mcClockInit == GLCD_TRUE)
-  {
-    digitOffset = nerdPrintNumber(thisClock.base,
-      thisClock.digitsTH, mcClockNewTH, mcClockOldTH, numberStr);
-    if (digitOffset != 255)
-      glcdPutStr2(thisClock.locXTH + digitOffset * 4,
-        thisClock.locYHms, FONT_5X5P, numberStr + digitOffset, mcFgColor);
-  }
+  // Verify changes in hour + min + sec
+  nerdPrintNumber(thisClock.maskLen, thisClock.digitsTH, mcClockOldTH,
+    mcClockNewTH, thisClock.locXTH, thisClock.locYHms);
+  nerdPrintNumber(thisClock.maskLen, thisClock.digitsTM, mcClockOldTM,
+    mcClockNewTM, thisClock.locXTM, thisClock.locYHms);
+  nerdPrintNumber(thisClock.maskLen, thisClock.digitsTS, mcClockOldTS,
+    mcClockNewTS, thisClock.locXTS, thisClock.locYHms);
 
-  // Minute
-  if (mcClockOldTM != mcClockNewTM || mcClockInit == GLCD_TRUE)
-  {
-    digitOffset = nerdPrintNumber(thisClock.base,
-      thisClock.digitsTM, mcClockNewTM, mcClockOldTM, numberStr);
-    if (digitOffset != 255)
-      glcdPutStr2(thisClock.locXTM + digitOffset * 4,
-        thisClock.locYHms, FONT_5X5P, numberStr + digitOffset, mcFgColor);
-  }
-
-  // Seconds
-  if (mcClockOldTS != mcClockNewTS || mcClockInit == GLCD_TRUE)
-  {
-    digitOffset = nerdPrintNumber(thisClock.base,
-      thisClock.digitsTS, mcClockNewTS, mcClockOldTS, numberStr);
-    if (digitOffset != 255)
-      glcdPutStr2(thisClock.locXTS + digitOffset * 4,
-        thisClock.locYHms, FONT_5X5P, numberStr + digitOffset, mcFgColor);
-  }
-
-  // Day
-  if (mcClockOldDD != mcClockNewDD || mcClockInit == GLCD_TRUE)
-  {
-    digitOffset = nerdPrintNumber(thisClock.base,
-      thisClock.digitsDD, mcClockNewDD, mcClockOldDD, numberStr);
-    if (digitOffset != 255)
-      glcdPutStr2(thisClock.locXDD + digitOffset * 4,
-        thisClock.locYDmy, FONT_5X5P, numberStr + digitOffset, mcFgColor);
-  }
-
-  // Month
-  if (mcClockOldDM != mcClockNewDM || mcClockInit == GLCD_TRUE)
-  {
-    digitOffset = nerdPrintNumber(thisClock.base,
-      thisClock.digitsDM, mcClockNewDM, mcClockOldDM, numberStr);
-    if (digitOffset != 255)
-      glcdPutStr2(thisClock.locXDM + digitOffset * 4,
-        thisClock.locYDmy, FONT_5X5P, numberStr + digitOffset, mcFgColor);
-  }
-
-  // Year
-  if (mcClockOldDY != mcClockNewDY || mcClockInit == GLCD_TRUE)
-  {
-    digitOffset = nerdPrintNumber(thisClock.base,
-      thisClock.digitsDY, mcClockNewDY + 2000, mcClockOldDY + 2000,
-      numberStr);
-    if (digitOffset != 255)
-      glcdPutStr2(thisClock.locXDY + digitOffset * 4,
-        thisClock.locYDmy, FONT_5X5P, numberStr + digitOffset, mcFgColor);
-  }
+  // Verify changes in day + mon + year
+  nerdPrintNumber(thisClock.maskLen, thisClock.digitsDD, mcClockOldDD,
+    mcClockNewDD, thisClock.locXDD, thisClock.locYDmy);
+  nerdPrintNumber(thisClock.maskLen, thisClock.digitsDM, mcClockOldDM,
+    mcClockNewDM, thisClock.locXDM, thisClock.locYDmy);
+  nerdPrintNumber(thisClock.maskLen, thisClock.digitsDY, mcClockOldDY + 2000,
+    mcClockNewDY + 2000, thisClock.locXDY, thisClock.locYDmy);
 }
 
 //
 // Function: nerdBaseClockUpdate
 //
-// Construct text string for a clock element in the requested number
-// base with the requested string length (that can lead to prefix '0'
-// characters).
-// - The function returns an index in the new value text string for the
-//   first character that deviates from the previous string value, so we
-//   don't have to print the entire string to the lcd.
-// - In case the clock has to init itelf, the function returns value 0.
-// - In case the new string value is identical to the old value the
-//   function returns value 255.
+// Construct and print text string for a clock element in the requested number
+// base (derived from the provided number mask length) with the requested
+// string length (that can lead to prefix '0' chars and a postfix space).
 //
-static uint8_t nerdPrintNumber(uint8_t base, uint8_t digits, uint16_t newVal,
-  uint16_t oldVal, char *numberStr)
+static void nerdPrintNumber(uint8_t maskLen, uint8_t digits, uint16_t oldVal,
+  uint16_t newVal, uint8_t x, uint8_t y)
 {
-  uint8_t i = 0;
-  uint16_t mask = 0;
-  uint8_t maskLen = 0;
-  uint8_t maskPos = 0;
-  uint8_t digitNew = 0;
-  uint8_t digitOld = 0;
-  uint8_t compareLoc = 255;
+  uint8_t i;
+  uint16_t mask;
+  uint8_t digit;
+  uint8_t thinDigits = 0;
+  char numberStr[NERD_ITEM_LEN];	// The string to print filled backwards
+  uint8_t idx = NERD_ITEM_LEN - 2;	// Index in numberStr
 
-  // We're mostly going to use shift and and/or operations to calculate
-  // our stuff so we need a bitmask. Depending on the number base we'll
-  // have different mask lengths.
-  if (base == 2)
-    maskLen = 1;
-  else if (base == 8)
-    maskLen = 3;
-  else
-    maskLen = 4;
+  // First check if we need to do anything
+  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+    return;
 
-  // Set the initial mask position in the number value
-  maskPos = maskLen * digits;
-  mask = (base - 1) << (maskLen * (digits - 1));
-
-  // Generate the requested length of characters
+  // Generate the requested length of characters starting at the last digit
+  // up to the first
+  mask = ~(0xffff << maskLen);
   for (i = 0; i < digits; i++)
   {
-    // Get the digit value for both the old and new value
-    digitNew = (newVal & mask) >> (maskPos - maskLen);
-    digitOld = (oldVal & mask) >> (maskPos - maskLen);
+    // Get digit and put it in string
+    idx--;
+    digit = (newVal & mask);
+    numberStr[idx] = pgm_read_byte(&nerdDigit[digit]);
 
-    // Do we have our first mismatch value between the old and new value
-    if (digitNew != digitOld && compareLoc > i)
-      compareLoc = i;
+    // Count occurrences of e and f characters that are only two pixels wide
+    if (digit > 13)
+      thinDigits++;
 
-    // Create the character for the digit value
-    if (digitNew == 0)
-      numberStr[i] = 'o';
-    else if (digitNew < 10)
-      numberStr[i] = (char)(digitNew + '0');
-    else if (digitNew < 16)
-      numberStr[i] = (char)(digitNew - 10 + 'a');
-
-    // Get remainder value for the old and new value
-    newVal = (newVal & ~mask);
-    oldVal = (oldVal & ~mask);
-
-    // And move to next digit
-    mask = (mask >> maskLen);
-    maskPos = maskPos - maskLen;
+    // Move to preceding digit
+    newVal = newVal >> maskLen;
   }
 
-  // Close the generated string
-  numberStr[digits] = '\0';
+  // Close the generated string. In case of a hex number we may need to add a
+  // space to compensate for a too thin string due to e and f chars.
+  if (thinDigits == 2)
+  {
+    numberStr[NERD_ITEM_LEN - 2] = ' ';
+    numberStr[NERD_ITEM_LEN - 1] = '\0';
+  }
+  else
+  {
+    numberStr[NERD_ITEM_LEN - 2] = '\0';
+  }
 
-  // If we need to init our clock overide the mismatch value and indicate
-  // that the entire string is to be reported
-  if (mcClockInit == GLCD_TRUE)
-    compareLoc = 0;
-
-  return compareLoc;
+  // Print the generated string
+  glcdPutStr2(x, y, FONT_5X5P, &numberStr[idx], mcFgColor);
 }

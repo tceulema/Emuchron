@@ -51,23 +51,13 @@ void spotLineChartCycle(void)
 
   DEBUGP("Update LineChart");
 
-  // Verify changes in sec or min
-  if (mcClockNewTS != mcClockOldTS || mcClockNewTM != mcClockOldTM ||
-      mcClockInit == GLCD_TRUE)
-  {
-    // Replace line min->sec
-    spotLineUpdate(LINE_AXIS_SEC, LINE_MIN_X_START, LINE_SEC_X_START,
-      mcClockOldTM, mcClockNewTM, mcClockOldTS, mcClockNewTS);
-  }
+  // Verify changes in sec or min and if needed replace line min->sec
+  spotLineUpdate(LINE_AXIS_SEC, LINE_MIN_X_START, LINE_SEC_X_START,
+    mcClockOldTM, mcClockNewTM, mcClockOldTS, mcClockNewTS);
 
-  // Verify changes in min or hour
-  if (mcClockNewTM != mcClockOldTM || mcClockNewTH != mcClockOldTH ||
-      mcClockInit == GLCD_TRUE)
-  {
-    // Replace line hour->min
-    spotLineUpdate(LINE_AXIS_MIN, LINE_HOUR_X_START, LINE_MIN_X_START,
-      mcClockOldTH, mcClockNewTH, mcClockOldTM, mcClockNewTM);
-  }
+  // Verify changes in min or hour and if needed replace line hour->min
+  spotLineUpdate(LINE_AXIS_MIN, LINE_HOUR_X_START, LINE_MIN_X_START,
+    mcClockOldTH, mcClockNewTH, mcClockOldTM, mcClockNewTM);
 }
 
 //
@@ -82,7 +72,7 @@ void spotLineChartInit(u08 mode)
   // Draw Spotfire form layout
   spotCommonInit("line chart", mode);
 
-  // Draw static part of linechart
+  // Draw static axis part of linechart
   spotAxisInit(CHRON_LINECHART);
 }
 
@@ -99,6 +89,11 @@ static void spotLineUpdate(u08 axisEnd, u08 xLeft, u08 xRight, u08 oldValLeft,
   u08 oldRightHeight;
   u08 newRightHeight;
   char lineValue[3];
+
+  // See if we need to update the chart line
+  if (oldValLeft == newValLeft && oldValRight == newValRight &&
+      mcClockInit == GLCD_FALSE)
+    return;
 
   // Get height of old and new line height on left and right side
   oldLeftHeight =

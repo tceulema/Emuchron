@@ -74,7 +74,7 @@ static u16 glcdFontIdxGet(unsigned char c);
 void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
 {
   u08 i;
-  u08 j;
+  u08 j = GLCD_FALSE;
   s08 x = 0;
   s08 y = radius;
   s08 tswitch = 3 - 2 * (s08)radius;
@@ -90,8 +90,8 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
     half = 1;
 
   // Initialize buffer that stores the template of the circle section to draw
-  for (j = 0; j <= radius; j++)
-    glcdBuffer[GLCD_CONTROLLER_XPIXELS + j] = 0;
+  for (i = 0; i <= radius; i++)
+    glcdBuffer[GLCD_CONTROLLER_XPIXELS + i] = 0;
 
   // Split up the circle generation in circle sections per y-line byte
   for (yLine = ((yCenter - radius) >> 3); yLine <= yLineEnd; yLine++)
@@ -111,47 +111,53 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
           (lineType == CIRCLE_THIRD && third == 0) ||
           (lineType != CIRCLE_THIRD && (x & 0x1) == half))
       {
-        j = GLCD_FALSE;
-        if (((yCenter + y) >> 3) == yLine)
+        i = yCenter + y;
+        if ((i >> 3) == yLine)
         {
           // Mark bottom-right pixel in template
           j = GLCD_TRUE;
-          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + x, yCenter + y);
+          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + x, i);
         }
-        if (((yCenter - y) >> 3) == yLine)
+        i = yCenter - y;
+        if ((i >> 3) == yLine)
         {
           // Mark top-right pixel in template
           j = GLCD_TRUE;
-          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + x, yCenter - y);
+          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + x, i);
         }
         if (j == GLCD_TRUE)
         {
           // Sync x range scope to process
-          if (xCenter + x < xStart)
-            xStart = xCenter + x;
-          if (xCenter + x > xEnd)
-            xEnd = xCenter + x;
+          i = xCenter + x;
+          if (i < xStart)
+            xStart = i;
+          if (i > xEnd)
+            xEnd = i;
           j = GLCD_FALSE;
         }
-        if (((yCenter + x) >> 3) == yLine)
+        i = yCenter + x;
+        if ((i >> 3) == yLine)
         {
           // Mark bottom-right pixel in template
           j = GLCD_TRUE;
-          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + y, yCenter + x);
+          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + y, i);
         }
-        if (((yCenter - x) >> 3) == yLine)
+        i = yCenter - x;
+        if ((i >> 3) == yLine)
         {
           // Mark top-right pixel in template
           j = GLCD_TRUE;
-          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + y, yCenter - x);
+          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + y, i);
         }
         if (j == GLCD_TRUE)
         {
           // Sync x range scope to process
-          if (xCenter + y < xStart)
-            xStart = xCenter + y;
-          if (xCenter + y > xEnd)
-            xEnd = xCenter + y;
+          i = xCenter + y;
+          if (i < xStart)
+            xStart = i;
+          if (i > xEnd)
+            xEnd = i;
+          j = GLCD_FALSE;
         }
       }
 
@@ -175,16 +181,16 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
     }
 
     // At this point the circle section template for the y-line is generated.
-    // In case the template is empty, which is possible when using the two
-    // HALF draw types, then quit this y-line
+    // In case the template is empty, which is possible when using the two HALF
+    // draw types, then quit this y-line
     if (xStart == 255)
       continue;
 
     // Load line section for right side of circle y-line
     glcdBufferRead(xStart, yLine, xEnd - xStart + 1);
 
-    // Map section template onto the right side circle section and write
-    // back to lcd
+    // Map section template onto the right side circle section and write back
+    // to lcd
     glcdSetAddress(xStart, yLine);
     j = GLCD_CONTROLLER_XPIXELS + (xStart - xCenter);
     for (i = 0; i <= xEnd - xStart; i++)
@@ -253,8 +259,8 @@ void glcdDot(u08 x, u08 y, u08 color)
   else
     newByte = (oldByte & ~mask);
 
-  // Prevent unnecessary write back to lcd if nothing has
-  // changed when compared to current byte
+  // Prevent unnecessary write back to lcd if nothing has changed when compared
+  // to current byte
   if (oldByte != newByte)
   {
     glcdSetAddress(x, y >> 3);
@@ -278,12 +284,12 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
 
   // The code below still has the basic logic structure of the well known
   // method to fill a circle using tswitch. Optimizations applied in this
-  // method are two-fold. First, an optimization avoids multiple vertical
-  // line draw actions in the same area (so, draw the vertical line only
-  // once). Consider this an optimization to the core of the tswitch method.
-  // Second, an optimization merges multiple vertical line draw actions into
-  // a single rectangle fill draw. This builds on optimizing the interface
-  // to our lcd display and is therefor hardware oriented.
+  // method are two-fold. First, an optimization avoids multiple vertical line
+  // draw actions in the same area (so, draw the vertical line only once).
+  // Consider this an optimization to the core of the tswitch method.
+  // Second, an optimization merges multiple vertical line draw actions into a
+  // single rectangle fill draw. This builds on optimizing the interface to our
+  // lcd display and is therefor hardware oriented.
   while (x <= y)
   {
     if (x != y)
@@ -422,8 +428,8 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
     // In some cases we partly update an lcd byte or invert it
     if (startBit != 0 || b - h < 8 || fillType == FILL_INVERSE)
     {
-      // Read all the required lcd bytes for this y-byte in the
-      // line buffer and update them byte by byte
+      // Read all the required lcd bytes for this y-byte in the line buffer and
+      // update them byte by byte
       useBuffer = GLCD_TRUE;
       glcdBufferRead(x, yByte, a);
     }
@@ -452,7 +458,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
     {
       // Set the template that we'll inverse for each x
       if ((virX & 0x1) == (virY & 0x1))
-        template = 0xAA;
+        template = 0xaa;
       else
         template = 0x55;
     }
@@ -466,7 +472,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
 
       // Set template that we have to apply to the lcd byte
       if (fillType == FILL_FULL)
-        template = 0xFF;
+        template = 0xff;
       else if (fillType == FILL_BLANK)
         template = 0x00;
       else if (fillType == FILL_HALF)
@@ -523,8 +529,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
 //
 // Function: glcdGetWidthStr
 //
-// Get the pixel width of a string, including the trailing white
-// space pixel
+// Get the pixel width of a string, including the trailing white space pixels
 //
 u08 glcdGetWidthStr(u08 font, char *data)
 {
@@ -558,8 +563,7 @@ u08 glcdGetWidthStr(u08 font, char *data)
     // Buffer all 128 (GLCD_XPIXELS) bytes for the y-byte pixel row
     glcdBufferRead(0, y, GLCD_XPIXELS);
 
-    // Go back to the beginning of the row and write the
-    // inverted pixel bytes
+    // Go back to the beginning of the row and write the inverted pixel bytes
     glcdSetAddress(0, y);
     for (x = 0; x < GLCD_XPIXELS; x++)
       glcdDataWrite(~(glcdBuffer[x]));
@@ -586,7 +590,7 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
   u08 drawX = x1;
   u08 drawY = y1;
   u08 yLine = y1 >> 3;
-  u08 lineCount = ABS((y2 >> 3) - yLine) + 1;
+  s08 lineCount;
   u08 line;
   u08 startX, endX;
   s08 firstWrite;
@@ -594,6 +598,12 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
   u08 finalByte;
   u08 mode = 1;
   u08 endValue = deltaYAbs;
+
+  // Determine number of lcd y-pixel bytes to draw
+  lineCount = (y2 >> 3) - yLine;
+  if (lineCount < 0)
+    lineCount = -lineCount;
+  lineCount++;
 
   // Set selector for line pixel generation
   if (deltaXAbs >= deltaYAbs)
@@ -603,7 +613,8 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
   }
 
   // Initialize buffer that stores the template of the line section to draw
-  for (i = (x1 <= x2 ? x1 : x2); i <= (x1 >= x2 ? x1 : x2); i++)
+  endX = (x1 >= x2 ? x1 : x2);
+  for (i = (x1 <= x2 ? x1 : x2); i <= endX; i++)
     glcdBuffer[i] = 0;
 
   // Split up the draw line in sections of lcd y-lines
@@ -709,8 +720,7 @@ void glcdPrintNumber(u08 n, u08 color)
 //
 // Function: glcdPrintNumberBg
 //
-// Print a number in two digits at current cursor location
-// in background color
+// Print a number in two digits at current cursor location in background color
 //
 void glcdPrintNumberBg(u08 n)
 {
@@ -720,8 +730,7 @@ void glcdPrintNumberBg(u08 n)
 //
 // Function: glcdPrintNumberFg
 //
-// Print a number in two digits at current cursor location
-// in foreground color
+// Print a number in two digits at current cursor location in foreground color
 //
 void glcdPrintNumberFg(u08 n)
 {
@@ -745,8 +754,8 @@ void glcdPutStr(char *data, u08 color)
 //
 // Function: glcdPutStrFg
 //
-// Write a character string starting at current cursor location
-// in foreground color
+// Write a character string starting at current cursor location in foreground
+// color
 //
 void glcdPutStrFg(char *data)
 {
@@ -807,8 +816,8 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
     // In most cases we partly update an lcd byte
     if (startBit != 0 || strHeight - h < 8)
     {
-      // Read all the required lcd bytes for this y-byte in the
-      // line buffer and update them byte by byte
+      // Read all the required lcd bytes for this y-byte in the line buffer and
+      // update them byte by byte
       glcdBufferRead(x, yByte, strWidth);
       if (startBit + (strHeight - h) > 8)
         lcdPixelsToDo = 8 - startBit;
@@ -831,7 +840,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
 
     for (i = 0; i < strWidth; i++)
     {
-      // Do we need to get the next font byte
+      // Do we need to get the next string character
       if (fontByteIdx > fontWidth || i == 0)
       {
         // Get next string character and start at first font byte
@@ -865,8 +874,8 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
       // Set the number of bits to process in lcd byte
       lcdPixelsLeft = lcdPixelsToDo;
 
-      // In case of x scaling, the template for the final lcd byte merge
-      // is already known
+      // In case of x scaling, the template for the final lcd byte merge is
+      // already known
       if (currXScale == 0)
       {
         // Reposition on y scale and font pixel
@@ -879,8 +888,8 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
         // We can optimize when the fontbyte contains the template we need
         if (yScale == 1)
         {
-          // No y scaling so we only need to shift the fontbyte to obtain
-          // the lcd byte template
+          // No y scaling so we only need to shift the fontbyte to obtain the
+          // lcd byte template
           template = (fontByte >> currFontPixel) << startBit;
           currFontPixel = currFontPixel + lcdPixelsLeft;
         }
@@ -936,8 +945,8 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
 //
 // Function: glcdPutStr3v
 //
-// Write a character string vertically starting at the px[x,y] position
-// in either bottom-up or top-down orientation with font scaling
+// Write a character string vertically starting at the px[x,y] position in
+// either bottom-up or top-down orientation with font scaling
 //
 u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
   u08 xScale, u08 yScale, u08 color)
@@ -1000,8 +1009,8 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
         (orientation == ORI_VERTICAL_BU && startBit != 7) ||
          strHeight - h < 8)
     {
-      // Read all the required lcd bytes for this y-byte in the line buffer
-      // and update them byte by byte
+      // Read all the required lcd bytes for this y-byte in the line buffer and
+      // update them byte by byte
       glcdBufferRead(xStart, yByte, strWidth);
       if (orientation == ORI_VERTICAL_TD && (startBit + (strHeight - h) > 8))
         lcdPixelsToDo = 8 - startBit;
@@ -1073,8 +1082,8 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
           }
           else
           {
-            // Processed the last font byte so move to next character in
-            // string to process
+            // Processed the last font byte so move to next character in string
+            // to process
             fontByteIdx = 0;
             if (*(c + 1) != 0)
             {
@@ -1172,8 +1181,7 @@ void glcdWriteChar(unsigned char c, u08 color)
 //
 // Function: glcdWriteCharFg
 //
-// Write a character at the current cursor position
-// in foreground color
+// Write a character at the current cursor position in foreground color
 //
 void glcdWriteCharFg(unsigned char c)
 {
@@ -1225,9 +1233,8 @@ static void glcdBufferBitUpdate(u08 x, u08 y)
 //
 // Function: glcdCharWidthGet
 //
-// Get the pixel width of a single character in the FONT_5X5P font
-// (excluding the trailing white space pixel) and its internal
-// fontmap array offset
+// Get the pixel width of a single character in the FONT_5X5P font (excluding
+// the trailing white space pixel) and its internal fontmap array offset
 //
 static u08 glcdCharWidthGet(char c, u08 *idxOffset)
 {

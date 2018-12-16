@@ -12,6 +12,10 @@
 int cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput);
 int cmdListExecute(cmdLine_t *cmdLineRoot, char *source);
 
+// mchron interpreter command list execution statistics functions
+void cmdListStatsInit(void);
+void cmdListStatsPrint(void);
+
 // mchron command list functions
 void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot);
 int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,

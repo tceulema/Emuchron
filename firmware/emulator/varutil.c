@@ -251,7 +251,7 @@ void varInit(void)
 // Print the value of named variables using a regexp pattern (where '.' matches
 // every named variable)
 //
-int varPrint(char *pattern, int silent)
+int varPrint(char *pattern, int summary)
 {
   const int spaceCountMax = 60;
   regex_t regex;
@@ -331,7 +331,7 @@ int varPrint(char *pattern, int silent)
   // End on newline if needed and provide variable summary
   if (spaceCount != 0)
     printf("\n");
-  if (silent == GLCD_FALSE && varInUse != 1)
+  if (summary == GLCD_TRUE && varInUse != 1)
     printf("registered variables: %d\n", varInUse);
 
   // Cleanup regexp
@@ -345,9 +345,10 @@ int varPrint(char *pattern, int silent)
 //
 // Reset all named variable data
 //
-void varReset(void)
+int varReset(void)
 {
   int i = 0;
+  int varInUse = 0;
   varVariable_t *delVar;
   varVariable_t *nextVar;
 
@@ -360,6 +361,8 @@ void varReset(void)
     {
       delVar = nextVar;
       nextVar = delVar->next;
+      if (delVar->active == GLCD_TRUE)
+        varInUse++;
       free(delVar->name);
       free(delVar);
     }
@@ -367,6 +370,8 @@ void varReset(void)
     varBucket[i].var = NULL;
   }
   varCount = 0;
+
+  return varInUse;
 }
 
 //

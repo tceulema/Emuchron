@@ -82,6 +82,7 @@
 #include <stdio.h>
 #include "../emulator/stub.h"
 #include "../emulator/controller.h"
+#include "../emulator/mchronutil.h"
 #else
 #include "../util.h"
 #endif

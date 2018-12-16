@@ -14,9 +14,8 @@
 #endif
 #include "ks0108.h"
 
-// Definition of a structure that holds the functional lcd cursor and
-// the active y line cursor in both controllers
-// (x=0..127, y=0..7)
+// Definition of a structure that holds the functional lcd cursor and the
+// active y line cursor in both controllers (x=0..127, y=0..7)
 typedef struct _glcdLcdCursor_t
 {
   unsigned char lcdXAddr;
@@ -99,12 +98,12 @@ static void glcdInitHW(void)
   sbi(GLCD_CTRL_RESET_DDR, GLCD_CTRL_RESET);
 #endif
   // Initialize lcd data
-  GLCD_DATAH_PORT &= ~(0xF0);
-  GLCD_DATAL_PORT &= ~(0x0F);
+  GLCD_DATAH_PORT &= ~(0xf0);
+  GLCD_DATAL_PORT &= ~(0x0f);
   //outb(GLCD_DATA_PORT, 0x00);
   // Initialize lcd data port to output
-  GLCD_DATAH_DDR |= 0xF0;
-  GLCD_DATAL_DDR |= 0x0F;
+  GLCD_DATAH_DDR |= 0xf0;
+  GLCD_DATAL_DDR |= 0x0f;
   //outb(GLCD_DATA_DDR, 0xFF);
 #endif
 }
@@ -123,18 +122,18 @@ static void glcdBusyWait(u08 controller)
   glcdControlSelect(controller);
   // Do a read from control register
   //outb(GLCD_DATA_PORT, 0xFF);
-  GLCD_DATAH_PORT |= 0xF0;
-  GLCD_DATAL_PORT |= 0x0F;
+  GLCD_DATAH_PORT |= 0xf0;
+  GLCD_DATAL_PORT |= 0x0f;
 
   cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   //outb(GLCD_DATA_DDR, 0x00);
-  GLCD_DATAH_DDR &= ~(0xF0);
-  GLCD_DATAL_DDR &= ~(0x0F);
+  GLCD_DATAH_DDR &= ~(0xf0);
+  GLCD_DATAL_DDR &= ~(0x0f);
   sbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   asm volatile ("nop"); asm volatile ("nop");
   //while (inb(GLCD_DATA_PIN) & GLCD_STATUS_BUSY)
-  while (((GLCD_DATAH_PIN & 0xF0) | (GLCD_DATAL_PIN & 0x0F)) & GLCD_STATUS_BUSY)
+  while (((GLCD_DATAH_PIN & 0xf0) | (GLCD_DATAL_PIN & 0x0f)) & GLCD_STATUS_BUSY)
   {
     cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
     asm volatile ("nop"); asm volatile ("nop");
@@ -146,8 +145,8 @@ static void glcdBusyWait(u08 controller)
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   //outb(GLCD_DATA_DDR, 0xFF);
-  GLCD_DATAH_DDR |= 0xF0;
-  GLCD_DATAL_DDR |= 0x0F;
+  GLCD_DATAH_DDR |= 0xf0;
+  GLCD_DATAL_DDR |= 0x0f;
   sei();
 #else
   // Enable RAM waitstate
@@ -184,15 +183,15 @@ void glcdControlWrite(u08 controller, u08 data)
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   //outb(GLCD_DATA_DDR, 0xFF);
-  GLCD_DATAH_DDR |= 0xF0;
-  GLCD_DATAL_DDR |= 0x0F;
+  GLCD_DATAH_DDR |= 0xf0;
+  GLCD_DATAL_DDR |= 0x0f;
   //outb(GLCD_DATA_PORT, data);
   // Clear and set top nibble
-  GLCD_DATAH_PORT &= ~0xF0;
-  GLCD_DATAH_PORT |= data & 0xF0;
+  GLCD_DATAH_PORT &= ~0xf0;
+  GLCD_DATAH_PORT |= data & 0xf0;
   // Clear and set bottom nibble
-  GLCD_DATAL_PORT &= ~0x0F;
-  GLCD_DATAL_PORT |= data & 0x0F;
+  GLCD_DATAL_PORT &= ~0x0f;
+  GLCD_DATAL_PORT |= data & 0x0f;
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
@@ -225,8 +224,8 @@ void glcdControlWrite(u08 controller, u08 data)
   glcdBusyWait(controller);
   cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   //outb(GLCD_DATA_DDR, 0x00);
-  GLCD_DATAH_DDR &= ~(0xF0);
-  GLCD_DATAL_DDR &= ~(0x0F);
+  GLCD_DATAH_DDR &= ~(0xf0);
+  GLCD_DATAL_DDR &= ~(0x0f);
   sbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   asm volatile ("nop"); asm volatile ("nop");
@@ -234,12 +233,12 @@ void glcdControlWrite(u08 controller, u08 data)
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
   //data = inb(GLCD_DATA_PIN);
-  data = (GLCD_DATAH_PIN & 0xF0) | (GLCD_DATAL_PIN & 0x0F);
+  data = (GLCD_DATAH_PIN & 0xf0) | (GLCD_DATAL_PIN & 0x0f);
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   //outb(GLCD_DATA_DDR, 0xFF);
-  GLCD_DATAH_DDR |= 0xF0;
-  GLCD_DATAL_DDR |= 0x0F;
+  GLCD_DATAH_DDR |= 0xf0;
+  GLCD_DATAL_DDR |= 0x0f;
   sei();
 #else
   // Enable RAM waitstate
@@ -332,16 +331,16 @@ void glcdDataWrite(u08 data)
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   //outb(GLCD_DATA_DDR, 0xFF);
-  GLCD_DATAH_DDR |= 0xF0;
-  GLCD_DATAL_DDR |= 0x0F;
+  GLCD_DATAH_DDR |= 0xf0;
+  GLCD_DATAL_DDR |= 0x0f;
 
   //outb(GLCD_DATA_PORT, data);
   // Clear and set top nibble
-  GLCD_DATAH_PORT &= ~0xF0;
-  GLCD_DATAH_PORT |= data & 0xF0;
+  GLCD_DATAH_PORT &= ~0xf0;
+  GLCD_DATAH_PORT |= data & 0xf0;
   // Clear and set bottom nibble
-  GLCD_DATAL_PORT &= ~0x0F;
-  GLCD_DATAL_PORT |= data & 0x0F;
+  GLCD_DATAL_PORT &= ~0x0f;
+  GLCD_DATAL_PORT |= data & 0x0f;
 
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
@@ -392,8 +391,8 @@ u08 glcdDataRead(void)
   glcdBusyWait(controller);
   sbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   //outb(GLCD_DATA_DDR, 0x00);
-  GLCD_DATAH_DDR &= ~(0xF0);
-  GLCD_DATAL_DDR &= ~(0x0F);
+  GLCD_DATAH_DDR &= ~(0xf0);
+  GLCD_DATAL_DDR &= ~(0x0f);
 
   sbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
@@ -402,7 +401,7 @@ u08 glcdDataRead(void)
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
   //data = inb(GLCD_DATA_PIN);
-  data = (GLCD_DATAH_PIN & 0xF0) | (GLCD_DATAL_PIN & 0x0F);
+  data = (GLCD_DATAH_PIN & 0xf0) | (GLCD_DATAL_PIN & 0x0f);
 
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);

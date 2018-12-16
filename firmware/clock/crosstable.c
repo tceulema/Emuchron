@@ -27,7 +27,8 @@ extern char animMin[];
 extern char animSec[];
 
 // Local function prototypes
-static void spotTextBox(u08 x, u08 y, u08 direction, char *data);
+static void spotCrossTextBox(u08 x, u08 y, u08 direction, char *data);
+static void spotCrossValDraw(u08 x, u08 oldVal, u08 newVal);
 
 //
 // Function: spotCrossTableCycle
@@ -36,8 +37,6 @@ static void spotTextBox(u08 x, u08 y, u08 direction, char *data);
 //
 void spotCrossTableCycle(void)
 {
-  char newVal[3];
-
   // Update common Spotfire clock elements and check if clock requires update
   if (spotCommonUpdate() == GLCD_FALSE)
     return;
@@ -45,21 +44,9 @@ void spotCrossTableCycle(void)
   DEBUGP("Update CrossTable");
 
   // Verify changes in time
-  if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
-  {
-    animValToStr(mcClockNewTS, newVal);
-    glcdPutStr2(71, 40, FONT_5X7N, newVal, mcFgColor);
-  }
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
-  {
-    animValToStr(mcClockNewTM, newVal);
-    glcdPutStr2(49, 40, FONT_5X7N, newVal, mcFgColor);
-  }
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
-  {
-    animValToStr(mcClockNewTH, newVal);
-    glcdPutStr2(27, 40, FONT_5X7N, newVal, mcFgColor);
-  }
+  spotCrossValDraw(71, mcClockOldTS, mcClockNewTS);
+  spotCrossValDraw(49, mcClockOldTM, mcClockNewTM);
+  spotCrossValDraw(27, mcClockOldTH, mcClockNewTH);
 }
 
 //
@@ -76,11 +63,11 @@ void spotCrossTableInit(u08 mode)
 
   // Draw static part of cross table
   // 1 - The crosstable labels in a textbox
-  spotTextBox(40, 20, ORI_HORIZONTAL, "columns");
-  spotTextBox(11, 46, ORI_VERTICAL_BU, "none");
-  spotTextBox(73, 54, ORI_HORIZONTAL, animSec);
-  spotTextBox(51, 54, ORI_HORIZONTAL, animMin);
-  spotTextBox(26, 54, ORI_HORIZONTAL, animHour);
+  spotCrossTextBox(40, 20, ORI_HORIZONTAL, "columns");
+  spotCrossTextBox(11, 46, ORI_VERTICAL_BU, "none");
+  spotCrossTextBox(73, 54, ORI_HORIZONTAL, animSec);
+  spotCrossTextBox(51, 54, ORI_HORIZONTAL, animMin);
+  spotCrossTextBox(26, 54, ORI_HORIZONTAL, animHour);
   // 2 - Crosstable x-axis column names
   glcdPutStr2(71, 31, FONT_5X5P, animSec, mcFgColor);
   glcdPutStr2(48, 31, FONT_5X5P, animMin, mcFgColor);
@@ -93,14 +80,14 @@ void spotCrossTableInit(u08 mode)
 }
 
 //
-// Function: spotTextBox
+// Function: spotCrossTextBox
 //
 // Draw a fancy textbox for a crosstable label
 //
-static void spotTextBox(u08 x, u08 y, u08 direction, char *data)
+static void spotCrossTextBox(u08 x, u08 y, u08 direction, char *data)
 {
   u08 bx, by, dx, dy;
-  u08 w, h;
+  u08 w, h, a, b;
   u08 textLen;
 
   // Depending on the text direction the textbox is drawn differently
@@ -130,12 +117,28 @@ static void spotTextBox(u08 x, u08 y, u08 direction, char *data)
   }
 
   // Draw the textbox for the label
+  a = bx + w - dx;
+  b = by + h - dy;
   glcdRectangle(bx, by, w, h, mcFgColor);
   glcdFillRectangle2(bx, by, dx, dy, ALIGN_AUTO, FILL_INVERSE, mcFgColor);
-  glcdFillRectangle2(bx + w - dx, by, dx, dy, ALIGN_AUTO, FILL_INVERSE,
-    mcFgColor);
-  glcdFillRectangle2(bx, by + h - dy, dx, dy, ALIGN_AUTO, FILL_INVERSE,
-    mcFgColor);
-  glcdFillRectangle2(bx + w - dx, by + h - dy, dx, dy, ALIGN_AUTO,
-    FILL_INVERSE, mcFgColor);
+  glcdFillRectangle2(a, by, dx, dy, ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+  glcdFillRectangle2(bx, b, dx, dy, ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+  glcdFillRectangle2(a, b, dx, dy, ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+}
+
+//
+// Function: spotCrossValDraw
+//
+// Draw a crosstable value
+//
+static void spotCrossValDraw(u08 x, u08 oldVal, u08 newVal)
+{
+  char strVal[3];
+
+  // See if we need to update the time element
+  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+    return;
+
+  animValToStr(newVal, strVal);
+  glcdPutStr2(x, 40, FONT_5X7N, strVal, mcFgColor);
 }

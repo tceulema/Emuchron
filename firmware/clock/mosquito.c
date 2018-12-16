@@ -121,8 +121,7 @@ void mosquitoCycle(void)
   animADAreaUpdate(MOS_ALARM_X_START, MOS_AD_Y_START, AD_AREA_ALM_ONLY);
 
   // Each minute change the direction of the elements
-  if (mcClockTimeEvent == GLCD_TRUE &&
-      (mcClockNewTM != mcClockOldTM || mcClockNewTH != mcClockOldTH))
+  if (mcClockTimeEvent == GLCD_TRUE && mcClockNewTM != mcClockOldTM)
     mosquitoDirectionSet();
 
   // Question: Why not move all elements in every clock cycle?
@@ -256,21 +255,25 @@ static void mosquitoElementDraw(timeElement_t *element, u08 value)
 //
 static void mosquitoElementMovePrep(timeElement_t *element)
 {
+  s08 dx, dy;
+  u08 posX = element->posX;
+  u08 posY = element->posY;
+  u08 width = element->width;
+  s08 textOffset = element->textOffset;
+  u08 textPosX = posX + textOffset;
   float mathPosXNew = element->mathPosX + element->dx;
   float mathPosYNew = element->mathPosY + element->dy;
-  s08 dx, dy;
-  u08 textPosX;
 
   // Check bouncing on left and right wall
-  if (mathPosXNew + element->textOffset - 1.01 <= 0L)
+  if (mathPosXNew + textOffset - 1.01 <= 0L)
   {
-    mathPosXNew = -(mathPosXNew + 2 * element->textOffset - 2.02);
+    mathPosXNew = -(mathPosXNew + 2 * textOffset - 2.02);
     element->dx = -element->dx;
   }
-  else if (mathPosXNew + element->textOffset + element->width + 1.01 >= GLCD_XPIXELS)
+  else if (mathPosXNew + textOffset + width + 1.01 >= GLCD_XPIXELS)
   {
     mathPosXNew = mathPosXNew -
-      2 * (mathPosXNew + element->textOffset + element->width + 1.01 - GLCD_XPIXELS);
+      2 * (mathPosXNew + textOffset + width + 1.01 - GLCD_XPIXELS);
     element->dx = -element->dx;
   }
 
@@ -288,43 +291,35 @@ static void mosquitoElementMovePrep(timeElement_t *element)
   }
 
   // Clear parts that are to be removed upon redraw
-  dx = (s08)mathPosXNew - (s08)element->posX;
-  dy = (s08)mathPosYNew - (s08)element->posY;
-
-  // Shortcut for calcs below
-  textPosX = element->posX + element->textOffset;
+  dx = (s08)mathPosXNew - (s08)posX;
+  dy = (s08)mathPosYNew - (s08)posY;
 
   if (dx > 1)
   {
     // Clear left side of element value and text
-    glcdFillRectangle(element->posX, element->posY, (u08)(dx - 1), 7,
-      mcBgColor);
-    glcdFillRectangle(textPosX, element->posY + 8, (u08)(dx - 1), 5,
-      mcBgColor);
+    glcdFillRectangle(posX, posY, (u08)(dx - 1), 7, mcBgColor);
+    glcdFillRectangle(textPosX, posY + 8, (u08)(dx - 1), 5, mcBgColor);
   }
   else if (dx < -1)
   {
     // Clear right side of element value and text
-    glcdFillRectangle((u08)(element->posX + 12 + dx), element->posY,
-      (u08)(-dx - 1), 7, mcBgColor);
-    glcdFillRectangle((u08)(textPosX + element->width + dx + 1),
-      element->posY + 8, (u08)(-dx - 1), 5, mcBgColor);
+    glcdFillRectangle((u08)(posX + 12 + dx), posY, (u08)(-dx - 1), 7,
+      mcBgColor);
+    glcdFillRectangle((u08)(textPosX + width + dx + 1), posY + 8,
+      (u08)(-dx - 1), 5, mcBgColor);
   }
   if (dy > 1)
   {
     // Clear top side of element value and text
-    glcdFillRectangle(element->posX, element->posY, 11, (u08)(dy - 1),
-      mcBgColor);
-    glcdFillRectangle(textPosX, element->posY + 8, element->width,
-      (u08)(dy - 1), mcBgColor);
+    glcdFillRectangle(posX, posY, 11, (u08)(dy - 1), mcBgColor);
+    glcdFillRectangle(textPosX, posY + 8, width, (u08)(dy - 1), mcBgColor);
   }
   else if (dy < -1)
   {
     // Clear bottom side of element value and text
-    glcdFillRectangle(element->posX, element->posY + 8 + dy, 11,
+    glcdFillRectangle(posX, posY + 8 + dy, 11, (u08)(-dy - 1), mcBgColor);
+    glcdFillRectangle(textPosX, (u08)(posY + 13 - (-dy - 1)), width,
       (u08)(-dy - 1), mcBgColor);
-    glcdFillRectangle(textPosX, (u08)(element->posY + 13 - (-dy - 1)),
-      element->width, (u08)(-dy - 1), mcBgColor);
   }
 
   // Sync new position of element

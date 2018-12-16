@@ -55,8 +55,8 @@ extern char animMin[];
 extern char animSec[];
 
 // Local function prototypes
-static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
-  u08 valEnd, u08 color);
+static void spotSpiderAxisConnUpdate(u08 axisStart, u08 valStart, u08 valEnd,
+  u08 color);
 
 //
 // Function: spotSpiderPlotCycle
@@ -98,38 +98,40 @@ void spotSpiderPlotCycle(void)
 
   // If only the seconds have changed verify if it impacts the Sec axis.
   // If not, then the plot remains untouched and we don't have to (re)paint
-  // anything. Repainting (=remove and paint) an unchanged plot can be seen
-  // on the lcd by the lines faintly dis/reappearing; we want to avoid that.
+  // anything. Repainting (=remove and paint) an unchanged plot can be seen on
+  // the lcd by the lines faintly dis/reappearing; we want to avoid that.
   if (mcClockNewTS != mcClockOldTS && mcClockNewTM == mcClockOldTM &&
     mcClockNewTH == mcClockOldTH && mcClockInit == GLCD_FALSE)
   {
-    if ((u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
-        mcClockOldTS) ==
-        (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
-        mcClockNewTS))
+    if ((u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) /
+        SPDR_AXIS_MS_STEPS * mcClockOldTS) ==
+        (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) /
+        SPDR_AXIS_MS_STEPS * mcClockNewTS))
       return;
   }
 
-  // Repaint all spiderplot connector and axis lines and the inner circles
+  // Repaint all spiderplot connector and axis lines and the inner circles.
+  // Drawing the axis connectors must use this sequence:
+  // sec -> min, min -> hour, hour -> sec
 
-  // First remove the 'old' connector and axis lines
-  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, SPDR_AXIS_MIN, mcClockOldTS,
-    mcClockOldTM, mcBgColor);
-  spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, SPDR_AXIS_HOUR, mcClockOldTM,
-    mcClockOldTH, mcBgColor);
-  spotSpiderAxisConnUpdate(SPDR_AXIS_HOUR, SPDR_AXIS_SEC, mcClockOldTH,
-    mcClockOldTS, mcBgColor);
+  // First remove the 'old' connector and axis lines:
+  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, mcClockOldTS, mcClockOldTM,
+    mcBgColor);
+  spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, mcClockOldTM, mcClockOldTH,
+    mcBgColor);
+  spotSpiderAxisConnUpdate(SPDR_AXIS_HOUR, mcClockOldTH, mcClockOldTS,
+    mcBgColor);
 
-  // Then draw the 'new' connector and axis lines
-  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, SPDR_AXIS_MIN, mcClockNewTS,
-    mcClockNewTM, mcFgColor);
-  spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, SPDR_AXIS_HOUR, mcClockNewTM,
-    mcClockNewTH, mcFgColor);
-  spotSpiderAxisConnUpdate(SPDR_AXIS_HOUR, SPDR_AXIS_SEC, mcClockNewTH,
-    mcClockNewTS, mcFgColor);
+  // Then draw the 'new' connector and axis lines:
+  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, mcClockNewTS, mcClockNewTM,
+    mcFgColor);
+  spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, mcClockNewTM, mcClockNewTH,
+    mcFgColor);
+  spotSpiderAxisConnUpdate(SPDR_AXIS_HOUR, mcClockNewTH, mcClockNewTS,
+    mcFgColor);
 
-  // Repaint the dotted inner circles at logical position 20 and 40 in
-  // case they got distorted by updating the connector and axis lines
+  // Repaint the dotted inner circles at logical position 20 and 40 in case
+  // they got distorted by updating the connector and axis lines
   glcdCircle2(SPDR_X_START, SPDR_Y_START,
     (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / 3L + SPDR_AXIS_VAL_BEGIN),
     CIRCLE_THIRD, mcFgColor);
@@ -167,19 +169,24 @@ void spotSpiderPlotInit(u08 mode)
 // Draw a connector line between two axis and an axis line in a Spotfire
 // QuintusVisuals Spider Plot. The color parameter will either remove or add
 // lines.
+// There is a hardcoded relation between start and end axis for drawing the
+// axis connectors:
+// axisStart = sec implies axisEnd = min
+// axisStart = min implies axisEnd = hour
+// axisStart = hour implies axisEnd = sec
 //
-static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
-  u08 valEnd, u08 color)
+static void spotSpiderAxisConnUpdate(u08 axisStart, u08 valStart, u08 valEnd,
+  u08 color)
 {
   s08 startX, startY, endX, endY;
   float tmp;
 
   // Get the x/y position of the axisStart value
-  if (axisStart == SPDR_AXIS_SEC || axisStart == SPDR_AXIS_MIN)
-    tmp = (float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
+  if (axisStart == SPDR_AXIS_HOUR)
+    tmp = (float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_H_STEPS *
       valStart + SPDR_AXIS_VAL_BEGIN;
   else
-    tmp = (float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_H_STEPS *
+    tmp = (float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
       valStart + SPDR_AXIS_VAL_BEGIN;
   if (axisStart == SPDR_AXIS_SEC)
   {
@@ -194,14 +201,14 @@ static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
     else
       startY = SPDR_Y_START - (u08)(tmp * SINPI3);
   }
-  // Get the x/y position of the axisEnd value
-  if (axisEnd == SPDR_AXIS_SEC || axisEnd == SPDR_AXIS_MIN)
-    tmp = (float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
-      valEnd + SPDR_AXIS_VAL_BEGIN;
-  else
+  // Get the x/y position of the axisEnd value (derived from axisStart)
+  if (axisStart == SPDR_AXIS_MIN)
     tmp = (float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_H_STEPS *
       valEnd + SPDR_AXIS_VAL_BEGIN;
-  if (axisEnd == SPDR_AXIS_SEC)
+  else
+    tmp = (float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / SPDR_AXIS_MS_STEPS *
+      valEnd + SPDR_AXIS_VAL_BEGIN;
+  if (axisStart == SPDR_AXIS_HOUR)
   {
     endX = SPDR_X_START + (u08)(tmp);
     endY = SPDR_Y_START;
@@ -209,28 +216,28 @@ static void spotSpiderAxisConnUpdate(u08 axisStart, u08 axisEnd, u08 valStart,
   else
   {
     endX = SPDR_X_START - (u08)(tmp * COSPI3);
-    if (axisEnd == SPDR_AXIS_MIN)
+    if (axisStart == SPDR_AXIS_SEC)
       endY = SPDR_Y_START + (u08)(tmp * SINPI3);
     else
       endY = SPDR_Y_START - (u08)(tmp * SINPI3);
   }
 
-  // Remove/add the connector line.
-  // Note: two connector lines are drawn involving the Sec axis. Make sure
-  // that both lines are drawn towards the Sec axis, thus showing identical
-  // line pixel behavior.
-  if (axisStart == SPDR_AXIS_SEC || axisStart == SPDR_AXIS_MIN)
-    glcdLine(endX, endY, startX, startY, color);
-  else
+  // Draw the connector line.
+  // Note: two connector lines are drawn involving the sec axis. Make sure that
+  // both lines are drawn towards the sec axis, thus showing identical line
+  // pixel behavior.
+  if (axisStart == SPDR_AXIS_HOUR)
     glcdLine(startX, startY, endX, endY, color);
+  else
+    glcdLine(endX, endY, startX, startY, color);
 
-  // Remove/add the axis line
-  if (axisStart == SPDR_AXIS_SEC)
-    glcdLine(startX, startY, SPDR_X_START + SPDR_RADIUS, startY, color);
+  // Draw the axis line
+  if (axisStart == SPDR_AXIS_HOUR)
+    glcdLine(startX, startY, SPDR_X_START - (u08)(SPDR_RADIUS * COSPI3),
+      SPDR_Y_START - (u08)(SPDR_RADIUS * SINPI3), color);
   else if (axisStart == SPDR_AXIS_MIN)
     glcdLine(startX, startY, SPDR_X_START - (u08)(SPDR_RADIUS * COSPI3),
       SPDR_Y_START + (u08)(SPDR_RADIUS * SINPI3), color);
   else
-    glcdLine(startX, startY, SPDR_X_START - (u08)(SPDR_RADIUS * COSPI3),
-      SPDR_Y_START - (u08)(SPDR_RADIUS * SINPI3), color);
+    glcdLine(startX, startY, SPDR_X_START + SPDR_RADIUS, startY, color);
 }

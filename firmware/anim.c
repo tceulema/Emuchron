@@ -37,10 +37,10 @@
 #include "clock/thermometer.h"
 #include "clock/trafficlight.h"
 
-// The following monomain.c global variables are used to transfer the
-// hardware state to a stable functional Monochron clock state.
-// They are not to be used in individual Monochron clocks as their
-// contents are considered unstable.
+// The following monomain.c global variables are used to transfer the hardware
+// state to a stable functional Monochron clock state.
+// They are not to be used in individual Monochron clocks as their contents are
+// considered unstable.
 extern volatile uint8_t almSwitchOn, almAlarming;
 extern volatile rtcDateTime_t rtcDateTimeNext;
 extern volatile uint8_t rtcTimeEvent;
@@ -68,7 +68,7 @@ volatile uint8_t mcAlarmSwitch;
 // Indicates whether the alarm switch has changed since last check
 volatile uint8_t mcUpdAlarmSwitch = GLCD_FALSE;
 
-// Indicates whether the clock is alarming or snoozing
+// Indicates whether the clock is alarming/snoozing or not
 volatile uint8_t mcAlarming = GLCD_FALSE;
 
 // The alarm time
@@ -119,10 +119,10 @@ const char *animDays[7] =
   "Sun ", "Mon ", "Tue ", "Wed ", "Thu ", "Fri ", "Sat "
 };
 
-// The monochron array defines the clocks and their round-robin sequence
-// as supported in the application.
-// Based on the selection of clocks in monochron[], configure the source
-// files in SRC in Makefile [firmware].
+// The monochron array defines the clocks and their round-robin sequence as
+// supported in the application.
+// Based on the selection of clocks in monochron[], configure the source files
+// in SRC in Makefile [firmware].
 clockDriver_t monochron[] =
 {
    //{CHRON_PERFTEST,    DRAW_INIT_FULL,    perfInit,           perfCycle,           0}
@@ -168,8 +168,8 @@ static void animDateTimeCopy(void);
 // Function: animADAreaUpdate
 //
 // Draw update in clock alarm/date area. It supports generic alarm/date area
-// functionality used in many clocks. The type defines whether the area is
-// used for displaying the alarm time only, date only or a combination of both,
+// functionality used in many clocks. The type defines whether the area is used
+// for displaying the alarm time only, date only or a combination of both,
 // depending on whether the alarm switch is on or off.
 // NOTE: A single clock can implement multiple date-only areas but only a
 // single area that includes the alarm. This restriction is due to the method
@@ -178,7 +178,6 @@ static void animDateTimeCopy(void);
 //
 void animADAreaUpdate(u08 x, u08 y, u08 type)
 {
-  u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
   u08 pxDone = 0;
   char msg[6];
@@ -191,9 +190,7 @@ void animADAreaUpdate(u08 x, u08 y, u08 type)
     return;
   }
 
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
+  // Detect change in displaying alarm or date
   if (mcUpdAlarmSwitch == GLCD_TRUE || mcClockDateEvent == GLCD_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
@@ -224,37 +221,26 @@ void animADAreaUpdate(u08 x, u08 y, u08 type)
     }
   }
 
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != almDisplayState)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      almDisplayState = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (almDisplayState == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      almDisplayState = GLCD_FALSE;
-    }
-  }
+  // Set alarm blinking state in case we're alarming
+  if (mcAlarming == GLCD_TRUE && (mcCycleCounter & 0x08) == 8)
+    newAlmDisplayState = GLCD_TRUE;
 
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
+  // Make alarm area blink during alarm or cleanup after end of alarm
+  if (newAlmDisplayState != almDisplayState)
+  {
+    // Inverse the alarm area
+    almDisplayState = newAlmDisplayState;
     glcdFillRectangle2(x - 1, y - 1, 19, 7, ALIGN_AUTO, FILL_INVERSE,
       mcBgColor);
+  }
 }
 
 //
 // Function: animAlarmSwitchCheck
 //
-// Check the position of the alarm switch versus the software state of
-// the alarm info, resulting in a flag indicating whether the alarm info
-// area must be updated
+// Check the position of the alarm switch versus the software state of the
+// alarm info, resulting in a flag indicating whether the alarm info area must
+// be updated
 //
 static void animAlarmSwitchCheck(void)
 {
@@ -288,8 +274,8 @@ static void animAlarmSwitchCheck(void)
 //
 // Function: animClockButton
 //
-// Wrapper function for clocks to react to the Set and/or Plus button
-// (when supported).
+// Wrapper function for clocks to react to the Set and/or Plus button (when
+// supported).
 // Returns GLCD_TRUE when a button handler is configured for the clock.
 //
 u08 animClockButton(u08 pressedButton)
@@ -299,7 +285,7 @@ u08 animClockButton(u08 pressedButton)
   if (clockDriver->button != 0)
   {
     // Execute the configured button function
-    (*clockDriver->button)(pressedButton);
+    clockDriver->button(pressedButton);
     return GLCD_TRUE;
   }
   return GLCD_FALSE;
@@ -340,7 +326,7 @@ void animClockDraw(u08 mode)
     {
       // Update clock and sync old date/time to current for next comparison
       animAlarmSwitchCheck();
-      (*clockDriver->cycle)();
+      clockDriver->cycle();
       if (mcClockTimeEvent == GLCD_TRUE)
         animDateTimeCopy();
 
@@ -359,7 +345,7 @@ void animClockDraw(u08 mode)
       // Init the clock
       animDateTimeCopy();
       mcClockInit = GLCD_TRUE;
-      (*clockDriver->init)(mode);
+      clockDriver->init(mode);
     }
   }
   else

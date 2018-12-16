@@ -151,16 +151,22 @@ void spotAxisInit(u08 clockId)
 //
 // Update a single bar (used in Spotfire bar chart and cascade)
 //
-void spotBarUpdate(u08 x, u08 y, u08 maxVal, u08 maxHeight, u08 width,
-  u08 oldVal, u08 newVal, s08 valXOffset, s08 valYOffset, u08 fillType)
+void spotBarUpdate(u08 x, u08 width, u08 oldVal, u08 newVal, s08 valXOffset,
+  u08 fillType)
 {
   u08 oldBarHeight;
   u08 newBarHeight;
   char barValue[3];
 
+  // See if there's any need to update a bar
+  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+    return;
+
   // Get height of old bar and new bar
-  oldBarHeight = (u08)((maxHeight / (float)maxVal) * oldVal + 0.5);
-  newBarHeight = (u08)((maxHeight / (float)maxVal) * newVal + 0.5);
+  oldBarHeight =
+    (u08)((SPOT_BAR_HEIGHT_MAX / (float)SPOT_BAR_VAL_STEPS) * oldVal + 0.5);
+  newBarHeight =
+    (u08)((SPOT_BAR_HEIGHT_MAX / (float)SPOT_BAR_VAL_STEPS) * newVal + 0.5);
 
   // If there are no changes in barheight there's no need to repaint the bar
   if (oldBarHeight != newBarHeight || mcClockInit == GLCD_TRUE)
@@ -170,36 +176,39 @@ void spotBarUpdate(u08 x, u08 y, u08 maxVal, u08 maxHeight, u08 width,
     {
       // A FILL_BLANK is in fact drawing the outline of the bar first and
       // then fill it with blank
-      glcdRectangle(x, y - newBarHeight, width, newBarHeight + 1, mcFgColor);
+      glcdRectangle(x, SPOT_BAR_Y_START - newBarHeight, width,
+        newBarHeight + 1, mcFgColor);
       if (newBarHeight > 1)
-        glcdFillRectangle2(x + 1, y - newBarHeight + 1, width - 2,
-          newBarHeight - 1, ALIGN_TOP, fillType, mcFgColor);
+        glcdFillRectangle2(x + 1, SPOT_BAR_Y_START - newBarHeight + 1,
+          width - 2, newBarHeight - 1, ALIGN_TOP, fillType, mcFgColor);
     }
     else
     {
-      glcdFillRectangle2(x, y - newBarHeight, width, newBarHeight + 1,
-        ALIGN_BOTTOM, fillType, mcFgColor);
+      glcdFillRectangle2(x, SPOT_BAR_Y_START - newBarHeight, width,
+        newBarHeight + 1, ALIGN_BOTTOM, fillType, mcFgColor);
     }
   }
 
   // Add the bar value (depending on bar value font size)
   animValToStr(newVal, barValue);
-  glcdPutStr2(x + valXOffset, y - newBarHeight + valYOffset, FONT_5X7N,
-    barValue, mcFgColor);
+  glcdPutStr2(x + valXOffset, SPOT_BAR_Y_START - newBarHeight +
+    SPOT_BAR_VAL_Y_OFFSET, FONT_5X7N, barValue, mcFgColor);
 
   // Clear the first line between the bar and the bar value
-  glcdFillRectangle(x, y - newBarHeight - 1, width, 1, mcBgColor);
+  glcdFillRectangle(x, SPOT_BAR_Y_START - newBarHeight - 1, width, 1,
+    mcBgColor);
 
   // Clear the space left and right of the bar value
-  glcdFillRectangle(x, y - newBarHeight + valYOffset, valXOffset,
-    -valYOffset - 1, mcBgColor);
-  glcdFillRectangle(x + width - valXOffset + 1, y - newBarHeight + valYOffset,
-    valXOffset - 1, -valYOffset - 1, mcBgColor);
+  glcdFillRectangle(x, SPOT_BAR_Y_START - newBarHeight + SPOT_BAR_VAL_Y_OFFSET,
+    valXOffset, -SPOT_BAR_VAL_Y_OFFSET - 1, mcBgColor);
+  glcdFillRectangle(x + width - valXOffset + 1,
+    SPOT_BAR_Y_START - newBarHeight + SPOT_BAR_VAL_Y_OFFSET, valXOffset - 1,
+    -SPOT_BAR_VAL_Y_OFFSET - 1, mcBgColor);
 
   // Clear what was above it (if any)
   if (oldBarHeight > newBarHeight)
-    glcdFillRectangle(x, y - oldBarHeight + valYOffset, width,
-      oldBarHeight - newBarHeight, mcBgColor);
+    glcdFillRectangle(x, SPOT_BAR_Y_START - oldBarHeight +
+      SPOT_BAR_VAL_Y_OFFSET, width, oldBarHeight - newBarHeight, mcBgColor);
 }
 
 //
@@ -235,7 +244,7 @@ void spotCommonInit(char *label, u08 mode)
     glcdFillRectangle(101, 7, 1, GLCD_YPIXELS - 7, mcFgColor);
 
     // Init the Menu bar
-    menuBarId = -1;
+    menuBarId = 255;
     spotMenuBarUpdate();
 
     // Init the visualization Title bar label

@@ -8,8 +8,8 @@
 
 // mchron variable support functions
 void varInit(void);
-int varPrint(char *pattern, int silent);
-void varReset(void);
+int varPrint(char *pattern, int summary);
+int varReset(void);
 
 // Functions for referencing and manipulating variables
 int varIdGet(char *var, int create);

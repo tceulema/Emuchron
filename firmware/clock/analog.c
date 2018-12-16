@@ -282,12 +282,9 @@ void analogHmsInit(u08 mode)
 //
 static void analogAlarmAreaUpdate(void)
 {
-  u08 inverseAlarmArea = GLCD_FALSE;
   u08 newAlmDisplayState = GLCD_FALSE;
 
-  if ((mcCycleCounter & 0x0F) >= 8)
-    newAlmDisplayState = GLCD_TRUE;
-
+  // Detect change in displaying alarm
   if (mcUpdAlarmSwitch == GLCD_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
@@ -323,30 +320,20 @@ static void analogAlarmAreaUpdate(void)
     }
   }
 
-  if (mcAlarming == GLCD_TRUE)
-  {
-    // Blink alarm area when we're alarming or snoozing
-    if (newAlmDisplayState != mcU8Util1)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = newAlmDisplayState;
-    }
-  }
-  else
-  {
-    // Reset inversed alarm area when alarming has stopped
-    if (mcU8Util1 == GLCD_TRUE)
-    {
-      inverseAlarmArea = GLCD_TRUE;
-      mcU8Util1 = GLCD_FALSE;
-    }
-  }
+  // Set alarm blinking state in case we're alarming
+  if (mcAlarming == GLCD_TRUE && (mcCycleCounter & 0x08) == 8)
+    newAlmDisplayState = GLCD_TRUE;
 
-  // Inverse the alarm area if needed
-  if (inverseAlarmArea == GLCD_TRUE)
+  // Make alarm area blink during alarm or cleanup after end of alarm
+  if (newAlmDisplayState != mcU8Util1)
+  {
+    // Inverse the alarm area
+    //inverseAlarmArea = GLCD_TRUE;
+    mcU8Util1 = newAlmDisplayState;
     glcdFillRectangle2(ANA_ALARM_X_START - ANA_ALARM_RADIUS - 1,
       ANA_ALARM_Y_START - ANA_ALARM_RADIUS - 1, ANA_ALARM_RADIUS * 2 + 3,
       ANA_ALARM_RADIUS * 2 + 3, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+  }
 }
 
 //

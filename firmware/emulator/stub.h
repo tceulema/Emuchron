@@ -98,6 +98,10 @@ void wdt_reset();
 char stubEventGet(void);
 void stubEventInit(u08 startWait, void (*stubHelpHandler)(void));
 
+// Logfile functions
+void stubLogfileClose(void);
+int stubLogfileOpen(char debugFile[]);
+
 // Alarm sound and switch stubs
 void alarmSoundReset(void);
 void alarmSoundStop(void);
@@ -107,15 +111,8 @@ void alarmSwitchToggle(uint8_t show);
 
 // Keyboard input and keypress events
 char kbKeypressScan(u08 quitFind);
-int kbModeGet(void);
-void kbModeSet(int);
-
-// Delay and timer functions
-char waitDelay(int delay);
-char waitKeypress(int allowQuit);
-char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
-  suseconds_t *remaining);
-void waitTimerStart(struct timeval *tvTimer);
+u08 kbModeGet(void);
+void kbModeSet(u08 mode);
 
 // Statistics
 void stubStatsPrint(void);

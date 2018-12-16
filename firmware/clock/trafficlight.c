@@ -49,23 +49,15 @@ void spotTrafLightCycle(void)
 
   DEBUGP("Update TrafficLight");
 
-  // Verify changes in sec
-  if ((mcClockNewTS / 20 != mcClockOldTS / 20) || mcClockInit == GLCD_TRUE)
-    spotTrafSegmentUpdate(
-      TRAF_BOX_X_START + 2 * TRAF_BOX_X_OFFSET_SIZE + TRAF_SEG_X_OFFSET,
-      TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 20, mcClockOldTS, mcClockNewTS);
-
-  // Verify changes in min
-  if ((mcClockNewTM / 20 != mcClockOldTM / 20) || mcClockInit == GLCD_TRUE)
-    spotTrafSegmentUpdate(
-      TRAF_BOX_X_START + TRAF_BOX_X_OFFSET_SIZE + TRAF_SEG_X_OFFSET,
-      TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 20, mcClockOldTM, mcClockNewTM);
-
-  // Verify changes in hour
-  if ((mcClockNewTH / 8 != mcClockOldTH / 8) || mcClockInit == GLCD_TRUE)
-    spotTrafSegmentUpdate(
-      TRAF_BOX_X_START + TRAF_SEG_X_OFFSET,
-      TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 8, mcClockOldTH, mcClockNewTH);
+  // Verify changes in sec + min + hour
+  spotTrafSegmentUpdate(
+    TRAF_BOX_X_START + 2 * TRAF_BOX_X_OFFSET_SIZE + TRAF_SEG_X_OFFSET,
+    TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 20, mcClockOldTS, mcClockNewTS);
+  spotTrafSegmentUpdate(
+    TRAF_BOX_X_START + TRAF_BOX_X_OFFSET_SIZE + TRAF_SEG_X_OFFSET,
+    TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 20, mcClockOldTM, mcClockNewTM);
+  spotTrafSegmentUpdate(TRAF_BOX_X_START + TRAF_SEG_X_OFFSET,
+    TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET, 8, mcClockOldTH, mcClockNewTH);
 }
 
 //
@@ -82,8 +74,7 @@ void spotTrafLightInit(u08 mode)
   // Draw Spotfire form layout
   spotCommonInit("traffic light", mode);
 
-  // Draw static part of traffic light.
-  // There are three traffic lights.
+  // Draw static part of three traffic lights
   for (i = 0; i <= 2; i++)
   {
     x = TRAF_BOX_X_START + i * TRAF_BOX_X_OFFSET_SIZE;
@@ -96,6 +87,8 @@ void spotTrafLightInit(u08 mode)
         TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET + j * TRAF_SEG_Y_OFFSET_SIZE,
         TRAF_SEG_RADIUS, CIRCLE_FULL, mcFgColor);
   }
+
+  // Draw static axis part of trafficlight
   spotAxisInit(CHRON_TRAFLIGHT);
 }
 
@@ -111,15 +104,19 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
   u08 fillType;
   u08 drawColor = mcFgColor;
 
-  // Clear old segment (clear content and redraw circle outline)
+  // See if we need to update the traffic light
   segmentOld = oldVal / segmentFactor;
+  segmentNew = newVal / segmentFactor;
+  if (segmentOld == segmentNew && mcClockInit == GLCD_FALSE)
+    return;
+
+  // Clear old segment (clear content and redraw circle outline)
   glcdFillCircle2(x, y + segmentOld * TRAF_SEG_Y_OFFSET_SIZE, TRAF_SEG_RADIUS,
     FILL_BLANK, mcFgColor);
   glcdCircle2(x, y + segmentOld * TRAF_SEG_Y_OFFSET_SIZE, TRAF_SEG_RADIUS,
     CIRCLE_FULL, mcFgColor);
 
   // Define filltype and colordraw for new segment
-  segmentNew = newVal / segmentFactor;
   if (segmentNew == 0)
   {
     fillType = FILL_THIRDDOWN;

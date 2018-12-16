@@ -8,12 +8,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <signal.h>
+#include <time.h>
 
 // Monochron and emuchron defines
 #include "../ks0108.h"
 #include "../monomain.h"
 #include "stub.h"
 #include "scanutil.h"
+#include "mchronutil.h"
 #include "listutil.h"
 
 // Current command file execution depth
@@ -29,6 +32,15 @@ extern const char *__progname;
 // switch between keyboard line mode and keypress mode
 int listExecDepth = 0;
 
+// System timer data for command list 100 msec keyboard scan
+static timer_t kbTimerId;
+static unsigned char kbTimerTripped;
+
+// Command list execution statistics
+static struct timeval cmdTvStart;
+static int cmdCmdCount = 0;
+static int cmdLineCount = 0;
+
 // Local function prototypes
 static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast,
   cmdLine_t **cmdLineRoot);
@@ -36,6 +48,7 @@ static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine);
 static int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdInput_t *cmdInput, int fileExecDepth);
+static void cmdListRaiseScan(void);
 static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine);
 static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine);
@@ -45,7 +58,8 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine);
 //
 // Create a new cmdLine structure and add it in the command linked list
 //
-static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
+static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast,
+  cmdLine_t **cmdLineRoot)
 {
   cmdLine_t *cmdLine = NULL;
 
@@ -141,7 +155,9 @@ int cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
       // Execute the commands in the command list
       int myEchoCmd = echoCmd;
       echoCmd = CMD_ECHO_NO;
+      cmdListStatsInit();
       retVal = cmdListExecute(cmdLineRoot, (char *)__progname);
+      cmdListStatsPrint();
       echoCmd = myEchoCmd;
     }
 
@@ -278,6 +294,7 @@ void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot)
   }
 }
 
+
 //
 // Function: cmdListExecute
 //
@@ -304,10 +321,16 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
   int retVal = CMD_RET_OK;
 
   // See if we need to switch to keypress mode. We only need to do this at the
-  // top of nested list executions. Switching to keypress mode allows the
+  // root of nested list executions. Switching to keypress mode allows the
   // end-user to interrupt the list execution using a 'q' keypress.
+  // Also, start a timer that fires every 100 msec after which we'll scan the
+  // keyboard for keypresses.
   if (listExecDepth == 0)
+  {
     kbModeSet(KB_MODE_SCAN);
+    kbTimerTripped = GLCD_FALSE;
+    emuSysTimerStart(&kbTimerId, 100, cmdListRaiseScan);
+  }
   listExecDepth++;
 
   // We start at the root of the linked list. Let's see where we end up.
@@ -323,6 +346,7 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
     }
 
     // Execute the command in the command line
+    cmdLineCount++;
     cmdCommand = cmdProgCounter->cmdCommand;
     if (cmdCommand == NULL)
     {
@@ -333,6 +357,7 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
     else if (cmdCommand->cmdPcCtrlType == PC_CONTINUE)
     {
       // Execute a regular command via the generic handler
+      cmdCmdCount++;
       cmdPcCtrlType = PC_CONTINUE;
       retVal = cmdLineExecute(cmdProgCounter, NULL);
     }
@@ -341,6 +366,7 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
       // This is a control block command from a repeat or if construct. Get the
       // command arguments (if not already done) and execute the associated
       // program counter control block handler from the command dictionary.
+      cmdCmdCount++;
       input = cmdProgCounter->input;
       if (cmdProgCounter->initialized == GLCD_FALSE)
       {
@@ -356,8 +382,9 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
     }
 
     // Verify if a command interrupt was requested
-    if (retVal == CMD_RET_OK)
+    if (retVal == CMD_RET_OK && kbTimerTripped == GLCD_TRUE)
     {
+      kbTimerTripped = GLCD_FALSE;
       ch = kbKeypressScan(GLCD_TRUE);
       if (ch == 'q')
       {
@@ -366,12 +393,11 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
       }
     }
 
-    // Check for error/interrupt
+    // Report stack level info in case of error/interrupt/recovery
     if (retVal == CMD_RET_ERROR || retVal == CMD_RET_INTERRUPT)
     {
-      // Error/interrupt occured in current level
+      // Error/interrupt occured at this level
       printf(CMD_STACK_TRACE);
-      // Report current stack level and cascade to upper level
       printf(CMD_STACK_FMT, fileExecDepth, source, cmdProgCounter->lineNum,
         cmdProgCounter->input);
       retVal = CMD_RET_RECOVER;
@@ -379,8 +405,7 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
     }
     else if (retVal == CMD_RET_RECOVER)
     {
-      // Error/interrupt occured at lower level.
-      // Report current stack level and cascade to upper level.
+      // Recovering from error/interrupt that occured at lower level
       printf(CMD_STACK_FMT, fileExecDepth, source, cmdProgCounter->lineNum,
         cmdProgCounter->input);
       break;
@@ -394,10 +419,14 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
   }
 
   // End of list or encountered error/interrupt.
-  // Switch back to line mode when we're back at root level.
+  // Switch back to line mode and stop keyboard timer when we're back at root
+  // level.
   listExecDepth--;
   if (listExecDepth == 0)
+  {
     kbModeSet(KB_MODE_LINE);
+    emuSysTimerStop(&kbTimerId);
+  }
 
   return retVal;
 }
@@ -615,6 +644,54 @@ static int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
 }
 
 //
+// Function: cmdListRaiseScan
+//
+// Handler for the repeating 100 msec cmdlist execution keyboard scan timer
+//
+static void cmdListRaiseScan(void)
+{
+  if (kbTimerTripped == GLCD_FALSE)
+    kbTimerTripped = GLCD_TRUE;
+}
+
+//
+// Function: cmdListStatsInit
+//
+// Inits the statistics data for the command list execution
+//
+void cmdListStatsInit(void)
+{
+  cmdCmdCount = 0;
+  cmdLineCount = 0;
+  gettimeofday(&cmdTvStart, NULL);
+}
+
+//
+// Function: cmdListStatsPrint
+//
+// Prints the statistics data for the command list execution
+//
+void cmdListStatsPrint(void)
+{
+  struct timeval cmdTvEnd;
+  double secElapsed;
+
+  // Print list execution statistics when there's something to show
+  if (cmdLineCount > 0)
+  {
+    gettimeofday(&cmdTvEnd, NULL);
+    secElapsed = ((cmdTvEnd.tv_sec - cmdTvStart.tv_sec) * 1E6 +
+      cmdTvEnd.tv_usec - cmdTvStart.tv_usec) / (double)1E6;
+    printf("time=%.3f sec, cmd=%d, line=%d", secElapsed, cmdCmdCount,
+      cmdLineCount);
+    if (secElapsed > 0.1)
+      printf(", avgLine=%.0f", cmdLineCount / secElapsed);
+    printf("\n");
+    cmdLineCount = 0;
+  }
+}
+
+//
 // Function: cmdPcCtrlCreate
 //
 // Create a new cmdPcCtrl structure, add it in the control block list,
@@ -666,6 +743,8 @@ static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
 static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
 {
   cmdPcCtrl_t *searchPcCtrl = cmdPcCtrlLast;
+  int cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
+  int searchPcCtrlType;
 
   while (searchPcCtrl != NULL)
   {
@@ -673,21 +752,17 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
     {
       // Found an unlinked control block. Verify if its control block type is
       // compatible with the control block type of the command line.
-      if (cmdLine->cmdCommand->cmdPcCtrlType == PC_REPEAT_NEXT &&
-          searchPcCtrl->cmdPcCtrlType != PC_REPEAT_FOR)
+      searchPcCtrlType = searchPcCtrl->cmdPcCtrlType;
+      if (cmdPcCtrlType == PC_REPEAT_NEXT && searchPcCtrlType != PC_REPEAT_FOR)
         return searchPcCtrl->cmdLineParent->lineNum;
-      else if (cmdLine->cmdCommand->cmdPcCtrlType == PC_IF_ELSE_IF &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF_ELSE_IF)
+      else if (cmdPcCtrlType == PC_IF_ELSE_IF && searchPcCtrlType != PC_IF &&
+        searchPcCtrlType != PC_IF_ELSE_IF)
         return searchPcCtrl->cmdLineParent->lineNum;
-      else if (cmdLine->cmdCommand->cmdPcCtrlType == PC_IF_ELSE &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF_ELSE_IF)
+      else if (cmdPcCtrlType == PC_IF_ELSE && searchPcCtrlType != PC_IF &&
+        searchPcCtrlType != PC_IF_ELSE_IF)
         return searchPcCtrl->cmdLineParent->lineNum;
-      else if (cmdLine->cmdCommand->cmdPcCtrlType == PC_IF_END &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF_ELSE_IF &&
-          searchPcCtrl->cmdPcCtrlType != PC_IF_ELSE)
+      else if (cmdPcCtrlType == PC_IF_END && searchPcCtrlType != PC_IF &&
+          searchPcCtrlType != PC_IF_ELSE_IF && searchPcCtrlType != PC_IF_ELSE)
         return searchPcCtrl->cmdLineParent->lineNum;
 
       // There's a valid match between the control block types of the current

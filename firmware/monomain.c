@@ -69,8 +69,9 @@ extern volatile uint8_t btnPressed;
 extern volatile uint8_t btnTickerHold;
 extern volatile uint8_t btnTickerConv;
 
-// The following variables drive the realtime clock
-volatile rtcDateTime_t rtcDateTime;
+// The following variables drive the realtime clock.
+// In case the clock fails to init set it to noon 1/1/2019.
+volatile rtcDateTime_t rtcDateTime = { 0, 0, 12, 1, 1, 19 };
 volatile rtcDateTime_t rtcDateTimeNext;
 volatile uint8_t rtcTimeEvent = GLCD_FALSE;
 
@@ -115,21 +116,21 @@ static void rtcFailure(uint8_t code, uint8_t id);
 const uint8_t __attribute__ ((progmem)) eepDefault[] =
 {
   EE_INITIALIZED,	// EE_OFFSET+0  - EE_INIT
-  8,			// EE_OFFSET+1  - EE_ALARM_HOUR
-  0,			// EE_OFFSET+2  - EE_ALARM_MIN
-  OCR2A_VALUE,		// EE_OFFSET+3  - EE_BRIGHT
-  1,			// EE_OFFSET+4  - EE_VOLUME (not used in Emuchron)
-  DATELONG_DOW,		// EE_OFFSET+5  - EE_REGION (not used in Emuchron)
-  TIME_24H,		// EE_OFFSET+6  - EE_TIME_FORMAT (not used in Emuchron)
-  0,			// EE_OFFSET+7  - EE_SNOOZE (not used in Emuchron)
-  0,			// EE_OFFSET+8  - EE_BGCOLOR
-  9,			// EE_OFFSET+9  - EE_ALARM_HOUR2
-  15,			// EE_OFFSET+10 - EE_ALARM_MIN2
-  10,			// EE_OFFSET+11 - EE_ALARM_HOUR3
-  30,			// EE_OFFSET+12 - EE_ALARM_MIN3
-  11,			// EE_OFFSET+13 - EE_ALARM_HOUR4
-  45,			// EE_OFFSET+14 - EE_ALARM_MIN4
-  0			// EE_OFFSET+15 - EE_ALARM_SELECT
+  OCR2A_VALUE,		// EE_OFFSET+1  - EE_BRIGHT
+  1,			// EE_OFFSET+2  - EE_VOLUME (not used in Emuchron)
+  DATELONG_DOW,		// EE_OFFSET+3  - EE_REGION (not used in Emuchron)
+  TIME_24H,		// EE_OFFSET+4  - EE_TIME_FORMAT (not used in Emuchron)
+  0,			// EE_OFFSET+5  - EE_SNOOZE (not used in Emuchron)
+  0,			// EE_OFFSET+6  - EE_BGCOLOR
+  0,			// EE_OFFSET+7  - EE_ALARM_SELECT
+  8,			// EE_OFFSET+8  - EE_ALARM_HOUR1
+  0,			// EE_OFFSET+9  - EE_ALARM_MIN1
+  9,			// EE_OFFSET+10 - EE_ALARM_HOUR2
+  15,			// EE_OFFSET+11 - EE_ALARM_MIN2
+  10,			// EE_OFFSET+12 - EE_ALARM_HOUR3
+  30,			// EE_OFFSET+13 - EE_ALARM_MIN3
+  11,			// EE_OFFSET+14 - EE_ALARM_HOUR4
+  45			// EE_OFFSET+15 - EE_ALARM_MIN4
 };
 
 //
@@ -145,8 +146,6 @@ int monoMain(void)
 int main(void)
 #endif
 {
-  u08 actionDefault = GLCD_FALSE;
-
   // Check if we were reset
   MCUSR = 0;
 
@@ -207,12 +206,11 @@ int main(void)
   DDRB |= _BV(5);
 
   // Init lcd.
-  // glcdInit locks and disables interrupts in one of its functions.
-  // If the lcd is not plugged in, glcd will run forever. For good
-  // reason, it would be desirable to know that the lcd is plugged in
-  // and working correctly as a result. This is why we are using a
-  // watch dog timer. The lcd should be initialized in way less than
-  // 500 ms.
+  // glcdInit locks and disables interrupts in one of its functions. If the lcd
+  // is not plugged in, glcd will run forever. For good reason, it would be
+  // desirable to know that the lcd is plugged in and working correctly as a
+  // result. This is why we are using a watch dog timer. The lcd should be
+  // initialized in way less than 500 ms.
   DEBUGP("*** LCD");
   beep(4000, 100);
   wdt_enable(WDTO_2S);
@@ -254,6 +252,8 @@ int main(void)
     }
     else // BTN_SET or BTN_PLUS
     {
+      u08 actionDefault = GLCD_FALSE;
+
       // Check the Set button
       if (btnPressed & BTN_SET)
       {
@@ -281,13 +281,11 @@ int main(void)
           animClockButton(btnPressed);
         else
           animClockDraw(initType);
-
-        actionDefault = GLCD_FALSE;
       }
     }
 
-    // Clear any button press to allow a new button event. Then have the
-    // active clock update itself.
+    // Clear any button press to allow a new button event. Then have the active
+    // clock update itself.
     btnPressed = BTN_NONE;
     animClockDraw(DRAW_CYCLE);
 
@@ -458,6 +456,7 @@ SIGNAL(TIMER2_OVF_vect)
 #endif
 #endif
   {
+    // Fetch time and reset for next cycle
     t2divider1 = 0;
   }
   else
@@ -495,8 +494,8 @@ SIGNAL(TIMER2_OVF_vect)
       {
         // Init alarm data at starting positions right before we
         // return from snooze
-        almSoundReset();
         DEBUGP("Alarm -> Snooze timeout");
+        almSoundReset();
       }
       if (almTickerSnooze)
         almTickerSnooze--;
@@ -524,10 +523,11 @@ SIGNAL(TIMER2_OVF_vect)
   // yet. This prevents a race condition on time data between the timer handler
   // and the functional clock handler. The functional clock handler will clear
   // the clock time event after which a new one can be raised.
-  if (rtcTimeEvent == GLCD_FALSE && rtcDateTimeNext.timeSec != rtcDateTime.timeSec)
+  if (rtcTimeEvent == GLCD_FALSE &&
+      rtcDateTimeNext.timeSec != rtcDateTime.timeSec)
   {
-    rtcDateTimeNext = rtcDateTime;
     DEBUGP("Raise time event");
+    rtcDateTimeNext = rtcDateTime;
     rtcTimeEvent = GLCD_TRUE;
   }
 
@@ -654,7 +654,6 @@ void almStateSet(void)
     if (almSwitchOn == GLCD_FALSE)
     {
       DEBUGP("Alarm -> Active");
-      // Alarm on!
       almSwitchOn = GLCD_TRUE;
       // Reset snoozing and alarm
       almTickerSnooze = 0;
@@ -669,22 +668,13 @@ void almStateSet(void)
 //
 // Get the requested alarm time from the eeprom
 //
-void almTimeGet(uint8_t alarmId, volatile uint8_t *hour,
-  volatile uint8_t *min)
+void almTimeGet(uint8_t alarmId, volatile uint8_t *hour, volatile uint8_t *min)
 {
   uint8_t *eepHour, *eepMin;
 
-  if (alarmId == 0)
-  {
-    eepHour = (uint8_t *)EE_ALARM_HOUR;
-    eepMin = (uint8_t *)EE_ALARM_MIN;
-  }
-  else
-  {
-    // Alarm 2..4 are sequential in eeprom
-    eepHour = (uint8_t *)(EE_ALARM_HOUR2) + (alarmId - 1) * 2;
-    eepMin = eepHour + 1;
-  }
+  // Alarm 1..4 are sequential in eeprom
+  eepHour = (uint8_t *)(EE_ALARM_HOUR1) + alarmId * 2;
+  eepMin = eepHour + 1;
 
   *hour = eeprom_read_byte(eepHour) % 24;
   *min = eeprom_read_byte(eepMin) % 60;
@@ -697,22 +687,14 @@ void almTimeGet(uint8_t alarmId, volatile uint8_t *hour,
 //
 void almTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min)
 {
-  uint8_t *aHour, *aMin;
+  uint8_t *eepHour, *eepMin;
 
-  if (alarmId == 0)
-  {
-    aHour = (uint8_t *)EE_ALARM_HOUR;
-    aMin = (uint8_t *)EE_ALARM_MIN;
-  }
-  else
-  {
-    // Alarm 2..4 are sequential in memory
-    aHour = (uint8_t *)(EE_ALARM_HOUR2) + (alarmId - 1) * 2;
-    aMin = aHour + 1;
-  }
+  // Alarm 1..4 are sequential in eeprom
+  eepHour = (uint8_t *)(EE_ALARM_HOUR1) + alarmId * 2;
+  eepMin = eepHour + 1;
 
-  eeprom_write_byte(aHour, hour);
-  eeprom_write_byte(aMin, min);
+  eeprom_write_byte(eepHour, hour);
+  eeprom_write_byte(eepMin, min);
 }
 
 //
@@ -722,7 +704,7 @@ void almTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min)
 //
 static uint8_t bcdDecode(uint8_t element, uint8_t nibbleMask)
 {
-  return ((element >> 4) & nibbleMask) * 10 + (element & 0xF);
+  return ((element >> 4) & nibbleMask) * 10 + (element & 0xf);
 }
 
 //
@@ -770,8 +752,8 @@ void beep(uint16_t freq, uint8_t duration)
 //
 // Function: eepInit
 //
-// Initialize the eeprom. This should occur only in rare occasions as
-// once it is set it should stay initialized forever.
+// Initialize the eeprom. This should occur only in rare occasions as once it
+// is set it should stay initialized forever.
 //
 void eepInit(void)
 {
@@ -824,7 +806,7 @@ static void rtcFailure(uint8_t code, uint8_t id)
   DEBUG(uart_putw_dec(code));
   DEBUG(putstring_nl(""));
   sei();
-  while(1)
+  while (1)
   {
     beep(4000, 100);
     _delay_ms(100);
@@ -887,8 +869,9 @@ void rtcTimeInit(void)
 
   if (rtcTimeRead())
   {
+    // Set clock with init data in rtcDateTime
     DEBUGP("Require reset RTC");
-    rtcTimeWrite(00, 00, 12, 1, 1, 18); // Noon Jan 1 2018
+    rtcTimeWrite();
   }
 
   rtcTimeRead();
@@ -937,6 +920,10 @@ uint8_t rtcTimeRead(void)
   if (r != 0)
     rtcFailure(r, 1);
 
+  // Check if clock data is in error
+  if ((clockdata[0] & 0x80) != 0)
+    return 1;
+
   // Process the time from the RTC
   rtcDateTime.timeSec = bcdDecode(clockdata[0], 0x7);
   rtcDateTime.timeMin = bcdDecode(clockdata[1], 0x7);
@@ -953,9 +940,9 @@ uint8_t rtcTimeRead(void)
   }
   rtcDateTime.dateDay = bcdDecode(clockdata[4], 0x3);
   rtcDateTime.dateMon = bcdDecode(clockdata[5], 0x1);
-  rtcDateTime.dateYear = bcdDecode(clockdata[6], 0xF);
+  rtcDateTime.dateYear = bcdDecode(clockdata[6], 0xf);
 
-  return clockdata[0] & 0x80;
+  return 0;
 }
 
 //
@@ -963,19 +950,18 @@ uint8_t rtcTimeRead(void)
 //
 // Set the real-time clock (RTC)
 //
-void rtcTimeWrite(uint8_t sec, uint8_t min, uint8_t hour, uint8_t day,
-  uint8_t mon, uint8_t year)
+void rtcTimeWrite(void)
 {
   uint8_t clockdata[8];
 
   clockdata[0] = 0;           // address
-  clockdata[1] = bcdEncode(sec);
-  clockdata[2] = bcdEncode(min);
-  clockdata[3] = bcdEncode(hour);
+  clockdata[1] = bcdEncode(rtcDateTime.timeSec);
+  clockdata[2] = bcdEncode(rtcDateTime.timeMin);
+  clockdata[3] = bcdEncode(rtcDateTime.timeHour);
   clockdata[4] = 0;           // day of week
-  clockdata[5] = bcdEncode(day);
-  clockdata[6] = bcdEncode(mon);
-  clockdata[7] = bcdEncode(year);
+  clockdata[5] = bcdEncode(rtcDateTime.dateDay);
+  clockdata[6] = bcdEncode(rtcDateTime.dateMon);
+  clockdata[7] = bcdEncode(rtcDateTime.dateYear);
 
   cli();
   uint8_t r = i2cMasterSendNI(0xD0, 8, clockdata);

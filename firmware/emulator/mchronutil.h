@@ -6,6 +6,8 @@
 #ifndef MCHRONUTIL_H
 #define MCHRONUTIL_H
 
+#include <time.h>
+#include <sys/time.h>
 #include "controller.h"
 
 // The coredump origin types
@@ -48,7 +50,15 @@ void emuClockUpdate(void);
 void emuTimePrint(int type);
 void emuTimeSync(void);
 
-// mchron logfile functions
-void emuLogfileClose(void);
-void emuLogfileOpen(char debugFile[]);
+// mchron system interval timer functions
+void emuSysTimerStart(timer_t *timer, int interval, void(*handler)(void));
+void emuSysTimerStop(timer_t *timer);
+
+// mchron delay, sleep and timer functions
+char waitDelay(int delay);
+char waitKeypress(int allowQuit);
+void waitSleep(int sleep);
+char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
+  suseconds_t *remaining);
+void waitTimerStart(struct timeval *tvTimer);
 #endif

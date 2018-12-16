@@ -10,6 +10,7 @@
 #include <regex.h>
 #include <ctype.h>
 #include <signal.h>
+#include <unistd.h>
 
 // Monochron defines
 #include "../ks0108.h"
@@ -44,9 +45,6 @@ extern clockDriver_t *mcClockPool;
 extern uint8_t emuAlarmH;
 extern uint8_t emuAlarmM;
 
-// Debug file
-extern FILE *stubDebugStream;
-
 // The command line input stream control structure
 extern cmdInput_t cmdInput;
 
@@ -70,6 +68,8 @@ int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   FILE *fp;
   int argCount = 1;
   char *tty = emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.tty;
+  int argHelp = GLCD_FALSE;
+  int argError = GLCD_FALSE;
 
   // Init references to command line argument positions
   emuArgcArgv->argDebug = 0;
@@ -105,6 +105,12 @@ int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
       emuArgcArgv->argGlutGeometry = argCount + 1;
       argCount = argCount + 2;
     }
+    else if (strncmp(argv[argCount], "-h", 4) == 0)
+    {
+      // Request for help: end scan
+      argHelp = GLCD_TRUE;
+      argCount = argc;
+    }
     else if (strncmp(argv[argCount], "-l", 4) == 0)
     {
       // Lcd stub device type
@@ -126,35 +132,19 @@ int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     else
     {
       // Anything else: force to quit
-      emuArgcArgv->argDebug = argc;
-      argCount = argc;
+      argCount = argc + 1;
     }
+
+    if (argCount > argc)
+      argError = GLCD_TRUE;
   }
 
   // Check result of command line processing
-  if (emuArgcArgv->argLcdType >= argc || emuArgcArgv->argDebug >= argc ||
-      emuArgcArgv->argGlutGeometry >= argc || emuArgcArgv->argTty >= argc ||
-      emuArgcArgv->argGlutPosition >= argc)
+  if (argError == GLCD_TRUE)
+    printf("%s: invalid/incomplete command argument\n\n", __progname);
+  if (argHelp == GLCD_TRUE || argError == GLCD_TRUE)
   {
-    printf("Use: %s [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]\n", __progname);
-    printf("            [-d <logfile>] [-h]\n");
-    printf("  -d <logfile>  - Debug logfile name\n");
-    printf("  -g <geometry> - Geometry (x,y) of glut window\n");
-    printf("                  Default: \"520x264\"\n");
-    printf("                  Examples: \"130x66\" or \"260x132\"\n");
-    printf("  -h            - Give usage help\n");
-    printf("  -l <device>   - Lcd stub device type\n");
-    printf("                  Values: \"glut\" or \"ncurses\" or \"all\"\n");
-    printf("                  Default: \"glut\"\n");
-    printf("  -p <position> - Position (x,y) of glut window\n");
-    printf("                  Default: \"100,100\"\n");
-    printf("  -t <tty>      - tty device for ncurses of 258x66 sized terminal\n");
-    printf("                  Default: get <tty> from $HOME/.mchron\n");
-    printf("Examples:\n");
-    printf("  ./%s\n", __progname);
-    printf("  ./%s -l glut -p \"768,128\"\n", __progname);
-    printf("  ./%s -l ncurses\n", __progname);
-    printf("  ./%s -l ncurses -t /dev/pts/1 -d debug.log\n", __progname);
+    system("/usr/bin/head -23 ../support/help.txt | /usr/bin/tail -20 2>&1");
     return CMD_RET_ERROR;
   }
 
@@ -271,8 +261,8 @@ int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     {
       printf("%s: cannot open file \"%s%s\".\n", __progname, "$HOME",
         NCURSES_TTYFILE);
-      printf("start a new Monochron ncurses terminal or use switch '-t <tty>' to set\n");
-      printf("mchron ncurses terminal tty\n");
+      printf("start a new Monochron ncurses terminal or use switch '-t <tty>' to set mchron\n");
+      printf("ncurses terminal tty\n");
       return CMD_RET_ERROR;
     }
 
@@ -415,7 +405,7 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
 
   // Dump all Monochron variables. Might be useful.
   printf("*** registered variables\n");
-  varPrint(".", GLCD_FALSE);
+  varPrint(".", GLCD_TRUE);
 
   // Stating the obvious
   printf("*** debug by loading coredump file (when created) in a debugger\n");
@@ -468,47 +458,6 @@ u08 emuFontGet(char *fontName)
 }
 
 //
-// Function: emuLogfileClose
-//
-// Close the debug logfile
-//
-void emuLogfileClose(void)
-{
-  if (stubDebugStream != NULL)
-    fclose(stubDebugStream);
-}
-
-//
-// Function: emuLogfileOpen
-//
-// Open the debug logfile
-//
-void emuLogfileOpen(char fileName[])
-{
-  if (!DEBUGGING)
-  {
-    printf("WARNING: -d <file> ignored as master debugging is Off.\n");
-    printf("Assign value 1 to \"#define DEBUGGING\" in monomain.h [firmware] and rebuild\n");
-    printf("mchron.\n\n");
-  }
-  else
-  {
-    stubDebugStream = fopen(fileName, "a");
-    if (stubDebugStream == NULL)
-    {
-      // Something went wrong opening the logfile
-      printf("Cannot open debug output file \"%s\".\n", fileName);
-    }
-    else
-    {
-      // Disable buffering so we can properly 'tail -f' the file
-      setbuf(stubDebugStream, NULL);
-      DEBUGP("**** logging started");
-    }
-  }
-}
-
-//
 // Function: emuOrientationGet
 //
 // Get the requested text orientation
@@ -549,20 +498,24 @@ void emuShutdown(void)
 //
 // Function: emuSigCatch
 //
-// Signal handler. Mainly used to implement a graceful shutdown so we do not
-// need to 'reset' the mchron shell, when it no longer echoes input characters
-// due to its keypress mode, or to kill the alarm audio PID.
-// However, do not close the lcd device (works for ncurses only) since we may
-// want to keep the latest screen layout for analytic purposes.
+// Main signal handler wrapper. Used for system timers and signals to implement
+// a graceful shutdown (preventing a screwed up bash terminal and killing alarm
+// audio).
 //
 static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
 {
-  //printf ("Signo     -  %d\n",siginfo->si_signo);
-  //printf ("SigCode   -  %d\n",siginfo->si_code);
+  //printf("signo=%d\n", siginfo->si_signo);
+  //printf("sigcode=%d\n", siginfo->si_code);
 
   // For signals that should make the application quit, switch back to
   // keyboard line mode and kill audio before we actually exit
-  if (sig == SIGINT)
+  if (sig == SIGVTALRM)
+  {
+    // Recurring system timer expiry.
+    // Execute the handler as requested in emuSysTimerStart().
+    ((void (*)(void))siginfo->si_value.sival_ptr)();
+  }
+  else if (sig == SIGINT)
   {
     // Keyboard: "^C"
     printf("\n<ctrl>c - interrupt\n");
@@ -630,6 +583,8 @@ void emuSigSetup(void)
   sigAction.sa_sigaction = &emuSigCatch;
   sigAction.sa_flags = SA_SIGINFO;
 
+  if (sigaction(SIGVTALRM, &sigAction, NULL) < 0)
+    printf("Cannot set handler SIGVTALRM (%d)\n", SIGVTALRM);
   if (sigaction(SIGINT, &sigAction, NULL) < 0)
     printf("Cannot set handler SIGINT (%d)\n", SIGINT);
   if (sigaction(SIGTSTP, &sigAction, NULL) < 0)
@@ -656,6 +611,46 @@ u08 emuStartModeGet(char startId)
     return GLCD_TRUE;
   else // startId == 'n'
     return GLCD_FALSE;
+}
+
+//
+// Function: emuSysTimerStart
+//
+// Start a repeating msec realtime interval timer
+//
+void emuSysTimerStart(timer_t *timer, int interval, void(*handler)(void))
+{
+  struct itimerspec iTimer;
+  struct sigevent sEvent;
+
+  // Setup repeating timer generating signal SIGVTALRM
+  iTimer.it_value.tv_sec = interval / 1000;
+  iTimer.it_value.tv_nsec = (interval % 1000) * 1E6;
+  iTimer.it_interval.tv_sec = iTimer.it_value.tv_sec;
+  iTimer.it_interval.tv_nsec = iTimer.it_value.tv_nsec;
+  sEvent.sigev_notify = SIGEV_SIGNAL;
+  sEvent.sigev_signo = SIGVTALRM;
+  sEvent.sigev_value.sival_ptr = handler;
+
+  // Make timer timeout on realtime and start it
+  timer_create(CLOCK_REALTIME, &sEvent, timer);
+  timer_settime(*timer, 0, &iTimer, NULL);
+}
+
+//
+// Function: emuSysTimerStop
+//
+// Stop (disarm) repeating msec realtime interval timer
+//
+void emuSysTimerStop(timer_t *timer)
+{
+  struct itimerspec iTimer;
+
+  iTimer.it_value.tv_sec = 0;
+  iTimer.it_value.tv_nsec = 0;
+  iTimer.it_interval.tv_sec = 0;
+  iTimer.it_interval.tv_nsec = 0;
+  timer_settime(*timer, 0, &iTimer, NULL);
 }
 
 //
@@ -687,4 +682,200 @@ void emuTimeSync(void)
   DEBUGP("Clear time event");
   rtcTimeEvent = GLCD_FALSE;
   rtcMchronTimeInit();
+}
+
+//
+// Function: waitDelay
+//
+// Wait amount of time (in msec) while allowing a 'q' keypress interrupt
+//
+char waitDelay(int delay)
+{
+  char ch = '\0';
+  struct timeval tvWait;
+  struct timeval tvNow;
+  struct timeval tvEnd;
+  suseconds_t timeDiff;
+  u08 myKbMode = KB_MODE_LINE;
+
+  // Set offset for wait period
+  gettimeofday(&tvNow, NULL);
+  gettimeofday(&tvEnd, NULL);
+
+  // Set end timestamp based current time plus delay
+  tvEnd.tv_usec = tvEnd.tv_usec + delay * 1000;
+
+  // Get the total time to wait
+  timeDiff = (tvEnd.tv_sec - tvNow.tv_sec) * 1E6 +
+    tvEnd.tv_usec - tvNow.tv_usec;
+
+  // Switch to keyboard scan mode if needed
+  myKbMode = kbModeGet();
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_SCAN);
+
+  // Wait till end of delay or a 'q' keypress and ignore a remaining wait time
+  // that is less than 0.5 msec
+  while (ch != 'q' && timeDiff > 500)
+  {
+    // Split time to delay up in parts of max 250msec
+    tvWait.tv_sec = 0;
+    if (timeDiff >= 250000)
+      tvWait.tv_usec = 250000;
+    else
+      tvWait.tv_usec = timeDiff;
+    select(0, NULL, NULL, NULL, &tvWait);
+
+    // Scan keyboard
+    ch = kbKeypressScan(GLCD_TRUE);
+    if (ch == 'q')
+      break;
+
+    // Based on last wait and keypress delays get time left to wait
+    gettimeofday(&tvNow, NULL);
+    timeDiff = (tvEnd.tv_sec - tvNow.tv_sec) * 1E6 +
+      tvEnd.tv_usec - tvNow.tv_usec;
+  }
+
+  // Return to line mode if needed
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_LINE);
+
+  // Clear return character for consistent interface
+  if (ch != 'q')
+    ch = '\0';
+
+  return ch;
+}
+
+//
+// Function: waitKeypress
+//
+// Wait for keyboard keypress.
+// The keyboard buffer is cleared first to enforce a wait cycle.
+//
+char waitKeypress(int allowQuit)
+{
+  char ch = '\0';
+  u08 myKbMode = KB_MODE_LINE;
+
+  // Switch to keyboard scan mode if needed
+  myKbMode = kbModeGet();
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_SCAN);
+
+  // Clear keyboard buffer
+  kbKeypressScan(GLCD_FALSE);
+
+  // Wait for single keypress
+  if (allowQuit == GLCD_FALSE)
+    printf("<wait: press key to continue> ");
+  else
+    printf("<wait: q = quit, other key = continue> ");
+  fflush(stdout);
+  while (ch == '\0')
+  {
+    // Sleep 150 msec and scan keyboard
+    waitSleep(150);
+    ch = kbKeypressScan(GLCD_TRUE);
+  }
+
+  // Return to line mode if needed
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_LINE);
+
+  printf("\n");
+
+  return ch;
+}
+
+//
+// Function: waitSleep
+//
+// Sleep amount of time (in msec) without keyboard interaction
+//
+void waitSleep(int sleep)
+{
+  struct timeval tvWait;
+
+  tvWait.tv_sec = 0;
+  tvWait.tv_usec = sleep * 1000;
+  select(0, NULL, NULL, NULL, &tvWait);
+}
+
+//
+// Function: waitTimerExpiry
+//
+// Wait amount of time (in msec) after a timer (re)start while optionally
+// allowing a 'q' keypress interrupt. Restart the timer when timer has already
+// expired upon entering this function or has expired after the remaining timer
+// period. When pressing the 'q' key the timer will not be restarted.
+// Return parameter remaining will indicate the remaining timer time in usec
+// upon entering this function, or -1 in case the timer had already expired.
+//
+char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
+  suseconds_t *remaining)
+{
+  char ch = '\0';
+  struct timeval tvNow;
+  struct timeval tvWait;
+  suseconds_t timeDiff;
+
+  // Get the total time to wait based on timer expiry
+  gettimeofday(&tvNow, NULL);
+  timeDiff = (tvTimer->tv_sec - tvNow.tv_sec) * 1E6 +
+    tvTimer->tv_usec - tvNow.tv_usec + expiry * 1000;
+
+  // See if timer has already expired
+  if (timeDiff < 0)
+  {
+    // Get next timer offset using current time as reference, so do not even
+    // attempt to compensate
+    *remaining = -1;
+    *tvTimer = tvNow;
+  }
+  else
+  {
+    // Wait the remaining time of the timer, defaulting to at least 1 msec
+    *remaining = timeDiff;
+    if (allowQuit == GLCD_TRUE)
+    {
+      if ((int)(*remaining / 1000) == 0)
+        ch = waitDelay(1);
+      else
+        ch = waitDelay((int)(timeDiff / 1000 + (float)0.5));
+    }
+    else
+    {
+      tvWait.tv_sec = timeDiff / 1E6;
+      tvWait.tv_usec = timeDiff % (int)1E6;
+      select(0, NULL, NULL, NULL, &tvWait);
+    }
+
+    // Get next timer offset by adding expiry to current timer offset
+    if (ch != 'q')
+    {
+      // Add expiry to current timer offset
+      tvTimer->tv_sec = tvTimer->tv_sec + expiry / 1000;
+      tvTimer->tv_usec = tvTimer->tv_usec + (expiry % 1000) * 1000;
+      if (tvTimer->tv_usec > 1E6)
+      {
+        tvTimer->tv_sec++;
+        tvTimer->tv_usec = tvTimer->tv_usec - 1E6;
+      }
+    }
+  }
+
+  return ch;
+}
+
+//
+// Function: waitTimerStart
+//
+// (Re)set wait timer to current time
+//
+void waitTimerStart(struct timeval *tvTimer)
+{
+  // Set timer to current timestamp
+  gettimeofday(tvTimer, NULL);
 }

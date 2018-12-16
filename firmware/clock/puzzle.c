@@ -37,13 +37,6 @@
 #define PUZZLE_HELP_RIGHT_X	70
 #define PUZZLE_HELP_TEXT_OFFSET	11
 
-// Structure defining the graphics properties of a clock bulb
-typedef struct _bulbDriver_t
-{
-  u08 colorCode;	// Draw color: 0 = foreground, 1 = background
-  u08 fillType;		// Circle fill type
-} bulbDriver_t;
-
 // Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
@@ -87,23 +80,23 @@ static char *puzzleHelpMsgsRight[] =
   "All Date"
 };
 
-// For each of the eight permutations of a bulb value specify the
-// parameters for the fill circle draw
-static bulbDriver_t bulbDriver[] =
+// For each of the eight permutations of a bulb value specify the circle fill
+// type (4 foreground + 4 background)
+static const unsigned char __attribute__ ((progmem)) bulbFillType[] =
 {
-  { 0, FILL_BLANK },
-  { 0, FILL_THIRDUP },
-  { 0, FILL_THIRDDOWN },
-  { 0, FILL_HALF },
-  { 1, FILL_HALF },
-  { 1, FILL_THIRDDOWN },
-  { 1, FILL_THIRDUP },
-  { 1, FILL_BLANK }
+  FILL_BLANK,
+  FILL_THIRDUP,
+  FILL_THIRDDOWN,
+  FILL_HALF,
+  FILL_HALF,
+  FILL_THIRDDOWN,
+  FILL_THIRDUP,
+  FILL_BLANK
 };
 
 // Local function prototypes
 static void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
-  u08 newVal1, u08 newVal2, u08 newVal3, u08 high, u08 init);
+  u08 newVal1, u08 newVal2, u08 newVal3, u08 high);
 static void puzzleHelp(void);
 
 //
@@ -137,6 +130,8 @@ void puzzleButton(u08 pressedButton)
 //
 void puzzleCycle(void)
 {
+  char counter[3];
+
   if ((mcU8Util1 == 1 && mcClockTimeEvent == GLCD_TRUE) ||
       (mcU8Util1 > 0 && mcU8Util2 == PUZZLE_MODE_CLOCK))
   {
@@ -147,12 +142,10 @@ void puzzleCycle(void)
   }
   else if (mcU8Util2 == PUZZLE_MODE_HELP)
   {
-    // We're in help mode so no screen updates, but decrease
-    // helppage timeout counter when appropriate
+    // We're in help mode so no screen updates, but decrease helppage timeout
+    // counter when appropriate
     if (mcClockTimeEvent == GLCD_TRUE)
     {
-      char counter[3];
-
       mcU8Util1--;
       animValToStr(mcU8Util1, counter);
       glcdPutStr2(120, 1, FONT_5X5P, counter, mcFgColor);
@@ -172,20 +165,16 @@ void puzzleCycle(void)
 
   // Time high part
   puzzleBulbRowSet(PUZZLE_BULB_Y_START, mcClockOldTS, mcClockOldTM,
-    mcClockOldTH, mcClockNewTS, mcClockNewTM, mcClockNewTH,
-    GLCD_TRUE, mcClockInit);
+    mcClockOldTH, mcClockNewTS, mcClockNewTM, mcClockNewTH, GLCD_TRUE);
   // Time low part
   puzzleBulbRowSet(PUZZLE_BULB_Y_START + 12, mcClockOldTS, mcClockOldTM,
-    mcClockOldTH, mcClockNewTS, mcClockNewTM, mcClockNewTH,
-    GLCD_FALSE, mcClockInit);
+    mcClockOldTH, mcClockNewTS, mcClockNewTM, mcClockNewTH, GLCD_FALSE);
   // Date high part
   puzzleBulbRowSet(PUZZLE_BULB_Y_START + 24, mcClockOldDD, mcClockOldDM,
-    mcClockOldDY, mcClockNewDD, mcClockNewDM, mcClockNewDY,
-    GLCD_TRUE, mcClockInit);
+    mcClockOldDY, mcClockNewDD, mcClockNewDM, mcClockNewDY, GLCD_TRUE);
   // Date low part
   puzzleBulbRowSet(PUZZLE_BULB_Y_START + 36, mcClockOldDD, mcClockOldDM,
-    mcClockOldDY, mcClockNewDD, mcClockNewDM, mcClockNewDY,
-    GLCD_FALSE, mcClockInit);
+    mcClockOldDY, mcClockNewDD, mcClockNewDM, mcClockNewDY, GLCD_FALSE);
 }
 
 //
@@ -203,10 +192,10 @@ void puzzleInit(u08 mode)
   // Draw the top row numbers.
   val[0] = '0';
   val[1] = '\0';
-  for (x = 0; x <= 9; x++)
+  for (x = 0; x <= 9 * 12; x = x + 12)
   {
-    glcdPutStr2(PUZZLE_NUMBER_X_START + x * 12,
-      PUZZLE_NUMBER_Y_START, FONT_5X5P, val, mcFgColor);
+    glcdPutStr2(PUZZLE_NUMBER_X_START + x, PUZZLE_NUMBER_Y_START, FONT_5X5P,
+      val, mcFgColor);
     val[0] = val[0] + 1;
   }
 
@@ -217,12 +206,12 @@ void puzzleInit(u08 mode)
     ORI_VERTICAL_BU, "Date", 1, 1, mcFgColor);
 
   // Draw the bulbs
-  for (x = 0; x <= 9; x++)
+  for (x = 0; x <= 9 * 12; x = x + 12)
   {
-    for (y = 0; y <= 3; y++)
+    for (y = 0; y <= 3 * 12; y = y + 12)
     {
-      if (y > 0 || x <= 5)
-        glcdCircle2(PUZZLE_BULB_X_START + x * 12, PUZZLE_BULB_Y_START + y * 12,
+      if (y > 0 || x <= 5 * 12)
+        glcdCircle2(PUZZLE_BULB_X_START + x, PUZZLE_BULB_Y_START + y,
           PUZZLE_BULB_RADIUS, CIRCLE_FULL, mcFgColor);
     }
   }
@@ -238,17 +227,18 @@ void puzzleInit(u08 mode)
 // Update a single bulb row of a puzzle clock
 //
 static void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
-  u08 newVal1, u08 newVal2, u08 newVal3, u08 high, u08 init)
+  u08 newVal1, u08 newVal2, u08 newVal3, u08 high)
 {
   u08 i;
   u08 bulbOld;
   u08 bulbNew;
+  u08 fillType;
   u08 color;
   u08 ov1, ov2, ov3, nv1, nv2, nv3;
 
-  // Get the right bulb values based on whether we're dealing with
-  // the factor 10 values (most significant digit) or the modulo 10
-  // values (least significant digit)
+  // Get the right bulb values based on whether we're dealing with the factor
+  // 10 values (most significant digit) or the modulo 10 value (least
+  // significant digit)
   if (high == GLCD_TRUE)
   {
     ov1 = oldVal1 / 10;
@@ -269,7 +259,7 @@ static void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
   }
 
   // Verify if anything needs to be done at all
-  if (ov1 == nv1 && ov2 == nv2 && ov3 == nv3 && init == GLCD_FALSE)
+  if (ov1 == nv1 && ov2 == nv2 && ov3 == nv3 && mcClockInit == GLCD_FALSE)
     return;
 
   // Get the old and new bulb values and update the bulb (if needed)
@@ -295,18 +285,18 @@ static void puzzleBulbRowSet(u08 y, u08 oldVal1, u08 oldVal2, u08 oldVal3,
       bulbNew = (bulbNew | 0x4);
 
     // Redraw bulb if needed
-    if (bulbOld != bulbNew || (init == GLCD_TRUE && bulbNew != 0))
+    if (bulbOld != bulbNew || (mcClockInit == GLCD_TRUE && bulbNew != 0))
     {
-      // Get draw color of bulb
-      if (bulbDriver[bulbNew].colorCode == 0)
+      // Get filltype and draw color of bulb and draw it
+      fillType = pgm_read_byte(bulbFillType + bulbNew);
+      if (bulbNew < 4)
         color = mcFgColor;
       else
         color = mcBgColor;
-      // Draw bulb
       glcdFillCircle2(PUZZLE_BULB_X_START + i * 12, y, PUZZLE_BULB_RADIUS,
-        bulbDriver[bulbNew].fillType, color);
-      glcdCircle2(PUZZLE_BULB_X_START + i * 12, y, PUZZLE_BULB_RADIUS, CIRCLE_FULL,
-        mcFgColor);
+        fillType, color);
+      glcdCircle2(PUZZLE_BULB_X_START + i * 12, y, PUZZLE_BULB_RADIUS,
+        CIRCLE_FULL, mcFgColor);
     }
   }
 }
@@ -320,6 +310,7 @@ static void puzzleHelp(void)
 {
   u08 i;
   u08 color;
+  u08 fillType;
 
   glcdClearScreen(mcBgColor);
   glcdPutStr2(1, 1, FONT_5X5P, "Puzzle - Help", mcFgColor);
@@ -332,20 +323,22 @@ static void puzzleHelp(void)
       color = mcBgColor;
     else
       color = mcFgColor;
+    fillType = pgm_read_byte(bulbFillType + i);
     glcdFillCircle2(PUZZLE_HELP_LEFT_X, 14 + i * 14, PUZZLE_BULB_RADIUS,
-      bulbDriver[i].fillType, color);
-    glcdCircle2(PUZZLE_HELP_LEFT_X, 14 + i * 14, PUZZLE_BULB_RADIUS, CIRCLE_FULL,
-      mcFgColor);
+      fillType, color);
+    glcdCircle2(PUZZLE_HELP_LEFT_X, 14 + i * 14, PUZZLE_BULB_RADIUS,
+      CIRCLE_FULL, mcFgColor);
 
     // Right side
     if (i == 0)
       color = mcFgColor;
     else
       color = mcBgColor;
+    fillType = pgm_read_byte(bulbFillType + i + 4);
     glcdFillCircle2(PUZZLE_HELP_RIGHT_X, 14 + i * 14, PUZZLE_BULB_RADIUS,
-      bulbDriver[i + 4].fillType, color);
-    glcdCircle2(PUZZLE_HELP_RIGHT_X, 14 + i * 14, PUZZLE_BULB_RADIUS, CIRCLE_FULL,
-      mcFgColor);
+      fillType, color);
+    glcdCircle2(PUZZLE_HELP_RIGHT_X, 14 + i * 14, PUZZLE_BULB_RADIUS,
+      CIRCLE_FULL, mcFgColor);
   }
 
   // Draw the help text for the top left None bulb
@@ -355,10 +348,10 @@ static void puzzleHelp(void)
   // Draw the help texts for the other bulbs
   // Left side
   for (i = 0; i < 6; i++)
-    glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 22 + i * 7, FONT_5X5P,
-      puzzleHelpMsgsLeft[i], mcFgColor);
+    glcdPutStr2(PUZZLE_HELP_LEFT_X + PUZZLE_HELP_TEXT_OFFSET, 22 + i * 7,
+      FONT_5X5P, puzzleHelpMsgsLeft[i], mcFgColor);
   // Right side
   for (i = 0; i < 8; i++)
-    glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 8 + i * 7, FONT_5X5P,
-      puzzleHelpMsgsRight[i], mcFgColor);
+    glcdPutStr2(PUZZLE_HELP_RIGHT_X + PUZZLE_HELP_TEXT_OFFSET, 8 + i * 7,
+      FONT_5X5P, puzzleHelpMsgsRight[i], mcFgColor);
 }

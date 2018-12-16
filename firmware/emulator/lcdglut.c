@@ -49,8 +49,8 @@
 #define GLUT_SHOW_PIXSIZE_MS	3000
 
 // We use a frame around our lcd display, being 1 Monochron pixel wide on each
-// side. So, the number of glut Monochron pixels in our display is a bit larger
-// than the number of GLCD Monochron pixels.
+// side. So, the number of glut Monochron pixels in our display is a bit higher
+// than the number of glcd Monochron pixels.
 #define GLUT_XPIXELS		(GLCD_XPIXELS + 2)
 #define GLUT_YPIXELS		(GLCD_YPIXELS + 2)
 
@@ -72,6 +72,11 @@
 
 // The glut thread main loop sleep duration (msec)
 #define GLUT_THREAD_SLEEP_MS	33
+
+// The number of glut messages per message buffer malloc (= 2^bits)
+#define GLUT_MSGS_BUFFER_BITS	6
+#define GLUT_MSGS_PER_BUFFER	(0x1 << (GLUT_MSGS_BUFFER_BITS - 1))
+#define GLUT_MSGS_MASK		(GLUT_MSGS_PER_BUFFER - 1)
 
 // The lcd message queue commands
 #define GLUT_CMD_EXIT		0
@@ -95,8 +100,14 @@ typedef struct _lcdGlutMsg_t
   unsigned char arg1;		// First command argument
   unsigned char arg2;		// Second command argument
   unsigned char arg3;		// Third acommand argument
-  struct _lcdGlutMsg_t *next;	// Pointer to next msg in queue
 } lcdGlutMsg_t;
+
+// Definition of a glut lcd message buffer
+typedef struct _lcdGlutMsgBuf_t
+{
+  lcdGlutMsg_t lcdGlutMsg[GLUT_MSGS_PER_BUFFER];	// The glut lcd messages
+  struct _lcdGlutMsgBuf_t *next;			// Ptr to next msg buffer
+} lcdGlutMsgBuf_t;
 
 // Definition of a structure holding the glut lcd device statistics
 typedef struct _lcdGlutStats_t
@@ -133,9 +144,10 @@ static pthread_t threadGlut;
 static unsigned char deviceActive = GLCD_FALSE;
 static int winGlutWin;
 
-// Start and end of lcd message queue
-static lcdGlutMsg_t *queueStart = NULL;
-static lcdGlutMsg_t *queueEnd = NULL;
+// Start and end of lcd message queue and length
+static lcdGlutMsgBuf_t *queueStart = NULL;
+static lcdGlutMsgBuf_t *queueEnd = NULL;
+static int queueLen = 0;
 
 // Mutex to access the lcd message queue and statistics counters
 // WARNING:
@@ -153,6 +165,11 @@ static unsigned char winRedrawFirst = GLCD_FALSE;
 static unsigned char winResize = GLCD_FALSE;
 static unsigned char winShowWinSize = GLCD_FALSE;
 static struct timeval tvWinReshapeLast;
+
+// Identifiers signalling right-button up/down state and location
+static int winRButtonState = GLUT_UP;
+static int winRButtonX = 0;
+static int winRButtonY = 0;
 
 // The init parameters
 static lcdGlutInitArgs_t lcdGlutInitArgs;
@@ -176,16 +193,25 @@ static unsigned char winPixelBezel = GLCD_FALSE;
 
 // Local function prototypes
 static void lcdGlutClose(void);
-static void lcdGlutDelay(int x);
 static void lcdGlutKeyboard(unsigned char key, int x, int y);
 static void *lcdGlutMain(void *ptr);
+static void lcdGlutMouse(int button, int state, int x, int y);
 static void lcdGlutMsgQueueAdd(unsigned char cmd, unsigned char arg1,
   unsigned char arg2, unsigned char arg3);
 static void lcdGlutMsgQueueProcess(void);
 static void lcdGlutRender(void);
-static void lcdGlutRenderPrepare(void);
+static void lcdGlutRenderBezel(float arX, int winWidth);
+static void lcdGlutRenderGrid(void);
+static void lcdGlutRenderInit(void);
+static void lcdGlutRenderPixels(void);
+static void lcdGlutRenderPosition(float arX, float arY, int winWidth,
+  int winHeight);
+static void lcdGlutRenderSchedule(void);
+static void lcdGlutRenderSize(float arX, float arY, int winWidth,
+  int winHeight);
 static void lcdGlutReshape(int x, int y);
 static void lcdGlutReshapeProcess(void);
+static void lcdGlutSleep(int sleep);
 
 //
 // Function: lcdGlutBacklightSet
@@ -240,20 +266,6 @@ void lcdGlutDataWrite(unsigned char x, unsigned char y, unsigned char data)
 {
   // Add msg to queue to draw a pixel byte (8 vertical pixels)
   lcdGlutMsgQueueAdd(GLUT_CMD_BYTEDRAW, data, x, y);
-}
-
-//
-// Function: lcdGlutDelay
-//
-// Delay time in milliseconds
-//
-static void lcdGlutDelay(int x)
-{
-  struct timeval sleepThis;
-
-  sleepThis.tv_sec = 0;
-  sleepThis.tv_usec = x * 1000;
-  select(0, NULL, NULL, NULL, &sleepThis);
 }
 
 //
@@ -360,7 +372,7 @@ static void lcdGlutKeyboard(unsigned char key, int x, int y)
   lcdGlutRender();
 
   // Wait 0.1 sec (this will lower the fps statistic)
-  lcdGlutDelay(100);
+  lcdGlutSleep(100);
 
   // And invert back to original
   for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
@@ -404,8 +416,9 @@ static void *lcdGlutMain(void *ptr)
   glutInitWindowSize(lcdGlutInitArgs.sizeX, lcdGlutInitArgs.sizeY);
   glutInitWindowPosition(lcdGlutInitArgs.posX, lcdGlutInitArgs.posY);
   winGlutWin = glutCreateWindow((char *)ptr);
-  glutDisplayFunc(lcdGlutRenderPrepare);
+  glutDisplayFunc(lcdGlutRenderSchedule);
   glutKeyboardFunc(lcdGlutKeyboard);
+  glutMouseFunc(lcdGlutMouse);
   glutReshapeFunc(lcdGlutReshape);
   glutCloseFunc(lcdGlutClose);
 
@@ -426,7 +439,7 @@ static void *lcdGlutMain(void *ptr)
     pthread_mutex_unlock(&mutexStats);
 
     // Process glut system events such as window resize, overlapping window
-    // movements and window keypresses. They may invoke a window redraw.
+    // movements and window mouse/keypresses. They may invoke a window redraw.
     glutMainLoopEvent();
 
     // Process reshape logic and application message queue and redraw when
@@ -441,7 +454,7 @@ static void *lcdGlutMain(void *ptr)
 
     // Go to sleep to achieve low cpu usage combined with a glut refresh rate
     // at max ~30 fps
-    lcdGlutDelay(GLUT_THREAD_SLEEP_MS);
+    lcdGlutSleep(GLUT_THREAD_SLEEP_MS);
   }
 
   // We are about to exit the glut thread. Disable the close callback as it
@@ -457,39 +470,50 @@ static void *lcdGlutMain(void *ptr)
 //
 // Function: lcdGlutMsgQueueAdd
 //
-// Add message to lcd message queue
+// Add message to lcd message queue. The message queue consists of linked
+// message buffers. When starting a new queue or when the current buffer is
+// full create a new message buffer and add it at the end of the linked list.
 //
 static void lcdGlutMsgQueueAdd(unsigned char cmd, unsigned char arg1,
   unsigned char arg2, unsigned char arg3)
 {
   lcdGlutMsg_t *lcdGlutMsg;
+  lcdGlutMsgBuf_t *lcdGlutMsgBuf;
+  int buffIndex;
 
   // Get exclusive access to the message queue
   pthread_mutex_lock(&mutexQueue);
 
-  // Create new message and add it to the end of the queue
-  lcdGlutMsg = malloc(sizeof(lcdGlutMsg_t));
-  if (queueStart == NULL)
+  // Create new message buffer every x msgs and add it to the end of the queue
+  buffIndex = (queueLen & GLUT_MSGS_MASK);
+  if (buffIndex == 0)
   {
-    // Start of new queue
-    queueStart = lcdGlutMsg;
-    queueEnd = queueStart;
-  }
-  else
-  {
-    // The queue is at least of size one: link last queue member to next
-    queueEnd->next = lcdGlutMsg;
-    queueEnd = queueEnd->next;
+    lcdGlutMsgBuf = malloc(sizeof(lcdGlutMsgBuf_t));
+    lcdGlutMsgBuf->next = NULL;
+    if (queueStart == NULL)
+    {
+      // This is the first buffer in a new buffer queue
+      queueStart = lcdGlutMsgBuf;
+      queueEnd = queueStart;
+    }
+    else
+    {
+      // The queue is at least one buffer long. Link the last full buffer to
+      // the next buffer.
+      queueEnd->next = lcdGlutMsgBuf;
+      queueEnd = queueEnd->next;
+    }
   }
 
   // Fill in functional content of message
-  queueEnd->cmd = cmd;
-  queueEnd->arg1 = arg1;
-  queueEnd->arg2 = arg2;
-  queueEnd->arg3 = arg3;
-  queueEnd->next = NULL;
+  lcdGlutMsg = queueEnd->lcdGlutMsg + buffIndex;
+  lcdGlutMsg->cmd = cmd;
+  lcdGlutMsg->arg1 = arg1;
+  lcdGlutMsg->arg2 = arg2;
+  lcdGlutMsg->arg3 = arg3;
 
   // Statistics
+  queueLen++;
   pthread_mutex_lock(&mutexStats);
   lcdGlutStats.msgSend++;
   pthread_mutex_unlock(&mutexStats);
@@ -505,42 +529,47 @@ static void lcdGlutMsgQueueAdd(unsigned char cmd, unsigned char arg1,
 //
 static void lcdGlutMsgQueueProcess(void)
 {
-  void *freeMsg;
-  lcdGlutMsg_t *glutMsg;
+  lcdGlutMsg_t *lcdGlutMsg;
+  lcdGlutMsgBuf_t *freeBuf;
+  lcdGlutMsgBuf_t *lcdGlutMsgBuf;
+  int queueDone = 0;
   unsigned char lcdByte;
   unsigned char msgByte;
   unsigned char controller;
   unsigned char pixel = 0;
-  int queueLength = 0;
 
   // Get exclusive access to the message queue and statistics counters
   pthread_mutex_lock(&mutexQueue);
   pthread_mutex_lock(&mutexStats);
 
   // Statistics
-  glutMsg = queueStart;
-  if (glutMsg != NULL)
+  lcdGlutMsgBuf = queueStart;
+  if (lcdGlutMsgBuf != NULL)
+  {
     lcdGlutStats.queueEvents++;
+    lcdGlutMsg = lcdGlutMsgBuf->lcdGlutMsg;
+  }
 
-  // Eat entire queue message by message
-  while (glutMsg != NULL)
+  // Eat entire queue message by message from the message buffers
+  freeBuf = queueStart;
+  while (queueDone != queueLen)
   {
     // Statistics
-    queueLength++;
+    queueDone++;
     lcdGlutStats.msgRcv++;
 
     // Process the glut command
-    if (glutMsg->cmd == GLUT_CMD_BYTEDRAW)
+    if (lcdGlutMsg->cmd == GLUT_CMD_BYTEDRAW)
     {
       // Draw monochron pixels in window. The controller has decided that the
       // new data differs from the current lcd data.
-      controller = glutMsg->arg2 >> GLCD_CONTROLLER_XPIXBITS;
+      controller = lcdGlutMsg->arg2 >> GLCD_CONTROLLER_XPIXBITS;
       winRedraw = GLCD_TRUE;
-      msgByte = glutMsg->arg1;
-      lcdByte = lcdGlutImage[glutMsg->arg2][glutMsg->arg3];
+      msgByte = lcdGlutMsg->arg1;
+      lcdByte = lcdGlutImage[lcdGlutMsg->arg2][lcdGlutMsg->arg3];
 
       // Sync internal window image
-      lcdGlutImage[glutMsg->arg2][glutMsg->arg3] = msgByte;
+      lcdGlutImage[lcdGlutMsg->arg2][lcdGlutMsg->arg3] = msgByte;
 
       // Statistics
       lcdGlutStats.byteReq++;
@@ -558,70 +587,103 @@ static void lcdGlutMsgQueueProcess(void)
         msgByte = msgByte >> 1;
       }
     }
-    else if (glutMsg->cmd == GLUT_CMD_BACKLIGHT)
+    else if (lcdGlutMsg->cmd == GLUT_CMD_BACKLIGHT)
     {
       // Set background brightness and force redraw
-      if (winBrightness != GLUT_BRIGHTNESS(glutMsg->arg1))
+      if (winBrightness != GLUT_BRIGHTNESS(lcdGlutMsg->arg1))
       {
-        winBrightness = GLUT_BRIGHTNESS(glutMsg->arg1);
+        winBrightness = GLUT_BRIGHTNESS(lcdGlutMsg->arg1);
         winRedraw = GLCD_TRUE;
       }
     }
-    else if (glutMsg->cmd == GLUT_CMD_DISPLAY)
+    else if (lcdGlutMsg->cmd == GLUT_CMD_DISPLAY)
     {
       // Set controller display and force redraw
-      if (lcdGlutCtrl[glutMsg->arg1].display != glutMsg->arg2)
+      if (lcdGlutCtrl[lcdGlutMsg->arg1].display != lcdGlutMsg->arg2)
       {
-        lcdGlutCtrl[glutMsg->arg1].display = glutMsg->arg2;
+        lcdGlutCtrl[lcdGlutMsg->arg1].display = lcdGlutMsg->arg2;
         winRedraw = GLCD_TRUE;
       }
     }
-    else if (glutMsg->cmd == GLUT_CMD_STARTLINE)
+    else if (lcdGlutMsg->cmd == GLUT_CMD_STARTLINE)
     {
       // Set controller display line offset and force redraw
-      if (lcdGlutCtrl[glutMsg->arg1].startLine != glutMsg->arg2)
+      if (lcdGlutCtrl[lcdGlutMsg->arg1].startLine != lcdGlutMsg->arg2)
       {
-        lcdGlutCtrl[glutMsg->arg1].startLine = glutMsg->arg2;
+        lcdGlutCtrl[lcdGlutMsg->arg1].startLine = lcdGlutMsg->arg2;
         winRedraw = GLCD_TRUE;
       }
     }
-    else if (glutMsg->cmd == GLUT_CMD_OPTIONS)
+    else if (lcdGlutMsg->cmd == GLUT_CMD_OPTIONS)
     {
       // Enable/disable pixel bezels and force redraw
-      if (winPixelBezel != glutMsg->arg1)
+      if (winPixelBezel != lcdGlutMsg->arg1)
       {
-        winPixelBezel = glutMsg->arg1;
+        winPixelBezel = lcdGlutMsg->arg1;
         winRedraw = GLCD_TRUE;
       }
       // Enable/disable gridlines and force redraw
-      if (winGridLines != glutMsg->arg2)
+      if (winGridLines != lcdGlutMsg->arg2)
       {
-        winGridLines = glutMsg->arg2;
+        winGridLines = lcdGlutMsg->arg2;
         winRedraw = GLCD_TRUE;
       }
     }
-    else if (glutMsg->cmd == GLUT_CMD_EXIT)
+    else if (lcdGlutMsg->cmd == GLUT_CMD_EXIT)
     {
       // Signal to exit glut thread (when queue is processed)
       winExit = GLCD_TRUE;
     }
-    // Go to next queue member and release memory of current one
-    freeMsg = (void *)glutMsg;
-    glutMsg = glutMsg->next;
-    free(freeMsg);
+
+    // If at end of buffer go to next buffer, or get next message in buffer
+    if ((queueDone & GLUT_MSGS_MASK) == 0)
+    {
+      lcdGlutMsgBuf = freeBuf->next;
+      free(freeBuf);
+      freeBuf = lcdGlutMsgBuf;
+      lcdGlutMsg = lcdGlutMsgBuf->lcdGlutMsg;
+    }
+    else
+    {
+      lcdGlutMsg++;
+    }
   }
 
   // Message queue is processed so let's cleanup
+  if (freeBuf != NULL)
+    free(freeBuf);
   queueStart = NULL;
   queueEnd = NULL;
+  queueLen = 0;
 
   // Statistics
-  if ((long long)queueLength > lcdGlutStats.queueMax)
-    lcdGlutStats.queueMax = (long long)queueLength;
+  if ((long long)queueDone > lcdGlutStats.queueMax)
+    lcdGlutStats.queueMax = (long long)queueDone;
 
   // Release exclusive access to the statistics counters and message queue
   pthread_mutex_unlock(&mutexStats);
   pthread_mutex_unlock(&mutexQueue);
+}
+
+//
+// Function: lcdGlutMouse
+//
+// Get right-click mouse event to trigger glcd pixel highlight
+//
+static void lcdGlutMouse(int button, int state, int x, int y)
+{
+  if (button == GLUT_RIGHT_BUTTON)
+  {
+    if (winRButtonState != state)
+      winRedraw = GLCD_TRUE;
+
+    if (state == GLUT_DOWN)
+    {
+      winRButtonX = x;
+      winRButtonY = y;
+    }
+    winRButtonState = state;
+  }
 }
 
 //
@@ -631,20 +693,10 @@ static void lcdGlutMsgQueueProcess(void)
 //
 static void lcdGlutRender(void)
 {
-  unsigned char x, y;
-  unsigned char line;
-  unsigned char lcdByte;
-  unsigned char pixel;
-  unsigned char pixValDraw;
-  unsigned char byteValIgnore;
-  unsigned char controller;
-  float posX, posY;
-  float minX, maxX;
-  float viewAspectRatio;
-  float arX, arY;
-  float brightnessDraw;
   int winWidth = glutGet(GLUT_WINDOW_WIDTH);
   int winHeight = glutGet(GLUT_WINDOW_HEIGHT);
+  float arView = (float)winWidth / winHeight;
+  float arX, arY;
 
   // Statistics
   pthread_mutex_lock(&mutexStats);
@@ -661,28 +713,159 @@ static void lcdGlutRender(void)
   glLoadIdentity();
 
   // Set the projection orthogonal
-  viewAspectRatio = (float)winWidth / winHeight;
-  if (viewAspectRatio < GLUT_ASPECTRATIO)
+  if (arView < GLUT_ASPECTRATIO)
   {
     // Shrink drawing area on the y-axis
-    glOrtho(-1, 1, -GLUT_ASPECTRATIO / viewAspectRatio,
-      GLUT_ASPECTRATIO / viewAspectRatio, -1, 1);
+    glOrtho(-1, 1, -GLUT_ASPECTRATIO / arView, GLUT_ASPECTRATIO / arView, -1,
+      1);
     arX = 1;
-    arY = GLUT_ASPECTRATIO / viewAspectRatio;
+    arY = GLUT_ASPECTRATIO / arView;
   }
   else
   {
     // Shrink drawing area on the x-axis
-    glOrtho(-viewAspectRatio / GLUT_ASPECTRATIO,
-      viewAspectRatio / GLUT_ASPECTRATIO, -1, 1, -1, 1);
-    arX = viewAspectRatio / GLUT_ASPECTRATIO;
+    glOrtho(-arView / GLUT_ASPECTRATIO, arView / GLUT_ASPECTRATIO, -1, 1, -1,
+      1);
+    arX = arView / GLUT_ASPECTRATIO;
     arY = 1;
   }
 
-  // We're going to draw our window that is fully cleared, which is a black
-  // background
+  // Draw our glut window that is fully cleared as a black background.
+  // Init the Monochron display layout and then add pixels, pixel bezels,
+  // gridlines, redraw size info and highlight pixel with glcd position.
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
+  lcdGlutRenderInit();
+  lcdGlutRenderPixels();
+  lcdGlutRenderBezel(arX, winWidth);
+  lcdGlutRenderGrid();
+  lcdGlutRenderSize(arX, arY, winWidth, winHeight);
+  lcdGlutRenderPosition(arX, arY, winWidth, winHeight);
+
+  // Swap buffers for next redraw
+  glutSwapBuffers();
+}
+
+//
+// Function: lcdGlutRenderBezel
+//
+// Render pixel bezels in a Monochron display
+//
+static void lcdGlutRenderBezel(float arX, int winWidth)
+{
+  unsigned char x, y;
+  unsigned char controller;
+  float posX, posY;
+  float minX, maxX;
+
+  // Draw pixel bezel lines only when requested and when a certain minimum
+  // Monochron window pixel width has been reached, or else the bezel lines
+  // will blur the actual pixels
+  if (winPixelBezel == GLCD_TRUE &&
+      (float)winWidth * GLCD_XPIXELS / GLUT_XPIXELS / arX > GLUT_PIXBEZEL_WIDTH_PX)
+  {
+    // Draw from top to bottom
+    glBegin(GL_LINES);
+      glColor3f(0, 0, 0);
+      posX = -1L + GLUT_PIX_X_SIZE;
+      for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
+      {
+        // Skip controller draw area when the controller is switched off as
+        // there is nothing to draw
+        if (lcdGlutCtrl[controller].display == GLCD_FALSE)
+        {
+          posX = posX + GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
+          continue;
+        }
+
+        // Draw the vertical lines per controller
+        for (x = 0; x < GLCD_CONTROLLER_XPIXELS; x++)
+        {
+          glVertex2f(posX, -1L + GLUT_PIX_Y_SIZE);
+          glVertex2f(posX,  1L - GLUT_PIX_Y_SIZE);
+          posX = posX + GLUT_PIX_X_SIZE;
+        }
+      }
+
+      // For drawing left to right first check if at least one controller is
+      // enabled
+      if (lcdGlutCtrl[0].display == GLCD_TRUE ||
+          lcdGlutCtrl[1].display == GLCD_TRUE)
+      {
+        // Skip controller draw area when it is switched off as there is
+        // nothing to draw
+        minX = -1L + GLUT_PIX_X_SIZE;
+        maxX = 1L - GLUT_PIX_X_SIZE;
+        if (lcdGlutCtrl[0].display == GLCD_FALSE)
+          minX = minX + GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
+        if (lcdGlutCtrl[1].display == GLCD_FALSE)
+          maxX = maxX - GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
+
+        // Draw horizontal lines
+        posY = -1L + GLUT_PIX_Y_SIZE;
+        for (y = 0; y < GLCD_CONTROLLER_YPIXELS; y++)
+        {
+          glVertex2f(minX, posY);
+          glVertex2f(maxX, posY);
+          posY = posY + GLUT_PIX_Y_SIZE;
+        }
+      }
+    glEnd();
+  }
+}
+
+//
+// Function: lcdGlutRenderGrid
+//
+// Render gridlines in a Monochron display
+//
+static void lcdGlutRenderGrid(void)
+{
+  unsigned char i;
+
+  // Draw gridlines for testing purposes
+  if (winGridLines == GLCD_TRUE)
+  {
+    glColor3f(GLUT_GRID_BRIGHTNESS, GLUT_GRID_BRIGHTNESS,
+      GLUT_GRID_BRIGHTNESS);
+    glBegin(GL_LINES);
+      // Horizontal and vertical gridlines
+      for (i = 1; i < 8; i++)
+      {
+        glVertex2f(i * 16 * GLUT_PIX_X_SIZE - 1 + GLUT_PIX_X_SIZE, -1);
+        glVertex2f(i * 16 * GLUT_PIX_X_SIZE - 1 + GLUT_PIX_X_SIZE,  1);
+      }
+      for (i = 1; i < 4; i++)
+      {
+        glVertex2f(-1, i * 16 * GLUT_PIX_Y_SIZE - 1 + GLUT_PIX_Y_SIZE);
+        glVertex2f( 1, i * 16 * GLUT_PIX_Y_SIZE - 1 + GLUT_PIX_Y_SIZE);
+      }
+      // Cross gridlines 1
+      glVertex2f(-1 + GLUT_PIX_X_SIZE, -1 + GLUT_PIX_Y_SIZE);
+      glVertex2f( 1 - GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
+      glVertex2f(-1 + GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
+      glVertex2f( 1 - GLUT_PIX_X_SIZE, -1 + GLUT_PIX_Y_SIZE);
+    glEnd();
+    glBegin(GL_LINE_LOOP);
+      // Cross gridlines 2
+      glVertex2f(-1 + GLUT_PIX_X_SIZE, 0);
+      glVertex2f(0,  1 - GLUT_PIX_Y_SIZE);
+      glVertex2f( 1 - GLUT_PIX_X_SIZE, 0);
+      glVertex2f(0, -1 + GLUT_PIX_Y_SIZE);
+    glEnd();
+  }
+}
+
+//
+// Function: lcdGlutRenderInit
+//
+// Initialize a Monochron display by drawing a controller area background (if
+// needed) and the display border.
+//
+static void lcdGlutRenderInit(void)
+{
+  unsigned char controller;
+  float minX, maxX;
 
   // Find out which controllers have a majority of white pixels to draw
   for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
@@ -738,12 +921,29 @@ static void lcdGlutRender(void)
     glVertex2f( 1 - GLUT_PIX_X_SIZE / 2, 1 - GLUT_PIX_Y_SIZE / 2);
     glVertex2f( 1 - GLUT_PIX_X_SIZE / 2,-1 + GLUT_PIX_Y_SIZE / 2);
   glEnd();
+}
+
+//
+// Function: lcdGlutRenderPixels
+//
+// Render minority pixels in a Monochron display
+//
+static void lcdGlutRenderPixels(void)
+{
+  unsigned char x, y;
+  unsigned char line;
+  unsigned char lcdByte;
+  unsigned char pixel;
+  unsigned char pixValDraw;
+  unsigned char byteValIgnore;
+  unsigned char controller;
+  float posX, posY;
+  float brightnessDraw;
 
   // The Monochron background and window frame are drawn and the parameters
   // for drawing either black or white pixels are set.
-  // Now render the minority filled lcd pixels in our beautiful Monochron
-  // display using the display image buffer.
-  // Begin at left of x axis and work our way to the right.
+  // Now render the minority filled lcd pixels. Begin at left of x axis and
+  // work our way to the right.
   posX = -1L + GLUT_PIX_X_SIZE;
   glBegin(GL_QUADS);
     for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
@@ -795,8 +995,7 @@ static void lcdGlutRender(void)
             line = line + 8;
             if (line >= GLCD_CONTROLLER_YPIXELS)
             {
-              // Due to startline offset we will continue at a new offset from
-              // the top
+              // Due to startline offset continue at a new offset from the top
               line = line - GLCD_CONTROLLER_YPIXELS;
               posY = 1L - GLUT_PIX_Y_SIZE - line * GLUT_PIX_Y_SIZE;
             }
@@ -823,7 +1022,7 @@ static void lcdGlutRender(void)
               line++;
               if (line == GLCD_CONTROLLER_YPIXELS)
               {
-                // Due to startline offset we will continue at the top
+                // Due to startline offset continue at the top
                 line = 0;
                 posY = 1L - GLUT_PIX_Y_SIZE;
               }
@@ -841,110 +1040,139 @@ static void lcdGlutRender(void)
       }
     }
   glEnd();
+}
 
-  // Draw pixel bezel lines only when requested and when a certain minimum
-  // Monochron window pixel width has been reached, or else the bezel lines
-  // will blur the actual pixels
-  if (winPixelBezel == GLCD_TRUE &&
-      (float)winWidth * GLCD_XPIXELS / GLUT_XPIXELS / arX > GLUT_PIXBEZEL_WIDTH_PX)
+//
+// Function: lcdGlutRenderPosition
+//
+// Render a red highlighted pizel and its glcd position in a Monochron display
+//
+static void lcdGlutRenderPosition(float arX, float arY, int winWidth,
+  int winHeight)
+{
+  unsigned char controller;
+  int winX, winY;
+  int winGlcdX, winGlcdY;
+  float x, y;
+  float dx, dy;
+  float posX, posY;
+  float pixelSizeX, pixelSizeY;
+  char sizeInfo1[14];
+  char sizeInfo2[14];
+  int size1, size2;
+  char *c;
+
+  if (winRButtonState == GLUT_DOWN)
   {
-    // Draw from top to bottom
-    glBegin(GL_LINES);
-      glColor3f(0, 0, 0);
-      posX = -1L + GLUT_PIX_X_SIZE;
-      for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
-      {
-        // Skip controller draw area when the controller is switched off as there
-        // is nothing to draw
-        if (lcdGlutCtrl[controller].display == GLCD_FALSE)
-        {
-          posX = posX + GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
-          continue;
-        }
+    // Obtain window position in draw pixels
+    winX = (int)((float) winRButtonX / winWidth * arX * GLUT_XPIXELS -
+      (arX - 1) * GLUT_XPIXELS / 2);
+    winY = (int)((float) winRButtonY / winHeight * arY * GLUT_YPIXELS -
+      (arY - 1) * GLUT_YPIXELS / 2);
 
-        // Draw the vertical lines per controller
-        for (x = 0; x < GLCD_CONTROLLER_XPIXELS; x++)
-        {
-          glVertex2f(posX, -1L + GLUT_PIX_Y_SIZE);
-          glVertex2f(posX,  1L - GLUT_PIX_Y_SIZE);
-          posX = posX + GLUT_PIX_X_SIZE;
-        }
-      }
+    // Only highlight a pixel when inside the frame
+    if (winX >= 1 && winX <= GLCD_XPIXELS && winY >= 1 && winY <= GLCD_YPIXELS)
+    {
+      // Determine the pixel location in glcd terms
+      winGlcdX = winX - 1;
+      controller = winGlcdX / GLCD_CONTROLLER_XPIXELS;
+      winGlcdY = (winY - 1 + lcdGlutCtrl[controller].startLine) %
+        GLCD_CONTROLLER_YPIXELS;
 
-      // For drawing left to right first check if at least one controller is
-      // enabled
-      if (lcdGlutCtrl[0].display == GLCD_TRUE ||
-          lcdGlutCtrl[1].display == GLCD_TRUE)
-      {
-        // Skip controller draw area when it is switched off as there is nothing
-        // to draw
-        minX = -1L + GLUT_PIX_X_SIZE;
-        maxX = 1L - GLUT_PIX_X_SIZE;
-        if (lcdGlutCtrl[0].display == GLCD_FALSE)
-          minX = minX + GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
-        if (lcdGlutCtrl[1].display == GLCD_FALSE)
-          maxX = maxX - GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
+      // Highlight the pixel in red at 1.5 pixel size
+      posX = -1L + GLUT_PIX_X_SIZE * winX;
+      posY = 1L - GLUT_PIX_Y_SIZE * winY;
+      glColor3f(1, 0, 0);
+      glBegin(GL_QUADS);
+        glVertex2f(posX - GLUT_PIX_X_SIZE / 2, posY - GLUT_PIX_Y_SIZE -
+          GLUT_PIX_Y_SIZE / 2);
+        glVertex2f(posX + GLUT_PIX_X_SIZE + GLUT_PIX_X_SIZE / 2, posY -
+          GLUT_PIX_Y_SIZE - GLUT_PIX_Y_SIZE / 2);
+        glVertex2f(posX + GLUT_PIX_X_SIZE + GLUT_PIX_X_SIZE / 2, posY +
+          GLUT_PIX_Y_SIZE / 2);
+        glVertex2f(posX - GLUT_PIX_X_SIZE / 2, posY + GLUT_PIX_Y_SIZE / 2);
+      glEnd();
 
-        // Draw horizontal lines
-        posY = -1L + GLUT_PIX_Y_SIZE;
-        for (y = 0; y < GLCD_CONTROLLER_YPIXELS; y++)
-        {
-          glVertex2f(minX, posY);
-          glVertex2f(maxX, posY);
-          posY = posY + GLUT_PIX_Y_SIZE;
-        }
-      }
-    glEnd();
+      // Show window pixel size and Monochron draw area pixel size in a textbox
+      // Get strings for window pixel size and Monochron draw area pixel size
+      // and determine window pixel size in relation to the projection
+      size1 = snprintf(sizeInfo1, 14, "glcd(x,y)");
+      size2 = snprintf(sizeInfo2, 14, "(%d,%d)", winGlcdX, winGlcdY);
+      pixelSizeX = 2 * arX / winWidth;
+      pixelSizeY = 2 * arY / winHeight;
+
+      // Background box with border for text strings
+      if (size1 > size2)
+        x = (float)size1 * 4.5 * pixelSizeX;
+      else
+        x = (float)size2 * 4.5 * pixelSizeX;
+      y = (float)18 * pixelSizeY;
+
+      // Place text box near the pixel, based on pixel quadrant
+      dx = (winRButtonX - winWidth / 2) * pixelSizeX;
+      dy = -(winRButtonY - winHeight / 2) * pixelSizeY;
+      if (winX - 1 < GLCD_XPIXELS / 2)
+        dx = dx + x * 2;
+      else
+        dx = dx - x * 2;
+      if (winY - 1 < GLCD_YPIXELS / 2)
+        dy = dy - y * 2;
+      else
+        dy = dy + y * 2;
+      glColor3f(0.4, 0.4, 0.4);
+      glBegin(GL_QUADS);
+        glVertex2f(-x - 3 * pixelSizeX + dx, -18 * pixelSizeY + dy);
+        glVertex2f( x + 3 * pixelSizeX + dx, -18 * pixelSizeY + dy);
+        glVertex2f( x + 3 * pixelSizeX + dx,  18 * pixelSizeY + dy);
+        glVertex2f(-x - 3 * pixelSizeX + dx,  18 * pixelSizeY + dy);
+      glEnd();
+
+      // Draw the glcd fixed text string in the box
+      x = (float)size1 * 4.5 * pixelSizeX;
+      y = (float)5 * pixelSizeY;
+      glColor3f(0, 1, 1);
+      glRasterPos2f(-x + dx, y + dy);
+      for (c = sizeInfo1; *c != '\0'; c++)
+        glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+
+      // Draw the glcd position in the box
+      x = (float)size2 * 4.5 * pixelSizeX;
+      y = -(float)12 * pixelSizeY;
+      glRasterPos2f(-x + dx, y + dy);
+      for (c = sizeInfo2; *c != '\0'; c++)
+        glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+    }
   }
+}
 
-  // Draw gridlines for testing purposes
-  if (winGridLines == GLCD_TRUE)
-  {
-    int i;
+//
+// Function: lcdGlutRenderSchedule
+//
+// Signal a glut redraw in the main loop due to system and end-user actions
+//
+static void lcdGlutRenderSchedule(void)
+{
+  winRedraw = GLCD_TRUE;
+}
 
-    glColor3f(GLUT_GRID_BRIGHTNESS, GLUT_GRID_BRIGHTNESS,
-      GLUT_GRID_BRIGHTNESS);
-    glBegin(GL_LINES);
-      // Horizontal and vertical gridlines
-      for (i = 1; i < 8; i++)
-      {
-        glVertex2f(i * 16 * GLUT_PIX_X_SIZE - 1 + GLUT_PIX_X_SIZE, -1);
-        glVertex2f(i * 16 * GLUT_PIX_X_SIZE - 1 + GLUT_PIX_X_SIZE,  1);
-      }
-      for (i = 1; i < 4; i++)
-      {
-        glVertex2f(-1, i * 16 * GLUT_PIX_Y_SIZE - 1 + GLUT_PIX_Y_SIZE);
-        glVertex2f( 1, i * 16 * GLUT_PIX_Y_SIZE - 1 + GLUT_PIX_Y_SIZE);
-      }
-      // Cross gridlines 1
-      glVertex2f(-1 + GLUT_PIX_X_SIZE, -1 + GLUT_PIX_Y_SIZE);
-      glVertex2f( 1 - GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
-      glVertex2f(-1 + GLUT_PIX_X_SIZE,  1 - GLUT_PIX_Y_SIZE);
-      glVertex2f( 1 - GLUT_PIX_X_SIZE, -1 + GLUT_PIX_Y_SIZE);
-    glEnd();
-    glBegin(GL_LINE_LOOP);
-      // Cross gridlines 2
-      glVertex2f(-1 + GLUT_PIX_X_SIZE, 0);
-      glVertex2f(0,  1 - GLUT_PIX_Y_SIZE);
-      glVertex2f( 1 - GLUT_PIX_X_SIZE, 0);
-      glVertex2f(0, -1 + GLUT_PIX_Y_SIZE);
-    glEnd();
-  }
+//
+// Function: lcdGlutRenderSize
+//
+// Render a textbox showing window size info after a resize operation
+//
+static void lcdGlutRenderSize(float arX, float arY, int winWidth,
+  int winHeight)
+{
+  float x, y;
+  float pixelSizeX, pixelSizeY;
+  char sizeInfo1[14];
+  char sizeInfo2[14];
+  int size1, size2;
+  char *c;
 
-  // Draw pixel size info after resizing the window
+  // Draw window pixel size info after resizing the window
   if (winShowWinSize == GLCD_TRUE)
   {
-    // Show window pixel size and Monochron draw area pixel size in a textbox
-    char sizeInfo1[14];
-    char sizeInfo2[14];
-    int size1;
-    int size2;
-    char *c;
-    float x;
-    float y;
-    float pixelSizeX;
-    float pixelSizeY;
-
     // Get strings for window pixel size and Monochron draw area pixel size
     // and determine window pixel size in relation to the projection
     size1 = snprintf(sizeInfo1, 14, "%dx%d", winWidth, winHeight);
@@ -982,19 +1210,6 @@ static void lcdGlutRender(void)
     for (c = sizeInfo2; *c != '\0'; c++)
       glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
   }
-
-  // Swap buffers for next redraw
-  glutSwapBuffers();
-}
-
-//
-// Function: lcdGlutRenderPrepare
-//
-// Signal a redraw in the main loop due to (amonst others) window reshape
-//
-static void lcdGlutRenderPrepare(void)
-{
-  winRedraw = GLCD_TRUE;
 }
 
 //
@@ -1035,7 +1250,7 @@ void lcdGlutReshapeProcess(void)
   if (winResize == GLCD_TRUE)
   {
     // There has been a glut resize event. Clear it and begin showing
-    // window pixel size info
+    // window pixel size info.
     winResize = GLCD_FALSE;
     winShowWinSize = GLCD_TRUE;
     winRedraw = GLCD_TRUE;
@@ -1054,6 +1269,20 @@ void lcdGlutReshapeProcess(void)
       winRedraw = GLCD_TRUE;
     }
   }
+}
+
+//
+// Function: lcdGlutSleep
+//
+// Sleep amount in time (in msec)
+//
+static void lcdGlutSleep(int sleep)
+{
+  struct timeval tvWait;
+
+  tvWait.tv_sec = 0;
+  tvWait.tv_usec = sleep * 1000;
+  select(0, NULL, NULL, NULL, &tvWait);
 }
 
 //

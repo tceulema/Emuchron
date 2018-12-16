@@ -38,9 +38,6 @@
 #define SET_BRT		105
 #define SET_DSP		106
 
-// How many pixels to indent the menu items
-#define MENU_INDENT	8
-
 // Button keypress delay (msec)
 #define KEYPRESS_DLY_1	150
 

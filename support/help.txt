@@ -1,8 +1,9 @@
 
 mchron - Emuchron emulator command line tool
 
-Use: mchron [-l <device>] [-t <tty>] [-g <geometry>] [-p <position>]
-            [-d <logfile>] [-h]
+Use: mchron [-d <logfile>] [-g <geometry>] [-h] [-l <device>] [-p <position>]
+            [-t <tty>]
+            
   -d <logfile>  - Debug logfile name
   -g <geometry> - Geometry (x,y) of glut window
                   Default: "520x264"
@@ -92,7 +93,7 @@ Commands:
               controller-1: 0 = off, 1 = on
   'le'  - Erase lcd display
   'lgg' - Set glut graphics options
-          Argument: <pixelbezel> <markerlines>
+          Arguments: <pixelbezel> <markerlines>
               pixelbezel: 0 = off, 1 = on
               gridlines: 0 = off, 1 = on
   'li'  - Inverse lcd display

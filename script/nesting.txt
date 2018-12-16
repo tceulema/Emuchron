@@ -4,17 +4,16 @@
 # Purpose: Test whether lots of nested repeat-for loops works.
 #          Consider this a performance test for the interpreter/CPU.
 #          Run this test a few times to average out the result duration.
-#          On a decent Intel VM machine this script takes about 15 secs to run.
+#          On a decent Intel VM machine this script takes about 14 secs to run.
 #
 # Result : x = 2^22 = 4194304
 #
 
+hm -- wait for the script to complete or abort with 'q' --
+
 # Clear all variables and init loop counter
 vr .
 vs x=0
-
-# Report start time
-tp
 
 # Nest 22 repeat-for loops where each loop runs twice
 rf aa=0 aa<=1 aa=aa+1
@@ -63,8 +62,7 @@ rf aa=0 aa<=1 aa=aa+1
  rn
 rn
 
-# Report end time and show all variables from this script
-tp
+# Show all variables from this script
 vp .
 hm Variable x:
 he x
