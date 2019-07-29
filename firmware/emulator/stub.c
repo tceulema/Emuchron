@@ -44,8 +44,8 @@
 // may be larger or smaller or not needed at all. Play (pun intended) with
 // both values until you find something that makes you feel comfortable.
 // On my machines prefix pulse value 95 (msec) seems to hit a sweet spot.
-// To re-iterate, only Debian 8 or later run as a VM seems to require a blank
-// prefix pulse. Use mchron command 'b' (beep) to test this.
+// To re-iterate, only Debian run as a VM seems to require a blank prefix
+// pulse. Use mchron command 'b' (beep) to test this.
 //
 // Emuchron v4.1:
 // By changing the parameters in the sox command to play audio, it looks like
@@ -170,8 +170,8 @@ static void alarmPidStart(void)
     // We forked successfully!
     // Emuchron tool genalarm generated an audio file for us to play.
     // The genalarm tool is built and run via MakefileEmu [firmware].
-    execlp("/usr/bin/play", "/usr/bin/play", "-q", "emulator/alarm.au", "-DG",
-      "-t", "alsa", "repeat", "3600", NULL);
+    execlp("/usr/bin/play", "/usr/bin/play", "-q", "emulator/alarm.au", "-t",
+      "alsa", "repeat", "3600", NULL);
     exit(0);
   }
   else
@@ -554,7 +554,7 @@ char stubEventGet(void)
     if (eventCycleState == CYCLE_REQ_WAIT)
     {
       alarmPidStop();
-      printf("\n<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
+      printf("\n<cycle: c = next cycle, p = next cycle + stats, q = quit, other key = resume> ");
       fflush(stdout);
       // Continue in single cycle mode
       eventCycleState = CYCLE_WAIT;
@@ -568,7 +568,7 @@ char stubEventGet(void)
       // Print and glcd/controller performance statistics
       printf("\n");
       ctrlStatsPrint(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
-      printf("\n<cycle: c = next cycle, p = next cycle + stats, other key = resume> ");
+      printf("\n<cycle: c = next cycle, p = next cycle + stats, q = quit, other key = resume> ");
       fflush(stdout);
       ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
     }
@@ -582,7 +582,14 @@ char stubEventGet(void)
     }
 
     // Verify keypress and its impact on the wait state
-    if (ch != 'c' && ch != 'p')
+    if (ch == 'q')
+    {
+      // Quit the clock emulator mode
+      eventCycleState = CYCLE_REQ_NOWAIT;
+      printf("\n");
+      return ch;
+    }
+    else if (ch != 'c' && ch != 'p')
     {
       // Not a 'c' or 'p' character: resume to normal mode state
       eventCycleState = CYCLE_REQ_NOWAIT;
@@ -839,13 +846,13 @@ u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
     // Assume it is a request to set the RTC time
     uint8_t sec, min, hr, day, date, mon, yr;
 
-    sec = ((data[1] >> 4) & 0xF) * 10 + (data[1] & 0xF);
-    min = ((data[2] >> 4) & 0xF) * 10 + (data[2] & 0xF);
-    hr = ((data[3] >> 4) & 0xF) * 10 + (data[3] & 0xF);
-    day = ((data[4] >> 4) & 0xF) * 10 + (data[4] & 0xF);
-    date = ((data[5] >> 4) & 0xF) * 10 + (data[5] & 0xF);
-    mon = ((data[6] >> 4) & 0xF) * 10 + (data[6] & 0xF);
-    yr = ((data[7] >> 4) & 0xF) * 10 + (data[7] & 0xF);
+    sec = ((data[1] >> 4) & 0xf) * 10 + (data[1] & 0xf);
+    min = ((data[2] >> 4) & 0xf) * 10 + (data[2] & 0xf);
+    hr = ((data[3] >> 4) & 0xf) * 10 + (data[3] & 0xf);
+    day = ((data[4] >> 4) & 0xf) * 10 + (data[4] & 0xf);
+    date = ((data[5] >> 4) & 0xf) * 10 + (data[5] & 0xf);
+    mon = ((data[6] >> 4) & 0xf) * 10 + (data[6] & 0xf);
+    yr = ((data[7] >> 4) & 0xf) * 10 + (data[7] & 0xf);
     stubTimeSet(sec, min, hr, day, date, mon, yr);
     retVal = 0;
   }

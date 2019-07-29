@@ -104,7 +104,7 @@ static void glcdInitHW(void)
   // Initialize lcd data port to output
   GLCD_DATAH_DDR |= 0xf0;
   GLCD_DATAL_DDR |= 0x0f;
-  //outb(GLCD_DATA_DDR, 0xFF);
+  //outb(GLCD_DATA_DDR, 0xff);
 #endif
 }
 
@@ -121,7 +121,7 @@ static void glcdBusyWait(u08 controller)
   // Select the controller chip
   glcdControlSelect(controller);
   // Do a read from control register
-  //outb(GLCD_DATA_PORT, 0xFF);
+  //outb(GLCD_DATA_PORT, 0xff);
   GLCD_DATAH_PORT |= 0xf0;
   GLCD_DATAL_PORT |= 0x0f;
 
@@ -144,7 +144,7 @@ static void glcdBusyWait(u08 controller)
   }
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
-  //outb(GLCD_DATA_DDR, 0xFF);
+  //outb(GLCD_DATA_DDR, 0xff);
   GLCD_DATAH_DDR |= 0xf0;
   GLCD_DATAL_DDR |= 0x0f;
   sei();
@@ -182,7 +182,7 @@ void glcdControlWrite(u08 controller, u08 data)
   cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
-  //outb(GLCD_DATA_DDR, 0xFF);
+  //outb(GLCD_DATA_DDR, 0xff);
   GLCD_DATAH_DDR |= 0xf0;
   GLCD_DATAL_DDR |= 0x0f;
   //outb(GLCD_DATA_PORT, data);
@@ -236,7 +236,7 @@ void glcdControlWrite(u08 controller, u08 data)
   data = (GLCD_DATAH_PIN & 0xf0) | (GLCD_DATAL_PIN & 0x0f);
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
-  //outb(GLCD_DATA_DDR, 0xFF);
+  //outb(GLCD_DATA_DDR, 0xff);
   GLCD_DATAH_DDR |= 0xf0;
   GLCD_DATAL_DDR |= 0x0f;
   sei();
@@ -330,7 +330,7 @@ void glcdDataWrite(u08 data)
   sbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
-  //outb(GLCD_DATA_DDR, 0xFF);
+  //outb(GLCD_DATA_DDR, 0xff);
   GLCD_DATAH_DDR |= 0xf0;
   GLCD_DATAL_DDR |= 0x0f;
 

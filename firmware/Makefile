@@ -29,31 +29,31 @@ BASE = anim.c buttons.c config.c glcd.c i2c.c ks0108.c monomain.c util.c
 # Based on the selection of source files in SRC, configure the clocks in
 # monochron[] in anim.c [firmware].
 
-# Monochron clocks - I
+# Monochron clocks - 1
 SRC = $(BASE) \
   clock/digital.c clock/analog.c clock/puzzle.c \
   clock/spotfire.c clock/cascade.c clock/speeddial.c clock/spiderplot.c \
   clock/trafficlight.c
 
-# Monochron clocks - II
+# Monochron clocks - 2
 #SRC = $(BASE) \
 #  clock/example.c clock/mosquito.c clock/nerd.c clock/pong.c clock/slider.c
 
-# Monochron clocks - III
+# Monochron clocks - 3
 #SRC = $(BASE) \
 #  clock/analog.c clock/bigdigit.c clock/digital.c clock/qr.c clock/qrencode.c
 
-# Monochron clocks - IV
+# Monochron clocks - 4
 #SRC = $(BASE) \
 #  clock/spotfire.c clock/barchart.c clock/cascade.c clock/crosstable.c \
 #  clock/linechart.c clock/piechart.c clock/speeddial.c clock/spiderplot.c \
 #  clock/thermometer.c clock/trafficlight.c
 
-# Monochron clocks - V - glcd performance test (that uses analog clock code)
+# Monochron clocks - 5 - glcd performance test (that uses analog clock code)
 #SRC = $(BASE) \
 #  clock/perftest.c clock/analog.c
 
-# All clocks
+# Monochron clocks - 6 - all clocks
 # Note: This will build a much too big firmware file but serves as a test to
 # verify whether everything will build cleanly
 #SRC = $(BASE) \
@@ -105,7 +105,7 @@ ASFLAGS = -Wa,-adhlns=$(<:.S=.lst),-gstabs
 # Optional linker flags:
 #  -Wl,...:   tell gcc to pass this to linker
 #  -Map:      create map file
-#  --cref:    add cross reference to  map file
+#  --cref:    add cross reference to map file
 LDFLAGS = -Wl,-Map=$(TARGET).map,--cref
 
 # Additional libraries
@@ -166,12 +166,12 @@ MSG_BEGIN = -------- begin --------
 MSG_END = --------  end  --------
 MSG_SIZE_BEFORE = Size before:
 MSG_SIZE_AFTER = Size after:
-MSG_COFF = Converting to AVR COFF:
-MSG_EXTENDED_COFF = Converting to AVR Extended COFF:
-MSG_FLASH = Creating load file for Flash:
-MSG_EEPROM = Creating load file for EEPROM:
-MSG_EXTENDED_LISTING = Creating Extended Listing:
-MSG_SYMBOL_TABLE = Creating Symbol Table:
+MSG_COFF = Converting to avr coff:
+MSG_EXTENDED_COFF = Converting to avr extended coff:
+MSG_FLASH = Creating load file for flash:
+MSG_EEPROM = Creating load file for eeprom:
+MSG_EXTENDED_LISTING = Creating extended listing:
+MSG_SYMBOL_TABLE = Creating symbol table:
 MSG_LINKING = Linking:
 MSG_COMPILING = Compiling:
 MSG_ASSEMBLING = Assembling:
@@ -289,7 +289,7 @@ extcoff: $(TARGET).elf
 %.elf: $(OBJ)
 	@echo
 	@echo $(MSG_LINKING) $@
-	$(CC) $(ALL_CFLAGS) $(OBJ) --output $@ $(LDFLAGS)
+	$(CC) --output $@ $(OBJ) -mmcu=$(MCU) $(LDFLAGS)
 
 # Compile: create object files from C source files
 %.o: %.c

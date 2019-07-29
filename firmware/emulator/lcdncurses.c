@@ -32,7 +32,7 @@
 #define GLCD_NUM_CONTROLLERS \
   ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
 #define GLCD_CONTROLLER_XPIXBITS 6
-#define GLCD_CONTROLLER_XPIXMASK 0x3F
+#define GLCD_CONTROLLER_XPIXMASK 0x3f
 #define GLCD_FALSE		0
 #define GLCD_TRUE		1
 #define GLCD_OFF		0
@@ -224,8 +224,7 @@ void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data)
       {
         // Switch between draw color and draw pixel
         lcdNcurDrawModeSet(controller, data & GLCD_ON);
-        mvwprintw(lcdNcurCtrl[controller].winCtrl, posY, posX,
-          lcdNcurPixel);
+        mvwprintw(lcdNcurCtrl[controller].winCtrl, posY, posX, lcdNcurPixel);
       }
     }
 
@@ -397,8 +396,8 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   // Check if the ncurses tty is actually in use
   if (stat(lcdNcurInitArgs.tty, &statTty) != 0)
   {
-    printf("%s: -t: destination ncurses tty \"%s\" is not in use\n", __progname,
-      lcdNcurInitArgs.tty);
+    printf("%s: -t: destination ncurses tty \"%s\" is not in use\n",
+      __progname, lcdNcurInitArgs.tty);
     return GLCD_FALSE;
   }
 
@@ -416,7 +415,7 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
     {
       printf("%s: -t: destination ncurses tty \"%s\" size (%dx%d) is too\n",
         __progname, lcdNcurInitArgs.tty, sizeTty.ws_col, sizeTty.ws_row);
-      printf("small for use as mchron ncurses terminal (min = %dx%d chars)\n",
+      printf("small for use as monochron ncurses terminal (min = %dx%d chars)\n",
         NCUR_X_PIXELS, NCUR_Y_PIXELS);
       fclose(fp);
       return GLCD_FALSE;

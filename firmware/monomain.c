@@ -70,8 +70,8 @@ extern volatile uint8_t btnTickerHold;
 extern volatile uint8_t btnTickerConv;
 
 // The following variables drive the realtime clock.
-// In case the clock fails to init set it to noon 1/1/2019.
-volatile rtcDateTime_t rtcDateTime = { 0, 0, 12, 1, 1, 19 };
+// In case the clock fails to init set it to noon 1/7/2019.
+volatile rtcDateTime_t rtcDateTime = { 0, 0, 12, 1, 7, 19 };
 volatile rtcDateTime_t rtcDateTimeNext;
 volatile uint8_t rtcTimeEvent = GLCD_FALSE;
 
@@ -505,12 +505,9 @@ SIGNAL(TIMER2_OVF_vect)
 
     // Log new time
     DEBUG(putstring("**** "));
-    DEBUG(uart_putw_dec(rtcDateTime.timeHour));
-    DEBUG(uart_putchar(':'));
-    DEBUG(uart_putw_dec(rtcDateTime.timeMin));
-    DEBUG(uart_putchar(':'));
-    DEBUG(uart_putw_dec(rtcDateTime.timeSec));
-    DEBUG(putstring_nl(""));
+    DEBUG(uart_putw_dec(rtcDateTime.timeHour); uart_putchar(':'));
+    DEBUG(uart_putw_dec(rtcDateTime.timeMin); uart_putchar(':'));
+    DEBUG(uart_putw_dec(rtcDateTime.timeSec); putstring_nl(""));
 
     // If we're in the config main menu we have a continuous time update
     // except when editing time itself or alarms or when we're changing
@@ -526,7 +523,7 @@ SIGNAL(TIMER2_OVF_vect)
   if (rtcTimeEvent == GLCD_FALSE &&
       rtcDateTimeNext.timeSec != rtcDateTime.timeSec)
   {
-    DEBUGP("Raise time event");
+    DEBUGTP("Raise time event");
     rtcDateTimeNext = rtcDateTime;
     rtcTimeEvent = GLCD_TRUE;
   }
@@ -800,11 +797,8 @@ uint8_t rtcDotw(uint8_t mon, uint8_t day, uint8_t year)
 static void rtcFailure(uint8_t code, uint8_t id)
 {
   // Not able to instruct/read/set RTC. Beep forever since we're screwed.
-  DEBUG(putstring("i2c data: "));
-  DEBUG(uart_putw_dec(id));
-  DEBUG(putstring(", "));
-  DEBUG(uart_putw_dec(code));
-  DEBUG(putstring_nl(""));
+  DEBUG(putstring("i2c data: "); uart_putw_dec(id); putstring(", "));
+  DEBUG(uart_putw_dec(code); putstring_nl(""));
   sei();
   while (1)
   {
@@ -841,7 +835,7 @@ void rtcMchronTimeInit(void)
   while (rtcTimeEvent == GLCD_FALSE);
   // Then restart the time scan mechanism while forcing a new time to
   // be generated
-  DEBUGP("Clear time event");
+  DEBUGTP("Clear time event");
   rtcDateTimeNext.timeSec = 60;
   rtcTimeEvent = GLCD_FALSE;
   // And finally wait for a new registered time event in next time scan cycle
@@ -849,7 +843,7 @@ void rtcMchronTimeInit(void)
 #else
   // As the emulator event loop is not in a separate thread nor is
   // interrupt driven we have to do things a bit differently
-  DEBUGP("Clear time event");
+  DEBUGTP("Clear time event");
   rtcTimeEvent = GLCD_FALSE;
   rtcDateTimeNext.timeSec = 60;
   monoTimer();
@@ -877,19 +871,12 @@ void rtcTimeInit(void)
   rtcTimeRead();
 
   DEBUG(putstring("\nread "));
-  DEBUG(uart_putw_dec(rtcDateTime.timeHour));
-  DEBUG(uart_putchar(':'));
-  DEBUG(uart_putw_dec(rtcDateTime.timeMin));
-  DEBUG(uart_putchar(':'));
-  DEBUG(uart_putw_dec(rtcDateTime.timeSec));
-
-  DEBUG(uart_putchar('\t'));
-  DEBUG(uart_putw_dec(rtcDateTime.dateDay));
-  DEBUG(uart_putchar('/'));
-  DEBUG(uart_putw_dec(rtcDateTime.dateMon));
-  DEBUG(uart_putchar('/'));
-  DEBUG(uart_putw_dec(rtcDateTime.dateYear));
-  DEBUG(putstring_nl(""));
+  DEBUG(uart_putw_dec(rtcDateTime.timeHour); uart_putchar(':'));
+  DEBUG(uart_putw_dec(rtcDateTime.timeMin); uart_putchar(':'));
+  DEBUG(uart_putw_dec(rtcDateTime.timeSec); uart_putchar('\t'));
+  DEBUG(uart_putw_dec(rtcDateTime.dateDay); uart_putchar('/'));
+  DEBUG(uart_putw_dec(rtcDateTime.dateMon); uart_putchar('/'));
+  DEBUG(uart_putw_dec(rtcDateTime.dateYear); putstring_nl(""));
 
   TCCR2B = _BV(CS22) | _BV(CS21) | _BV(CS20); // div by 1024
   // Overflow ~30Hz = 8MHz/(255 * 1024)
@@ -912,10 +899,10 @@ uint8_t rtcTimeRead(void)
 
   // Get the time from the RTC
   cli();
-  r = i2cMasterSendNI(0xD0, 1, &regaddr);
+  r = i2cMasterSendNI(0xd0, 1, &regaddr);
   if (r != 0)
     rtcFailure(r, 0);
-  r = i2cMasterReceiveNI(0xD0, 7, clockdata);
+  r = i2cMasterReceiveNI(0xd0, 7, clockdata);
   sei();
   if (r != 0)
     rtcFailure(r, 1);
@@ -964,7 +951,7 @@ void rtcTimeWrite(void)
   clockdata[7] = bcdEncode(rtcDateTime.dateYear);
 
   cli();
-  uint8_t r = i2cMasterSendNI(0xD0, 8, clockdata);
+  uint8_t r = i2cMasterSendNI(0xd0, 8, clockdata);
   sei();
   if (r != 0)
     rtcFailure(r, 2);

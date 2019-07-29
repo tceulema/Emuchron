@@ -167,8 +167,8 @@ int main(int argc, char *argv[])
   emuArgcArgv_t emuArgcArgv;
   int retVal = CMD_RET_OK;
 
-  // Setup signal handlers to either recover from signal or to attempt
-  // graceful non-standard exit
+  // Setup signal handlers to either recover from signal or to attempt graceful
+  // non-standard exit
   emuSigSetup();
 
   // Do command line processing
@@ -385,7 +385,7 @@ int doAlarmSet(cmdLine_t *cmdLine)
       // alarm time will be displayed when the clock is initialized after
       // exiting the config menu. We therefore don't care what the old value
       // was. This behavior will not cause a problem for most clocks when we
-      // are in command mode and change the alarm: the alarm time wil
+      // are in command mode and change the alarm: the alarm time will
       // overwrite the old value on the lcd. However, for a clock like Analog
       // that shows the alarm in an analog clock style, changing the alarm in
       // command mode will draw the new alarm while not erasing the old alarm
@@ -491,15 +491,13 @@ int doClockFeed(cmdLine_t *cmdLine)
   mcAlarming = GLCD_FALSE;
   rtcMchronTimeInit();
 
-  // Init stub event handler used in main loop below
+  // Init stub event handler used in main loop below and get first event
   stubEventInit(startWait, stubHelpClockFeed);
+  ch = stubEventGet();
 
   // Run clock until 'q'
   while (ch != 'q')
   {
-    // Get timer event
-    ch = stubEventGet();
-
     // Process keyboard events
     if (ch == 's')
       animClockButton(BTN_SET);
@@ -511,6 +509,9 @@ int doClockFeed(cmdLine_t *cmdLine)
 
     // Just processed another cycle
     mcCycleCounter++;
+
+    // Get next timer event
+    ch = stubEventGet();
   }
 
   // Flush any pending updates in the lcd device
@@ -1007,30 +1008,40 @@ int doLcdErase(cmdLine_t *cmdLine)
 //
 int doLcdGlutGrSet(cmdLine_t *cmdLine)
 {
-  u08 bezel = TO_UINT8_T(argDouble[0]);
-  u08 grid = TO_UINT8_T(argDouble[1]);
-
   // Ignore if glut device is not used
   if (ctrlDeviceActive(CTRL_DEVICE_GLUT) == GLCD_FALSE)
     return CMD_RET_OK;
 
   // Set glut pixel bezel and gridline options on/off
-  ctrlLcdGlutGrSet(bezel, grid);
+  ctrlLcdGlutGrSet(TO_UINT8_T(argDouble[0]), TO_UINT8_T(argDouble[1]));
 
-  // Report the new option settings
-  if (echoCmd == CMD_ECHO_YES)
-  {
-    printf("glut pixel bezel: ");
-    if (bezel == GLCD_TRUE)
-      printf("on\n");
-    else
-      printf("off\n");
-    printf("glut gridlines: ");
-    if (grid == GLCD_TRUE)
-      printf("on\n");
-    else
-      printf("off\n");
-  }
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdHlReset
+//
+// Reset (clear) glcd pixel highlight (glut only)
+//
+int doLcdHlReset(cmdLine_t *cmdLine)
+{
+  // Disable glcd pixel highlight
+  ctrlLcdHighlight(GLCD_FALSE, 0, 0);
+  ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doLcdHlSet
+//
+// Enable glcd pixel highlight (glut only)
+//
+int doLcdHlSet(cmdLine_t *cmdLine)
+{
+  // Enable glcd pixel highlight
+  ctrlLcdHighlight(GLCD_TRUE, TO_U08(argDouble[0]), TO_U08(argDouble[1]));
+  ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
@@ -1069,25 +1080,13 @@ int doLcdInverse(cmdLine_t *cmdLine)
 //
 int doLcdNcurGrSet(cmdLine_t *cmdLine)
 {
-  u08 backlight = TO_UINT8_T(argDouble[0]);
-
   // Ignore if ncurses device is not used
   if (ctrlDeviceActive(CTRL_DEVICE_NCURSES) == GLCD_FALSE)
     return CMD_RET_OK;
 
   // Set ncurses backlight option on/off
-  ctrlLcdNcurGrSet(backlight);
+  ctrlLcdNcurGrSet(TO_UINT8_T(argDouble[0]));
   ctrlLcdFlush();
-
-  // Report the new option setting
-  if (echoCmd == CMD_ECHO_YES)
-  {
-    printf("ncurses backlight: ");
-    if (backlight == GLCD_TRUE)
-      printf("on\n");
-    else
-      printf("off\n");
-  }
 
   return CMD_RET_OK;
 }

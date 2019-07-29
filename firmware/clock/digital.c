@@ -55,7 +55,7 @@ extern char *animDays[7];
 // Random value for determining the occurrence and duration of glitch
 static u16 digiRandBase = M_PI * M_PI * 1000;
 static const float digiRandSeed = 3.9147258617;
-static u16 digiRandVal = 0xA5C3;
+static u16 digiRandVal = 0xa5c3;
 #endif
 
 // These variables control the layout of the digital clock
@@ -328,7 +328,7 @@ static void digiPeriodSet(void)
 #ifdef DIGI_GLITCH
 static void digiRandGet(void)
 {
-  digiRandBase = (int)(digiRandSeed * (digiRandVal + mcClockNewTM) * 213);
+  digiRandBase = (u16)(digiRandSeed * (digiRandVal + mcClockNewTM) * 213);
   digiRandVal = mcCycleCounter * digiRandSeed + digiRandBase;
 }
 #endif

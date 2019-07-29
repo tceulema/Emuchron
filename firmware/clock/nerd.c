@@ -17,10 +17,30 @@
 // Specifics for nerd clock
 #define NERD_ALARM_X_START	2
 #define NERD_ALARM_Y_START	57
-#define NERD_CLOCK_BINARY	0
-#define NERD_CLOCK_OCTAL	1
-#define NERD_CLOCK_HEX		2
 #define NERD_ITEM_LEN		14
+
+// Size and index of element format info for a single clock in nerdFormat[]
+#define NERD_DATA_LEN	15 // Number of data elements for a single clock
+#define NERD_MASK_LEN	0  // Bit mask length (representing the number base)
+#define NERD_LOC_YHMS	1  // Start y location of h:m:s
+#define NERD_LOC_XTH	2  // Start x location of time h
+#define NERD_DIG_TH	3  // Number of digits of time h
+#define NERD_LOC_XTM	4  // Start x location of time m
+#define NERD_DIG_TM	5  // Number of digits of time m
+#define NERD_LOC_XTS	6  // Start x location of time s
+#define NERD_DIG_TS	7  // Number of digits of time s
+#define NERD_LOC_YDMY	8  // Start y location of d/m/y
+#define NERD_LOC_XDD	9  // Start x location of date d
+#define NERD_DIG_DD	10 // Number of digits of date d
+#define NERD_LOC_XDM	11 // Start x location of date m
+#define NERD_DIG_DM	12 // Number of digits of date m
+#define NERD_LOC_XDY	13 // Start x location of date y
+#define NERD_DIG_DY	14 // Number of digits of date y
+
+// Clock element start index in nerdFormat[]
+#define NERD_CLOCK_BINARY	(0 * NERD_DATA_LEN)
+#define NERD_CLOCK_OCTAL	(1 * NERD_DATA_LEN)
+#define NERD_CLOCK_HEX		(2 * NERD_DATA_LEN)
 
 // Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
@@ -31,44 +51,18 @@ extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcFgColor;
 
-// Structure defining the lcd element locations for a single clock
-typedef struct _nerdLocation_t
+// Display definitions for the binary, octal and hex clock elements
+static const unsigned char __attribute__ ((progmem)) nerdFormat[] =
 {
-  uint8_t maskLen;	// Number mask length (representing the number base)
-  uint8_t locYHms;	// Start y location of h:m:s
-  uint8_t locXTH;	// Start x location of time h
-  uint8_t digitsTH;	// Number of digits of time h
-  uint8_t locXTM;	// Start x location of time m
-  uint8_t digitsTM;	// Number of digits of time m
-  uint8_t locXTS;	// Start x location of time s
-  uint8_t digitsTS;	// Number of digits of time s
-  uint8_t locYDmy;	// Start y location of d/m/y
-  uint8_t locXDD;	// Start x location of date d
-  uint8_t digitsDD;	// Number of digits of date d
-  uint8_t locXDM;	// Start x location of date m
-  uint8_t digitsDM;	// Number of digits of date m
-  uint8_t locXDY;	// Start x location of date y
-  uint8_t digitsDY;	// Number of digits of date y
-} nerdLocation_t;
-
-// Location definitions for the binary, octal and hex clock elements
-static nerdLocation_t nerdLocation[] =
-{
-  {
-    1, // Binary clock
-    17, 28, 5, 28 + 5 * 4 + 2, 6, 28 + 11 * 4 + 2 * 2,  6,
-    24, 18, 5, 18 + 6 * 4    , 4, 18 + 11 * 4        , 12
-  },
-  {
-    3, // Octal clock
-    33, 48, 2, 48 + 3 * 4 + 2, 2, 48 +  6 * 4 + 2 * 2,  2,
-    40, 42, 2, 42 + 4 * 4    , 2, 42 +  8 * 4        ,  4
-  },
-  {
-    4, // Hex clock
-    49, 46, 2, 46 + 4 * 4 + 2, 2, 46 +  8 * 4 + 2 * 2,  2,
-    56, 44, 2, 44 + 5 * 4    , 1, 44 +  9 * 4        ,  3
-  }
+  1, // Binary clock
+  17, 28, 5, 28 + 5 * 4 + 2, 6, 28 + 11 * 4 + 2 * 2,  6,
+  24, 18, 5, 18 + 6 * 4    , 4, 18 + 11 * 4        , 12,
+  3, // Octal clock
+  33, 48, 2, 48 + 3 * 4 + 2, 2, 48 +  6 * 4 + 2 * 2,  2,
+  40, 42, 2, 42 + 4 * 4    , 2, 42 +  8 * 4        ,  4,
+  4, // Hex clock
+  49, 46, 2, 46 + 4 * 4 + 2, 2, 46 +  8 * 4 + 2 * 2,  2,
+  56, 44, 2, 44 + 5 * 4    , 1, 44 +  9 * 4        ,  3
 };
 
 // The clock digit characters
@@ -78,9 +72,9 @@ static const unsigned char __attribute__ ((progmem)) nerdDigit[] =
 };
 
 // Local function prototypes
-static void nerdBaseClockUpdate(uint8_t clock);
-static void nerdPrintNumber(uint8_t maskLen, uint8_t digits, uint16_t oldVal,
-  uint16_t newVal, uint8_t x, uint8_t y);
+static void nerdBaseClockUpdate(u08 clock);
+static void nerdPrintNumber(u08 maskLen, u08 digits, u16 oldVal, u16 newVal,
+  u08 x, u08 y);
 
 //
 // Function: nerdCycle
@@ -129,47 +123,54 @@ void nerdInit(u08 mode)
 //
 // Draw update for a single clock
 //
-static void nerdBaseClockUpdate(uint8_t clock)
+static void nerdBaseClockUpdate(u08 clock)
 {
-  nerdLocation_t thisClock = nerdLocation[clock];
-
   // Verify changes in hour + min + sec
-  nerdPrintNumber(thisClock.maskLen, thisClock.digitsTH, mcClockOldTH,
-    mcClockNewTH, thisClock.locXTH, thisClock.locYHms);
-  nerdPrintNumber(thisClock.maskLen, thisClock.digitsTM, mcClockOldTM,
-    mcClockNewTM, thisClock.locXTM, thisClock.locYHms);
-  nerdPrintNumber(thisClock.maskLen, thisClock.digitsTS, mcClockOldTS,
-    mcClockNewTS, thisClock.locXTS, thisClock.locYHms);
+  nerdPrintNumber(clock + NERD_MASK_LEN, clock + NERD_DIG_TH, mcClockOldTH,
+    mcClockNewTH, clock + NERD_LOC_XTH, clock + NERD_LOC_YHMS);
+  nerdPrintNumber(clock + NERD_MASK_LEN, clock + NERD_DIG_TM, mcClockOldTM,
+    mcClockNewTM, clock + NERD_LOC_XTM, clock + NERD_LOC_YHMS);
+  nerdPrintNumber(clock + NERD_MASK_LEN, clock + NERD_DIG_TS, mcClockOldTS,
+    mcClockNewTS, clock + NERD_LOC_XTS, clock + NERD_LOC_YHMS);
 
   // Verify changes in day + mon + year
-  nerdPrintNumber(thisClock.maskLen, thisClock.digitsDD, mcClockOldDD,
-    mcClockNewDD, thisClock.locXDD, thisClock.locYDmy);
-  nerdPrintNumber(thisClock.maskLen, thisClock.digitsDM, mcClockOldDM,
-    mcClockNewDM, thisClock.locXDM, thisClock.locYDmy);
-  nerdPrintNumber(thisClock.maskLen, thisClock.digitsDY, mcClockOldDY + 2000,
-    mcClockNewDY + 2000, thisClock.locXDY, thisClock.locYDmy);
+  nerdPrintNumber(clock + NERD_MASK_LEN, clock + NERD_DIG_DD, mcClockOldDD,
+    mcClockNewDD, clock + NERD_LOC_XDD, clock + NERD_LOC_YDMY);
+  nerdPrintNumber(clock + NERD_MASK_LEN, clock + NERD_DIG_DM, mcClockOldDM,
+    mcClockNewDM, clock + NERD_LOC_XDM, clock + NERD_LOC_YDMY);
+  nerdPrintNumber(clock + NERD_MASK_LEN, clock + NERD_DIG_DY,
+    mcClockOldDY + 2000, mcClockNewDY + 2000, clock + NERD_LOC_XDY,
+    clock + NERD_LOC_YDMY);
 }
 
 //
-// Function: nerdBaseClockUpdate
+// Function: nerdPrintNumber
 //
 // Construct and print text string for a clock element in the requested number
 // base (derived from the provided number mask length) with the requested
 // string length (that can lead to prefix '0' chars and a postfix space).
+// Note that parameters maskLen, digits, x and y are indices in nerdFormat[]
+// where to find the actual value.
 //
-static void nerdPrintNumber(uint8_t maskLen, uint8_t digits, uint16_t oldVal,
-  uint16_t newVal, uint8_t x, uint8_t y)
+static void nerdPrintNumber(u08 maskLen, u08 digits, u16 oldVal, u16 newVal,
+  u08 x, u08 y)
 {
-  uint8_t i;
-  uint16_t mask;
-  uint8_t digit;
-  uint8_t thinDigits = 0;
+  u08 i;
+  u16 mask;
+  u08 digit;
+  u08 thinDigits = 0;
   char numberStr[NERD_ITEM_LEN];	// The string to print filled backwards
-  uint8_t idx = NERD_ITEM_LEN - 2;	// Index in numberStr
+  u08 idx = NERD_ITEM_LEN - 2;		// Index in numberStr
 
   // First check if we need to do anything
   if (oldVal == newVal && mcClockInit == GLCD_FALSE)
     return;
+
+  // Get the clock display metadata
+  maskLen = pgm_read_byte(&nerdFormat[maskLen]);
+  digits = pgm_read_byte(&nerdFormat[digits]);
+  x = pgm_read_byte(&nerdFormat[x]);
+  y = pgm_read_byte(&nerdFormat[y]);
 
   // Generate the requested length of characters starting at the last digit
   // up to the first
@@ -177,13 +178,13 @@ static void nerdPrintNumber(uint8_t maskLen, uint8_t digits, uint16_t oldVal,
   for (i = 0; i < digits; i++)
   {
     // Get digit and put it in string
-    idx--;
+    idx = idx - 1;
     digit = (newVal & mask);
     numberStr[idx] = pgm_read_byte(&nerdDigit[digit]);
 
     // Count occurrences of e and f characters that are only two pixels wide
     if (digit > 13)
-      thinDigits++;
+      thinDigits = thinDigits + 1;
 
     // Move to preceding digit
     newVal = newVal >> maskLen;

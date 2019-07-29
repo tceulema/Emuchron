@@ -45,11 +45,11 @@
 // Structure defining the several layouts for a Spotfire menu bar
 typedef struct
 {
-  uint8_t barText;	// Alignment: left or center
-  uint8_t day;		// Message date day
-  uint8_t month;	// Message date month
-  char *msg1;		// First message
-  char *msg2;		// Optional message added after first
+  u08 barText;	// Alignment: left or center
+  u08 day;	// Message date day
+  u08 month;	// Message date month
+  char *msg1;	// First message
+  char *msg2;	// Optional message added after first
 } menuBarDriver_t;
 
 // Monochron environment variables
@@ -70,7 +70,7 @@ extern char animSec[];
 static char barNewYear[] = "*** happy new year ***";
 static char barAprFool[] = "*** happy april fool's day ***";
 static char barBirthday[] = "** happy birthday ";
-static char barMsgDflt[] = "FILE  EDIT  VIEW  INSERT  TOOLS  HELP";
+static char barMsgDflt[] = "FILE  EDIT  DATA  VISUALIZATIONS  VIEW";
 
 // The menuBarDriver array defines the possible Spotfire menu bars.
 // The last entry in the array is considered the default.
@@ -117,7 +117,7 @@ void spotAxisInit(u08 clockId)
     // Barchart
     glcdDot(37, 57, mcFgColor);
     glcdDot(64, 57, mcFgColor);
-    xs = 72; xh = 16; y=58;
+    xs = 72; xh = 16; y = 58;
   }
   else if (clockId == CHRON_CASCADE || clockId == CHRON_LINECHART)
   {
@@ -247,7 +247,7 @@ void spotCommonInit(char *label, u08 mode)
     menuBarId = 255;
     spotMenuBarUpdate();
 
-    // Init the visualization Title bar label
+    // Init the visualization title bar label
     glcdPutStr2(2, 9, FONT_5X5P, label, mcFgColor);
 
     // Filter panel label
@@ -319,16 +319,15 @@ static void spotMenuBarUpdate(void)
   // initializing
   if (mcClockDateEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
   {
-    uint8_t i = 1;
-    uint8_t posX;
+    u08 i;
+    u08 posX;
     menuBarDriver_t *mbDriver = menuBarDriver;
 
     // Find the new menu bar
-    while (i < sizeof(menuBarDriver) / sizeof(menuBarDriver_t))
+    for (i = 1; i < sizeof(menuBarDriver) / sizeof(menuBarDriver_t); i++)
     {
       if (mcClockNewDD == mbDriver->day && mcClockNewDM == mbDriver->month)
         break;
-      i++;
       mbDriver++;
     }
 

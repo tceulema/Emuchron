@@ -9,7 +9,7 @@
 #include "global.h"
 
 // Version of our emuchron code base
-#define EMUCHRON_VERSION	"v4.2"
+#define EMUCHRON_VERSION	"v5.0"
 
 // Debugging macros.
 // Note that DEBUGGING is the master switch for generating debug output.
@@ -17,10 +17,14 @@
 #define DEBUGGING	0
 #define DEBUG(x)	if (DEBUGGING) { x; }
 #define DEBUGP(x)	DEBUG(putstring_nl(x))
+// Select to report debug entries for time change events
+#define DEBUGTIME	1
+#define DEBUGT(x)	if (DEBUGGING && DEBUGTIME) { x; }
+#define DEBUGTP(x)	DEBUGT(putstring_nl(x))
 
 // Software options. Uncomment to enable.
-// BACKLIGHT_ADJUST - Allows software control of backlight, assuming
-// you mounted your 100ohm resistor in R2.
+// BACKLIGHT_ADJUST - Allows software control of backlight, assuming you
+// mounted your 100ohm resistor in R2.
 #define BACKLIGHT_ADJUST 1
 
 // Define application clock cycle msec timer value for animation and keypress
@@ -44,8 +48,6 @@
 #define PIEZO_PIN	PINC
 #define PIEZO_DDR	DDRC
 #define PIEZO		3
-
-// Enums
 
 // Constants for how to display time & date.
 // Those commented out are no longer supported.

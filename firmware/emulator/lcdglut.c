@@ -13,17 +13,16 @@
 #include "lcdglut.h"
 
 // This is ugly:
-// Why can't we include the GLCD_* defs below from ks0108conf.h and
-// ks0108.h?
+// Why can't we include the GLCD_* defs below from ks0108conf.h and ks0108.h?
 // The reason for this is that headers in glut and avr define identical
-// typedefs like uint32_t, making it impossible to compile glut code in
-// an avr environment.
-// So, we have to build glut completely independent from avr, and
-// because of this we have to duplicate common stuff defines like lcd
-// panel pixel sizes and colors in here.
-// This also means that we can 'communicate' with the outside world
-// using only common data types such as int, char, etc and whatever we
-// define locally and expose via our header.
+// typedefs like uint32_t, making it impossible to compile glut code in an avr
+// environment.
+// So, we have to build glut completely independent from avr, and because of
+// this we have to duplicate common stuff defines like lcd panel pixel sizes
+// and colors in here.
+// This also means that we can 'communicate' with the outside world using only
+// common data types such as int, char, etc and whatever we define locally and
+// expose via our header.
 #define GLCD_XPIXELS		128
 #define GLCD_YPIXELS		64
 #define GLCD_CONTROLLER_XPIXELS	64
@@ -31,7 +30,7 @@
 #define GLCD_NUM_CONTROLLERS \
   ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
 #define GLCD_CONTROLLER_XPIXBITS 6
-#define GLCD_CONTROLLER_YPIXMASK 0x3F
+#define GLCD_CONTROLLER_YPIXMASK 0x3f
 #define GLCD_FALSE		0
 #define GLCD_TRUE		1
 #define GLCD_OFF		0
@@ -85,15 +84,17 @@
 #define GLUT_CMD_DISPLAY	3
 #define GLUT_CMD_STARTLINE	4
 #define GLUT_CMD_OPTIONS	5
+#define GLUT_CMD_HIGHLIGHT	6
 
 // Definition of an lcd message to process for our glut window.
 // Structure is populated depending on the message command:
 // cmd = GLUT_CMD_EXIT		- <no arguments used>
-// cmd = GLUT_CMD_BYTEDRAW	- arg1 = draw byte value, arg2 = x, arg3 = y
+// cmd = GLUT_CMD_BYTEDRAW	- arg1 = pixel byte, arg2 = x, arg3 = yline
 // cmd = GLUT_CMD_BACKLIGHT	- arg1 = backlight value
 // cmd = GLUT_CMD_DISPLAY	- arg1 = controller, arg2 = display value
 // cmd = GLUT_CMD_STARTLINE	- arg1 = controller, arg2 = startline value
 // cmd = GLUT_CMD_OPTIONS	- arg1 = pixel bezel, arg2 = gridlines
+// cmd = GLUT_CMD_HIGHLIGHT	- arg1 = highlight, arg = x, arg3 = y
 typedef struct _lcdGlutMsg_t
 {
   unsigned char cmd;		// Message command (draw, backlight (etc))
@@ -166,10 +167,13 @@ static unsigned char winResize = GLCD_FALSE;
 static unsigned char winShowWinSize = GLCD_FALSE;
 static struct timeval tvWinReshapeLast;
 
-// Identifiers signalling right-button up/down state and location
-static int winRButtonState = GLUT_UP;
+// Identifiers right-button down event and pixel highlight location
+static int winRButtonEvent = GLCD_FALSE;
 static int winRButtonX = 0;
 static int winRButtonY = 0;
+static int winPixHighlight = GLCD_FALSE;
+static int winPixGlcdX = 0;
+static int winPixGlcdY = 0;
 
 // The init parameters
 static lcdGlutInitArgs_t lcdGlutInitArgs;
@@ -202,10 +206,10 @@ static void lcdGlutMsgQueueProcess(void);
 static void lcdGlutRender(void);
 static void lcdGlutRenderBezel(float arX, int winWidth);
 static void lcdGlutRenderGrid(void);
+static void lcdGlutRenderHighlight(float arX, float arY, int winWidth,
+  int winHeight);
 static void lcdGlutRenderInit(void);
 static void lcdGlutRenderPixels(void);
-static void lcdGlutRenderPosition(float arX, float arY, int winWidth,
-  int winHeight);
 static void lcdGlutRenderSchedule(void);
 static void lcdGlutRenderSize(float arX, float arY, int winWidth,
   int winHeight);
@@ -298,6 +302,18 @@ void lcdGlutGraphicsSet(unsigned char bezel, unsigned char grid)
 {
   // Add msg to queue to enable/disable pixel bezel and gridline support
   lcdGlutMsgQueueAdd(GLUT_CMD_OPTIONS, bezel, grid, 0);
+}
+
+//
+// Function: lcdGlutHighlightSet
+//
+// Enable/disable pixel highlight
+//
+void lcdGlutHighlightSet(unsigned char highlight, unsigned char x,
+  unsigned char y)
+{
+  // Add msg to queue to set/reset glcd pixel highlight
+  lcdGlutMsgQueueAdd(GLUT_CMD_HIGHLIGHT, highlight, x, y);
 }
 
 //
@@ -450,6 +466,7 @@ static void *lcdGlutMain(void *ptr)
     {
       lcdGlutRender();
       winRedraw = GLCD_FALSE;
+      winRButtonEvent = GLCD_FALSE;
     }
 
     // Go to sleep to achieve low cpu usage combined with a glut refresh rate
@@ -629,6 +646,18 @@ static void lcdGlutMsgQueueProcess(void)
         winRedraw = GLCD_TRUE;
       }
     }
+    else if (lcdGlutMsg->cmd == GLUT_CMD_HIGHLIGHT)
+    {
+      // Set/reset glcd pixel highlight
+      if (winPixHighlight != lcdGlutMsg->arg1 ||
+          winPixGlcdX != lcdGlutMsg->arg2 || winPixGlcdY != lcdGlutMsg->arg3)
+      {
+        winPixHighlight = lcdGlutMsg->arg1;
+        winPixGlcdX = lcdGlutMsg->arg2;
+        winPixGlcdY = lcdGlutMsg->arg3;
+        winRedraw = GLCD_TRUE;
+      }
+    }
     else if (lcdGlutMsg->cmd == GLUT_CMD_EXIT)
     {
       // Signal to exit glut thread (when queue is processed)
@@ -668,21 +697,16 @@ static void lcdGlutMsgQueueProcess(void)
 //
 // Function: lcdGlutMouse
 //
-// Get right-click mouse event to trigger glcd pixel highlight
+// Get right-click mouse down event to toggle glcd pixel highlight
 //
 static void lcdGlutMouse(int button, int state, int x, int y)
 {
-  if (button == GLUT_RIGHT_BUTTON)
+  if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN)
   {
-    if (winRButtonState != state)
-      winRedraw = GLCD_TRUE;
-
-    if (state == GLUT_DOWN)
-    {
-      winRButtonX = x;
-      winRButtonY = y;
-    }
-    winRButtonState = state;
+    winRedraw = GLCD_TRUE;
+    winRButtonEvent = GLCD_TRUE;
+    winRButtonX = x;
+    winRButtonY = y;
   }
 }
 
@@ -740,7 +764,7 @@ static void lcdGlutRender(void)
   lcdGlutRenderBezel(arX, winWidth);
   lcdGlutRenderGrid();
   lcdGlutRenderSize(arX, arY, winWidth, winHeight);
-  lcdGlutRenderPosition(arX, arY, winWidth, winHeight);
+  lcdGlutRenderHighlight(arX, arY, winWidth, winHeight);
 
   // Swap buffers for next redraw
   glutSwapBuffers();
@@ -853,6 +877,123 @@ static void lcdGlutRenderGrid(void)
       glVertex2f( 1 - GLUT_PIX_X_SIZE, 0);
       glVertex2f(0, -1 + GLUT_PIX_Y_SIZE);
     glEnd();
+  }
+}
+
+//
+// Function: lcdGlutRenderHighlight
+//
+// Render a red highlighted pixel and its glcd position in a Monochron display
+//
+static void lcdGlutRenderHighlight(float arX, float arY, int winWidth,
+  int winHeight)
+{
+  unsigned char controller;
+  int winX, winY;
+  int winLcdGlcdY;
+  float posX, posY;
+  float x, y;
+  float dx, dy;
+  float pixelSizeX, pixelSizeY;
+  char sizeInfo1[14];
+  char sizeInfo2[14];
+  int size1, size2;
+  char *c;
+
+  // See if a pixel highlight on/off toggle event occurred
+  if (winRButtonEvent == GLCD_TRUE && winPixHighlight == GLCD_TRUE)
+  {
+    // Disable pixel highlight
+    winPixHighlight = GLCD_FALSE;
+  }
+  else if (winRButtonEvent == GLCD_TRUE && winPixHighlight == GLCD_FALSE)
+  {
+    // Obtain window position in draw pixels
+    winX = (int)((float) winRButtonX / winWidth * arX * GLUT_XPIXELS -
+      (arX - 1) * GLUT_XPIXELS / 2);
+    winY = (int)((float) winRButtonY / winHeight * arY * GLUT_YPIXELS -
+      (arY - 1) * GLUT_YPIXELS / 2);
+
+    // Only enable pixel highlight when inside the glcd frame
+    if (winX >= 1 && winX <= GLCD_XPIXELS && winY >= 1 && winY <= GLCD_YPIXELS)
+    {
+      // Enable pixel highlight and determine its location in glcd terms
+      winPixHighlight = GLCD_TRUE;
+      winPixGlcdX = winX - 1;
+      controller = winPixGlcdX / GLCD_CONTROLLER_XPIXELS;
+      winPixGlcdY = (winY - 1 + lcdGlutCtrl[controller].startLine) %
+        GLCD_CONTROLLER_YPIXELS;
+    }
+  }
+
+  // Draw highlighted glcd pixel when active
+  if (winPixHighlight == GLCD_TRUE)
+  {
+    // Highlight the glcd pixel in red at 1.5 pixel size
+    controller = winPixGlcdX / GLCD_CONTROLLER_XPIXELS;
+    winLcdGlcdY = (winPixGlcdY - lcdGlutCtrl[controller].startLine +
+      GLCD_CONTROLLER_YPIXELS) % GLCD_CONTROLLER_YPIXELS;
+    posX = -1L + GLUT_PIX_X_SIZE * (winPixGlcdX + 1);
+    posY = 1L - GLUT_PIX_Y_SIZE * (winLcdGlcdY + 1);
+    glColor3f(1, 0, 0);
+    glBegin(GL_QUADS);
+      glVertex2f(posX - GLUT_PIX_X_SIZE / 2, posY - GLUT_PIX_Y_SIZE -
+        GLUT_PIX_Y_SIZE / 2);
+      glVertex2f(posX + GLUT_PIX_X_SIZE + GLUT_PIX_X_SIZE / 2, posY -
+        GLUT_PIX_Y_SIZE - GLUT_PIX_Y_SIZE / 2);
+      glVertex2f(posX + GLUT_PIX_X_SIZE + GLUT_PIX_X_SIZE / 2, posY +
+        GLUT_PIX_Y_SIZE / 2);
+      glVertex2f(posX - GLUT_PIX_X_SIZE / 2, posY + GLUT_PIX_Y_SIZE / 2);
+    glEnd();
+
+    // Show glcd pixel location info in a textbox.
+    // Get strings for textbox and determine window pixel size in relation to
+    // the projection.
+    size1 = snprintf(sizeInfo1, 14, "glcd(x,y)");
+    size2 = snprintf(sizeInfo2, 14, "(%d,%d)", winPixGlcdX, winPixGlcdY);
+    pixelSizeX = 2 * arX / winWidth;
+    pixelSizeY = 2 * arY / winHeight;
+
+    // Background box size with border for text strings
+    if (size1 > size2)
+      x = (float)size1 * 4.5 * pixelSizeX;
+    else
+      x = (float)size2 * 4.5 * pixelSizeX;
+    y = (float)18 * pixelSizeY;
+
+    // Place text box near the glcd pixel, based on glcd pixel quadrant
+    dx = ((float)winPixGlcdX + 1.5 - GLUT_XPIXELS / 2) / (GLUT_XPIXELS / 2);
+    dy = -((float)winLcdGlcdY + 1.5 - GLUT_YPIXELS / 2) / (GLUT_YPIXELS / 2);
+    if (winPixGlcdX < GLCD_XPIXELS / 2)
+      dx = dx + x * 2;
+    else
+      dx = dx - x * 2;
+    if (winLcdGlcdY < GLCD_YPIXELS / 2)
+      dy = dy - y * 2;
+    else
+      dy = dy + y * 2;
+    glColor3f(0.4, 0.4, 0.4);
+    glBegin(GL_QUADS);
+      glVertex2f(-x - 3 * pixelSizeX + dx, -18 * pixelSizeY + dy);
+      glVertex2f( x + 3 * pixelSizeX + dx, -18 * pixelSizeY + dy);
+      glVertex2f( x + 3 * pixelSizeX + dx,  18 * pixelSizeY + dy);
+      glVertex2f(-x - 3 * pixelSizeX + dx,  18 * pixelSizeY + dy);
+    glEnd();
+
+    // Draw the glcd fixed text string in the box
+    x = (float)size1 * 4.5 * pixelSizeX;
+    y = (float)5 * pixelSizeY;
+    glColor3f(0, 1, 1);
+    glRasterPos2f(-x + dx, y + dy);
+    for (c = sizeInfo1; *c != '\0'; c++)
+      glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
+
+    // Draw the glcd position in the box
+    x = (float)size2 * 4.5 * pixelSizeX;
+    y = -(float)12 * pixelSizeY;
+    glRasterPos2f(-x + dx, y + dy);
+    for (c = sizeInfo2; *c != '\0'; c++)
+      glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
   }
 }
 
@@ -1043,109 +1184,6 @@ static void lcdGlutRenderPixels(void)
 }
 
 //
-// Function: lcdGlutRenderPosition
-//
-// Render a red highlighted pizel and its glcd position in a Monochron display
-//
-static void lcdGlutRenderPosition(float arX, float arY, int winWidth,
-  int winHeight)
-{
-  unsigned char controller;
-  int winX, winY;
-  int winGlcdX, winGlcdY;
-  float x, y;
-  float dx, dy;
-  float posX, posY;
-  float pixelSizeX, pixelSizeY;
-  char sizeInfo1[14];
-  char sizeInfo2[14];
-  int size1, size2;
-  char *c;
-
-  if (winRButtonState == GLUT_DOWN)
-  {
-    // Obtain window position in draw pixels
-    winX = (int)((float) winRButtonX / winWidth * arX * GLUT_XPIXELS -
-      (arX - 1) * GLUT_XPIXELS / 2);
-    winY = (int)((float) winRButtonY / winHeight * arY * GLUT_YPIXELS -
-      (arY - 1) * GLUT_YPIXELS / 2);
-
-    // Only highlight a pixel when inside the frame
-    if (winX >= 1 && winX <= GLCD_XPIXELS && winY >= 1 && winY <= GLCD_YPIXELS)
-    {
-      // Determine the pixel location in glcd terms
-      winGlcdX = winX - 1;
-      controller = winGlcdX / GLCD_CONTROLLER_XPIXELS;
-      winGlcdY = (winY - 1 + lcdGlutCtrl[controller].startLine) %
-        GLCD_CONTROLLER_YPIXELS;
-
-      // Highlight the pixel in red at 1.5 pixel size
-      posX = -1L + GLUT_PIX_X_SIZE * winX;
-      posY = 1L - GLUT_PIX_Y_SIZE * winY;
-      glColor3f(1, 0, 0);
-      glBegin(GL_QUADS);
-        glVertex2f(posX - GLUT_PIX_X_SIZE / 2, posY - GLUT_PIX_Y_SIZE -
-          GLUT_PIX_Y_SIZE / 2);
-        glVertex2f(posX + GLUT_PIX_X_SIZE + GLUT_PIX_X_SIZE / 2, posY -
-          GLUT_PIX_Y_SIZE - GLUT_PIX_Y_SIZE / 2);
-        glVertex2f(posX + GLUT_PIX_X_SIZE + GLUT_PIX_X_SIZE / 2, posY +
-          GLUT_PIX_Y_SIZE / 2);
-        glVertex2f(posX - GLUT_PIX_X_SIZE / 2, posY + GLUT_PIX_Y_SIZE / 2);
-      glEnd();
-
-      // Show window pixel size and Monochron draw area pixel size in a textbox
-      // Get strings for window pixel size and Monochron draw area pixel size
-      // and determine window pixel size in relation to the projection
-      size1 = snprintf(sizeInfo1, 14, "glcd(x,y)");
-      size2 = snprintf(sizeInfo2, 14, "(%d,%d)", winGlcdX, winGlcdY);
-      pixelSizeX = 2 * arX / winWidth;
-      pixelSizeY = 2 * arY / winHeight;
-
-      // Background box with border for text strings
-      if (size1 > size2)
-        x = (float)size1 * 4.5 * pixelSizeX;
-      else
-        x = (float)size2 * 4.5 * pixelSizeX;
-      y = (float)18 * pixelSizeY;
-
-      // Place text box near the pixel, based on pixel quadrant
-      dx = (winRButtonX - winWidth / 2) * pixelSizeX;
-      dy = -(winRButtonY - winHeight / 2) * pixelSizeY;
-      if (winX - 1 < GLCD_XPIXELS / 2)
-        dx = dx + x * 2;
-      else
-        dx = dx - x * 2;
-      if (winY - 1 < GLCD_YPIXELS / 2)
-        dy = dy - y * 2;
-      else
-        dy = dy + y * 2;
-      glColor3f(0.4, 0.4, 0.4);
-      glBegin(GL_QUADS);
-        glVertex2f(-x - 3 * pixelSizeX + dx, -18 * pixelSizeY + dy);
-        glVertex2f( x + 3 * pixelSizeX + dx, -18 * pixelSizeY + dy);
-        glVertex2f( x + 3 * pixelSizeX + dx,  18 * pixelSizeY + dy);
-        glVertex2f(-x - 3 * pixelSizeX + dx,  18 * pixelSizeY + dy);
-      glEnd();
-
-      // Draw the glcd fixed text string in the box
-      x = (float)size1 * 4.5 * pixelSizeX;
-      y = (float)5 * pixelSizeY;
-      glColor3f(0, 1, 1);
-      glRasterPos2f(-x + dx, y + dy);
-      for (c = sizeInfo1; *c != '\0'; c++)
-        glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
-
-      // Draw the glcd position in the box
-      x = (float)size2 * 4.5 * pixelSizeX;
-      y = -(float)12 * pixelSizeY;
-      glRasterPos2f(-x + dx, y + dy);
-      for (c = sizeInfo2; *c != '\0'; c++)
-        glutBitmapCharacter(GLUT_BITMAP_9_BY_15, *c);
-    }
-  }
-}
-
-//
 // Function: lcdGlutRenderSchedule
 //
 // Signal a glut redraw in the main loop due to system and end-user actions
@@ -1158,7 +1196,7 @@ static void lcdGlutRenderSchedule(void)
 //
 // Function: lcdGlutRenderSize
 //
-// Render a textbox showing window size info after a resize operation
+// Render a centered textbox showing window size info after a resize operation
 //
 static void lcdGlutRenderSize(float arX, float arY, int winWidth,
   int winHeight)

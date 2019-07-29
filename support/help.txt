@@ -15,7 +15,7 @@ Use: mchron [-d <logfile>] [-g <geometry>] [-h] [-l <device>] [-p <position>]
   -p <position> - Position (x,y) of glut window
                   Default: "100,100"
   -t <tty>      - tty device for ncurses of 258x66 sized terminal
-                  Default: get <tty> from $HOME/.mchron
+                  Default: get <tty> from ~/.config/mchron/tty
 
 Examples:
   ./mchron
@@ -96,6 +96,11 @@ Commands:
           Arguments: <pixelbezel> <markerlines>
               pixelbezel: 0 = off, 1 = on
               gridlines: 0 = off, 1 = on
+  'lhr' - Reset glut glcd pixel highlight
+  'lhs' - Set glut glcd pixel highlight
+          Arguments: <x> <y>
+              x: 0..127
+              y: 0..63
   'li'  - Inverse lcd display
   'lng' - Set ncurses graphics options
           Argument: <backlight>

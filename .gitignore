@@ -10,12 +10,13 @@
 *.sym
 *.lst
 *.au
+*.log
 
 # Libraries
 *.lib
 *.a
 
-# Shared objects (inc. Windows DLLs)
+# Shared objects
 *.dll
 *.so
 *.so.*
@@ -30,10 +31,14 @@
 *.elf
 core
 
-# Specific files and folders to ignore
+# Emuchron project object files
 /firmware/mchron
 /firmware/emulator/expr.tab.c
 /firmware/emulator/expr.tab.h
 /firmware/emulator/expr.yy.c
 /firmware/emulator/genalarm
-/.vscode
+
+# IDE files and folders
+.vscode
+gede2.ini
+*.anjuta*

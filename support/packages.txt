@@ -10,25 +10,30 @@
 # - Connect and upload firmware to Monochron via the FTDI port
 # - Read Monochron debug strings from the FTDI port
 # - Debug clock and high-level graphics code
-# - Interrupt/halt debugger in Debian 8 (Jessie) and 9 (Stretch) without
-#   being warned or prompted about certain libc sourcefiles not being found
+# - Interrupt/halt debugger in Debian without being warned or prompted about
+#   certain libc sourcefiles not being found
+# - Create main menu program lauchers
 #
 
-# Compiler and AVR stuff
+# Compilers and compiler tools
 apt-get install gcc
 apt-get install make
 apt-get install flex
 apt-get install byacc
 apt-get install bison
+
+# AVR environment
 apt-get install libusb-dev
 apt-get install avr-libc
 apt-get install gcc-avr
 apt-get install avrdude
 
-# Debugger and gui front-ends
+# GDB debugger
 apt-get install gdb
-apt-get install ddd
-apt-get install nemiver
+
+# GDB gui front-ends and IDE's
+# This script no longer installs GDB gui front-ends and/or IDE's.
+# For more information refer to section ?.? of the Emuchron manual.
 
 # LCD device stubs
 apt-get install libncurses5-dev
@@ -43,55 +48,38 @@ apt-get install libreadline-dev
 # Read Monochron debug strings from FTDI port
 apt-get install minicom
 
-# For a non-annoying debugging experience in Debian 8 (Jessie) we require a
-# specific glibc source file named syscall-template.S
+# Main menu editor and program launcher utility
+apt-get install alacarte
+
+# Debian 10 requires specific glibc source files for a non-annoying debugging
+# experience in some gdb front-end gui's. The files that are referenced are
+# usually syscall-template.S and pselect.c.
 # For more info refer to section 3.7.2 of the Emuchron pdf manual.
 myDebianVersion=`lsb_release -c`
-if [[ $myDebianVersion == *"jessie"* ]];
+
+# Obtaining glibc sources for Debian 10 (Buster)
+if [[ $myDebianVersion == *"buster"* ]];
 then
-  if [ -f /build/glibc/glibc-2.19/sysdeps/unix/syscall-template.S ];
+  if [ -f /build/glibc/glibc-2.28/sysdeps/unix/syscall-template.S ];
   then
-    echo "glibc sources already available"
+    echo "glibc sources already present"
   else
-    echo "Installing/replacing glibc sources in /build/glibc"
+    echo "installing/replacing glibc sources in /build/glibc"
     apt-get install dpkg-dev
     mkdir -p /build/glibc
-    rm -rf /build/glibc/glibc-2.19
+    rm -rf /build/glibc/glibc-2.28
     cd /build/glibc
     apt-get source glibc
     cd -
   fi
-  echo "Installing/replacing glibc source symbolic links"
+  echo "installing/replacing glibc source symbolic links"
   # When needed add new symbolic link entries below
-  for i in Ir_s5K I9DIZl 3Vu5mt uPj9cH daoqzt qK83Be KShDyh 6V9RKT
+  for i in d2N3Ld vjB4T1
   do
     rm -f /build/glibc-$i
     ln -s /build/glibc /build/glibc-$i
   done
 fi
 
-# Debian 9 (Stretch) also requires glibc sources available for an unannoying
-# debugging experience, mostly being syscall-template.S and pselect.c.
-# For more info refer to section 3.7.2 of the Emuchron pdf manual.
-if [[ $myDebianVersion == *"stretch"* ]];
-then
-  if [ -f /build/glibc-2.24/sysdeps/unix/syscall-template.S ];
-  then
-    echo "glibc sources already available"
-  else
-    echo "Installing/replacing glibc sources in /build/glibc"
-    apt-get install dpkg-dev
-    mkdir -p /build/glibc
-    rm -rf /build/glibc/glibc-2.24
-    cd /build/glibc
-    apt-get source glibc
-    cd -
-  fi
-  echo "Installing/replacing glibc source symbolic links"
-  # When needed add new symbolic link entries below
-  for i in p3Km7c yWQXbR
-  do
-    rm -f /build/glibc-$i
-    ln -s /build/glibc /build/glibc-$i
-  done
-fi
+echo "done"
+

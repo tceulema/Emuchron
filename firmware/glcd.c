@@ -38,9 +38,9 @@ extern volatile uint8_t mcBgColor, mcFgColor;
 static u08 glcdBuffer[GLCD_XPIXELS];
 
 // The following arrays contain bitmap templates for fill options third up/down
-static u08 pattern3Up[] =
+static const unsigned char __attribute__ ((progmem)) pattern3Up[] =
   { 0x49, 0x24, 0x92 };
-static u08 pattern3Down[] =
+static const unsigned char __attribute__ ((progmem)) pattern3Down[] =
   { 0x49, 0x92, 0x24 };
 
 // The following variables are used for obtaining font information and font
@@ -62,9 +62,9 @@ static u16 fontCharIdx;
 // Local function prototypes
 static void glcdBufferBitUpdate(u08 x, u08 y);
 static void glcdBufferRead(u08 x, u08 yByte, u08 len);
-static u08 glcdCharWidthGet(char c, u08 *idxOffset);
 static u08 glcdFontByteGet(u08 color);
 static u16 glcdFontIdxGet(unsigned char c);
+static u08 glcdFontInfoGet(char c);
 
 //
 // Function: glcdCircle2
@@ -97,7 +97,6 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
   for (yLine = ((yCenter - radius) >> 3); yLine <= yLineEnd; yLine++)
   {
     // Reset circle generation parameters
-    x = 0;
     y = radius;
     third = 0;
     tswitch = 3 - 2 * (s08)radius;
@@ -105,12 +104,13 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
     xEnd = 0;
 
     // Generate template pixels using the right side of the circle y-line
-    while (x <= y)
+    for (x = 0; x <= y; x++)
     {
       if (lineType == CIRCLE_FULL ||
           (lineType == CIRCLE_THIRD && third == 0) ||
           (lineType != CIRCLE_THIRD && (x & 0x1) == half))
       {
+        j = GLCD_FALSE;
         i = yCenter + y;
         if ((i >> 3) == yLine)
         {
@@ -157,7 +157,6 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
             xStart = i;
           if (i > xEnd)
             xEnd = i;
-          j = GLCD_FALSE;
         }
       }
 
@@ -171,7 +170,6 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
         tswitch = tswitch + 4 * (x - y) + 10;
         y--;
       }
-      x++;
 
       // Set next offset for THIRD draw type
       if (third == 2)
@@ -276,7 +274,7 @@ void glcdDot(u08 x, u08 y, u08 color)
 void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
   u08 color)
 {
-  s08 x = 0;
+  s08 x;
   s08 y = radius;
   s08 tswitch = 3 - 2 * (u08)radius;
   u08 firstDraw = GLCD_TRUE;
@@ -290,7 +288,7 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
   // Second, an optimization merges multiple vertical line draw actions into a
   // single rectangle fill draw. This builds on optimizing the interface to our
   // lcd display and is therefor hardware oriented.
-  while (x <= y)
+  for (x = 0; x <= y; x++)
   {
     if (x != y)
     {
@@ -331,8 +329,6 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
       drawSize = 0;
       y--;
     }
-
-    x++;
   }
 }
 
@@ -481,9 +477,9 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
           template = ~template;
       }
       else if (fillType == FILL_THIRDUP)
-        template = pattern3Up[distance];
+        template = pgm_read_byte(pattern3Up + distance);
       else if (fillType == FILL_THIRDDOWN)
-        template = pattern3Down[distance];
+        template = pgm_read_byte(pattern3Down + distance);
       else // fillType == FILL_INVERSE
         template = ~lcdByte;
 
@@ -534,14 +530,12 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
 u08 glcdGetWidthStr(u08 font, char *data)
 {
   u08 width = 0;
-  u08 idxOffset;
 
+  fontId = font;
   while (*data)
   {
-    if (font == FONT_5X5P)
-      width = width + glcdCharWidthGet(*data, &idxOffset) + 1;
-    else // FONT_5X7N
-      width = width + 6;
+    glcdFontIdxGet(*data);
+    width = width + fontWidth + 1;
     data++;
   }
   return width;
@@ -634,23 +628,23 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
       // Set x and y draw points for line section pixel
       if (mode == 0)
       {
-        modifierY += deltaYAbs;
+        modifierY = modifierY + deltaYAbs;
         if (modifierY >= deltaXAbs)
         {
-          modifierY -= deltaXAbs;
-          drawY += sgnDeltaY;
+          modifierY = modifierY - deltaXAbs;
+          drawY = drawY + sgnDeltaY;
         }
-        drawX += sgnDeltaX;
+        drawX = drawX + sgnDeltaX;
       }
       else
       {
-        modifierX += deltaXAbs;
+        modifierX = modifierX + deltaXAbs;
         if (modifierX >= deltaYAbs)
         {
-          modifierX -= deltaYAbs;
-          drawX += sgnDeltaX;
+          modifierX = modifierX - deltaYAbs;
+          drawX = drawX + sgnDeltaX;
         }
-        drawY += sgnDeltaY;
+        drawY = drawY + sgnDeltaY;
       }
 
       // Detect end of line section
@@ -701,8 +695,8 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
     }
 
     // Starting points for next iteration
-    n = n + 1;
     yLine = yLine + sgnDeltaY;
+    n++;
   }
 }
 
@@ -780,8 +774,9 @@ u08 glcdPutStr2(u08 x, u08 y, u08 font, char *data, u08 color)
 u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
   u08 color)
 {
-  u08 h = 0;
-  u08 i = 0;
+  u08 h;
+  u08 i;
+  u08 j;
   u08 strWidth;
   u08 strHeight;
   u08 fontByte = 0;
@@ -795,15 +790,13 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
   u08 yByte = y / 8;
   u08 startBit = y % 8;
   u08 lcdPixelsToDo;
-  u08 lcdPixelsLeft;
   u08 mask = 0;
   u08 bitmask;
   u08 template = 0;
   char *c;
 
   // Get the width and height of the entire string
-  fontId = font;
-  strWidth = glcdGetWidthStr(fontId, data) * xScale;
+  strWidth = glcdGetWidthStr(font, data) * xScale;
   if (font == FONT_5X5P)
     strHeight = 5;
   else
@@ -811,7 +804,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
   strHeight = strHeight * yScale;
 
   // Loop through each y-pixel byte
-  while (h < strHeight)
+  for (h = 0; h < strHeight; h = h + lcdPixelsToDo)
   {
     // In most cases we partly update an lcd byte
     if (startBit != 0 || strHeight - h < 8)
@@ -837,7 +830,6 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
     // Loop for each of the character width elements
     c = data;
     currXScale = 0;
-
     for (i = 0; i < strWidth; i++)
     {
       // Do we need to get the next string character
@@ -845,8 +837,6 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
       {
         // Get next string character and start at first font byte
         fontByteIdx = 0;
-
-        // Get entry point in font array and width of the character
         fontCharIdx = glcdFontIdxGet(*c);
 
         // Prepare for next character
@@ -856,11 +846,8 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
       // When x scale of current font byte is reached get next font byte
       if (currXScale == xScale || i == 0)
       {
-        // Get next font byte
-        fontByte = glcdFontByteGet(color);
-
-        // Restart x scaling
         currXScale = 0;
+        fontByte = glcdFontByteGet(color);
 
         // Prepare for next font byte
         fontByteIdx++;
@@ -871,9 +858,6 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
       if (lcdPixelsToDo != 8)
         lcdByte = glcdBuffer[i];
 
-      // Set the number of bits to process in lcd byte
-      lcdPixelsLeft = lcdPixelsToDo;
-
       // In case of x scaling, the template for the final lcd byte merge is
       // already known
       if (currXScale == 0)
@@ -883,7 +867,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
         currFontPixel = lastFontPixel;
 
         // Set mask for final build of lcd byte
-        mask = (0xff >> (8 - lcdPixelsLeft)) << startBit;
+        mask = (0xff >> (8 - lcdPixelsToDo)) << startBit;
 
         // We can optimize when the fontbyte contains the template we need
         if (yScale == 1)
@@ -891,7 +875,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
           // No y scaling so we only need to shift the fontbyte to obtain the
           // lcd byte template
           template = (fontByte >> currFontPixel) << startBit;
-          currFontPixel = currFontPixel + lcdPixelsLeft;
+          currFontPixel = currFontPixel + lcdPixelsToDo;
         }
         else
         {
@@ -899,7 +883,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
           template = 0;
           fontBytePixel = (fontByte >> currFontPixel);
           bitmask = (0x1 << startBit);
-          while (lcdPixelsLeft != 0)
+          for (j = lcdPixelsToDo; j > 0; j--)
           {
             // Map a single fontbit on the lcd byte
             if ((fontBytePixel & 0x1) == 0x1)
@@ -917,7 +901,6 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
 
             // Proceed with next lcd bit
             bitmask = (bitmask << 1);
-            lcdPixelsLeft--;
           }
         }
       }
@@ -935,7 +918,6 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
     startBit = 0;
     lastYScale = currYScale;
     lastFontPixel = currFontPixel;
-    h = h + lcdPixelsToDo;
   }
 
   // Width + trailing blank px
@@ -951,7 +933,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
 u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
   u08 xScale, u08 yScale, u08 color)
 {
-  u08 h = 0;
+  u08 h;
   u08 i;
   u08 j;
   u08 strWidth;
@@ -965,7 +947,6 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
   u08 startBit = y % 8;
   u08 lastFontByteIdx = 0;
   u08 lcdPixelsToDo;
-  u08 lcdPixelsLeft;
   u08 mask = 0;
   u08 bitmask;
   u08 template = 0;
@@ -977,8 +958,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
   u08 lcdPixelStart;
 
   // Get the width and height of the entire string
-  fontId = font;
-  strHeight = glcdGetWidthStr(fontId, data) * yScale;
+  strHeight = glcdGetWidthStr(font, data) * yScale;
   if (font == FONT_5X5P)
     strWidth = 5;
   else
@@ -1002,7 +982,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
   }
 
   // Loop through each y-pixel byte bit by bit
-  while (h < strHeight)
+  for (h = 0; h < strHeight; h = h + lcdPixelsToDo)
   {
     // In some cases we partly update an lcd byte
     if ((orientation == ORI_VERTICAL_TD && startBit != 0) ||
@@ -1015,7 +995,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
       if (orientation == ORI_VERTICAL_TD && (startBit + (strHeight - h) > 8))
         lcdPixelsToDo = 8 - startBit;
       else if (orientation == ORI_VERTICAL_BU &&
-          ((8 - startBit) + (strHeight - h) > 8))
+          (8 - startBit) + (strHeight - h) > 8)
         lcdPixelsToDo = startBit + 1;
       else
         lcdPixelsToDo = strHeight - h;
@@ -1056,7 +1036,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
       // Build the lcd byte template bit by bit
       template = 0;
       bitmask = (0x1 << startBit);
-      for (lcdPixelsLeft = lcdPixelsToDo; lcdPixelsLeft > 0; lcdPixelsLeft--)
+      for (j = lcdPixelsToDo; j > 0; j--)
       {
         // Map a single font bit on the lcd byte template
         if ((fontByte & (1 << fontBytePixel)) != 0)
@@ -1114,7 +1094,6 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
 
     // Go to next y byte where we'll start at either the first or last bit
     yByte = yByte + byteDelta;
-    h = h + lcdPixelsToDo;
     startBit = lcdPixelStart;
 
     // Define new starting points in string, y scale and font byte.
@@ -1231,23 +1210,6 @@ static void glcdBufferBitUpdate(u08 x, u08 y)
 }
 
 //
-// Function: glcdCharWidthGet
-//
-// Get the pixel width of a single character in the FONT_5X5P font (excluding
-// the trailing white space pixel) and its internal fontmap array offset
-//
-static u08 glcdCharWidthGet(char c, u08 *idxOffset)
-{
-  if (c >= 'a' && c <= 'z')
-    *idxOffset = 0x20;
-  else if (c > 'z')
-    *idxOffset = 26;
-  else
-    *idxOffset = 0;
-  return pgm_read_byte(&Font5x5p[(c - 0x20 - *idxOffset) * 5]) >> 5;
-}
-
-//
 // Function: glcdFontByteGet
 //
 // Get a font byte
@@ -1284,16 +1246,34 @@ static u08 glcdFontByteGet(u08 color)
 //
 static u16 glcdFontIdxGet(unsigned char c)
 {
-  u08 idxOffset;
-
   if (fontId == FONT_5X5P)
   {
-    fontWidth = glcdCharWidthGet(c, &idxOffset);
-    return (c - 0x20 - idxOffset) * 5;
+    return glcdFontInfoGet(c);
   }
   else // font == FONT_5X7NP
   {
     fontWidth = 5;
     return (c - 0x20) * 5;
   }
+}
+
+//
+// Function: glcdFontInfoGet
+//
+// Get the pixel width of a single character in the FONT_5X5P font (excluding
+// the trailing white space pixel) and return its internal font array offset
+//
+static u08 glcdFontInfoGet(char c)
+{
+  u08 idx;
+
+  if (c >= 'a' && c <= 'z')
+    idx = 0x20;
+  else if (c > 'z')
+    idx = 26;
+  else
+    idx = 0;
+  idx = pgm_read_byte(&Font5x5pIdx[c - 0x20 - idx]);
+  fontWidth = pgm_read_byte(&Font5x5p[idx]) >> 5;
+  return idx;
 }

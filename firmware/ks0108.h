@@ -29,9 +29,9 @@
 // in Monochron.
 // GLCD_SET_PAGE   - This is actually the vertical y-byte address (0..7)
 // GLCD_SET_Y_ADDR - This is actually the horizontal x address (0..63)
-#define GLCD_ON_CTRL		0x3E	// 0011111X: lcd on/off control
-#define GLCD_START_LINE		0xC0	// 11XXXXXX: set lcd start line
-#define GLCD_SET_PAGE		0xB8	// 10111XXX: set lcd page (X) address
+#define GLCD_ON_CTRL		0x3e	// 0011111X: lcd on/off control
+#define GLCD_START_LINE		0xc0	// 11XXXXXX: set lcd start line
+#define GLCD_SET_PAGE		0xb8	// 10111XXX: set lcd page (X) address
 #define GLCD_SET_Y_ADDR		0x40	// 01YYYYYY: set lcd Y address
 
 #define GLCD_OFF_DISPLAY	0x00	// DB0: turn display off

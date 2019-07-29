@@ -29,6 +29,8 @@ int doLcdCursorReset(cmdLine_t *cmdLine);
 int doLcdDisplaySet(cmdLine_t *cmdLine);
 int doLcdErase(cmdLine_t *cmdLine);
 int doLcdGlutGrSet(cmdLine_t *cmdLine);
+int doLcdHlReset(cmdLine_t *cmdLine);
+int doLcdHlSet(cmdLine_t *cmdLine);
 int doLcdInverse(cmdLine_t *cmdLine);
 int doLcdNcurGrSet(cmdLine_t *cmdLine);
 int doLcdPrint(cmdLine_t *cmdLine);

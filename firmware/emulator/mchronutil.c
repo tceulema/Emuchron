@@ -144,7 +144,7 @@ int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     printf("%s: invalid/incomplete command argument\n\n", __progname);
   if (argHelp == GLCD_TRUE || argError == GLCD_TRUE)
   {
-    system("/usr/bin/head -23 ../support/help.txt | /usr/bin/tail -20 2>&1");
+    system("/usr/bin/head -24 ../support/help.txt | /usr/bin/tail -21 2>&1");
     return CMD_RET_ERROR;
   }
 
@@ -248,21 +248,23 @@ int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     if (home == NULL)
     {
       printf("%s: cannot get $HOME\n", __progname);
-      printf("use switch '-t <tty>' to set lcd output device\n");
+      printf("- use switch \"-t <tty>\" to set lcd output device\n");
       return CMD_RET_ERROR;
     }
-    fullPath = malloc(strlen(home) + strlen(NCURSES_TTYFILE) + 1);
-    sprintf(fullPath,"%s%s", home, NCURSES_TTYFILE);
+    fullPath = malloc(strlen(home) + strlen(MCHRON_CONFIG) +
+      strlen(NCURSES_TTYFILE) + 1);
+    sprintf(fullPath,"%s%s%s", home, MCHRON_CONFIG, NCURSES_TTYFILE);
 
     // Open the file with the tty device
     fp = fopen(fullPath, "r");
     free(fullPath);
     if (fp == NULL)
     {
-      printf("%s: cannot open file \"%s%s\".\n", __progname, "$HOME",
-        NCURSES_TTYFILE);
-      printf("start a new Monochron ncurses terminal or use switch '-t <tty>' to set mchron\n");
-      printf("ncurses terminal tty\n");
+      printf("%s: cannot open file \"%s%s%s\".\n", __progname, "~",
+        MCHRON_CONFIG, NCURSES_TTYFILE);
+      printf("- manually create folder ~%s\n", MCHRON_CONFIG);
+      printf("- start a new monochron ncurses terminal or use switch \"-t <tty>\" to set\n");
+      printf("  mchron ncurses terminal tty\n");
       return CMD_RET_ERROR;
     }
 
@@ -679,7 +681,7 @@ void emuTimePrint(int type)
 void emuTimeSync(void)
 {
   rtcDateTimeNext.timeSec = 60;
-  DEBUGP("Clear time event");
+  DEBUGTP("Clear time event");
   rtcTimeEvent = GLCD_FALSE;
   rtcMchronTimeInit();
 }

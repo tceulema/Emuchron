@@ -6,12 +6,6 @@
 #ifndef GLCD_H
 #define GLCD_H
 
-#ifndef EMULIN
-#ifndef WIN32
-// AVR specific includes
-#include <avr/io.h>
-#endif
-#endif
 #include "global.h"
 
 // Fill types

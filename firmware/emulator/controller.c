@@ -557,32 +557,32 @@ static u08 ctrlWrite(ctrlController_t *ctrlController, u08 payload)
 static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
 {
   // Get controller command and command argument
-  if ((data & 0xC0) == GLCD_SET_Y_ADDR)
+  if ((data & 0xc0) == GLCD_SET_Y_ADDR)
   {
     // Set x position
     *command = CTRL_CMD_COLUMN;
-    *payload = data & 0x3F;
+    *payload = data & 0x3f;
     return CTRL_EVENT_CURSOR_X;
   }
-  else if ((data & 0xF8) == GLCD_SET_PAGE)
+  else if ((data & 0xf8) == GLCD_SET_PAGE)
   {
     // Set y page
     *command = CTRL_CMD_PAGE;
     *payload = data & 0x07;
     return CTRL_EVENT_CURSOR_Y;
   }
-  else if ((data & 0xFE) == GLCD_ON_CTRL)
+  else if ((data & 0xfe) == GLCD_ON_CTRL)
   {
     // Display on/off command
     *command = CTRL_CMD_DISPLAY;
     *payload = data & 0x01;
     return CTRL_EVENT_DISPLAY;
   }
-  else if ((data & 0xC0) == GLCD_START_LINE)
+  else if ((data & 0xc0) == GLCD_START_LINE)
   {
     // Set display data start line
     *command = CTRL_CMD_START_LINE;
-    *payload = data & 0x3F;
+    *payload = data & 0x3f;
     return CTRL_EVENT_STARTLINE;
   }
   else
@@ -705,6 +705,18 @@ void ctrlLcdGlutGrSet(u08 bezel, u08 grid)
 {
   if (useGlut == GLCD_TRUE)
     lcdGlutGraphicsSet((unsigned char)bezel, (unsigned char)grid);
+}
+
+//
+// Function: ctrlLcdHighlight
+//
+// Set/reset glcd pixel highlight (glut only)
+//
+void ctrlLcdHighlight(u08 highlight, u08 x, u08 y)
+{
+  if (useGlut == GLCD_TRUE)
+    lcdGlutHighlightSet((unsigned char)highlight, (unsigned char)x,
+      (unsigned char)y);
 }
 
 //

@@ -307,7 +307,7 @@ void animClockDraw(u08 mode)
   // If there's a time event, sync Monochron time with RTC
   if (mcClockTimeEvent == GLCD_TRUE)
   {
-    DEBUGP("Update by time event");
+    DEBUGTP("Update by time event");
     mcClockNewTS = rtcDateTimeNext.timeSec;
     mcClockNewTM = rtcDateTimeNext.timeMin;
     mcClockNewTH = rtcDateTimeNext.timeHour;
@@ -356,7 +356,7 @@ void animClockDraw(u08 mode)
   // Clear a time event when set
   if (mcClockTimeEvent == GLCD_TRUE)
   {
-    DEBUGP("Clear time event");
+    DEBUGTP("Clear time event");
     mcClockTimeEvent = GLCD_FALSE;
     mcClockDateEvent = GLCD_FALSE;
     rtcTimeEvent = GLCD_FALSE;

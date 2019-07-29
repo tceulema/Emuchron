@@ -95,34 +95,33 @@
 #include "analog.h"
 
 // Refer to appendix B in Emuchron_Manual.pdf [support].
-// Since v2.1, due to improved draw performance, optimizations in tests, and a
-// different compiler, a test loop value recalibration is warranted.
-// For Emuchron v3.1 the test loop values are recalibrated in such a way that a
-// test, built for Emuchron v3.1 using avr-gcc 4.8.1 (Debian 8), runs on
-// Monochron hardware in about 2 minutes.
-#define PERF_DOT_1		64
-#define PERF_DOT_2		77
-#define PERF_LINE_1		11500
-#define PERF_LINE_2		28
-#define PERF_CIRCLE2_1		407
-#define PERF_CIRCLE2_2		807
-#define PERF_FILLCIRCLE2_1	293
-#define PERF_FILLCIRCLE2_2	951
-#define PERF_RECTANGLE2_1	887
-#define PERF_RECTANGLE2_2	580
-#define PERF_FILLRECTANGLE2_1	1292
-#define PERF_FILLRECTANGLE2_2	6680
-#define PERF_FILLRECTANGLE2_3	4033
-#define PERF_FILLRECTANGLE2_4	3945
-#define PERF_PUTSTR3_1		1246
-#define PERF_PUTSTR3_2		2405
-#define PERF_PUTSTR3_3		1152
-#define PERF_PUTSTR3_4		2406
-#define PERF_PUTSTR3_5		2265
-#define PERF_PUTSTR3V_1		850
-#define PERF_PUTSTR3V_2		2062
-#define PERF_PUTSTR3V_3		985
-#define PERF_PUTSTR3V_4		2400
+// The test loop numbers below have been recalibrated several times.
+// Last calibration: Emuchron v5.0 using avr-gcc 5.4.0 (Debian 10).
+// The test loop numbers make every test run on Monochron hardware complete in
+// about 2 minutes.
+#define PERF_DOT_1		70
+#define PERF_DOT_2		84
+#define PERF_LINE_1		11897
+#define PERF_LINE_2		30
+#define PERF_CIRCLE2_1		461
+#define PERF_CIRCLE2_2		897
+#define PERF_FILLCIRCLE2_1	314
+#define PERF_FILLCIRCLE2_2	1010
+#define PERF_RECTANGLE2_1	942
+#define PERF_RECTANGLE2_2	600
+#define PERF_FILLRECTANGLE2_1	1332
+#define PERF_FILLRECTANGLE2_2	6890
+#define PERF_FILLRECTANGLE2_3	4172
+#define PERF_FILLRECTANGLE2_4	4046
+#define PERF_PUTSTR3_1		1206
+#define PERF_PUTSTR3_2		2366
+#define PERF_PUTSTR3_3		1124
+#define PERF_PUTSTR3_4		2367
+#define PERF_PUTSTR3_5		2185
+#define PERF_PUTSTR3V_1		953
+#define PERF_PUTSTR3V_2		2313
+#define PERF_PUTSTR3V_3		1115
+#define PERF_PUTSTR3V_4		2692
 #define PERF_PUTSTR_1		6010
 
 // Defines on button press action flavors

@@ -76,7 +76,7 @@ extern char animSec[];
 // Random value for determining the direction of the elements
 static u16 mosRandBase = M_PI * M_PI * 1000;
 static const float mosRandSeed = 3.9147258617;
-static u16 mosRandVal = 0xA5C3;
+static u16 mosRandVal = 0xa5c3;
 
 // Init data for the hr/min/sec mosquite time elements
 static timeElement_t elementSecInit =
@@ -208,7 +208,7 @@ static void mosquitoElementDirectionSet(timeElement_t *element)
   u16 angle;
 
   // Generate a random number of most likely abysmal quality
-  mosRandBase = (int)(mosRandSeed * (mosRandVal + mcClockNewTM) * 213);
+  mosRandBase = (u16)(mosRandSeed * (mosRandVal + mcClockNewTM) * 213);
   mosRandVal = mcCycleCounter * mosRandSeed + mosRandBase;
 
   // Get an angle while preventing too shallow/steep values

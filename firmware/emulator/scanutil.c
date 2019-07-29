@@ -23,7 +23,7 @@
 
 // The readline unsaved cache and history file with size parameters
 #define READLINE_CACHE_LEN	15
-#define READLINE_HISFILE	"/.mchron_history"
+#define READLINE_HISFILE	"/history"
 #define READLINE_MAXHISTORY	250
 
 // External data from expression evaluator
@@ -686,18 +686,20 @@ void cmdInputInit(cmdInput_t *cmdInput)
     home = getenv("HOME");
     if (home == NULL)
     {
-      printf("%s: readline: Cannot get $HOME\n", __progname);
+      printf("%s: readline: cannot get $HOME\n", __progname);
     }
     else
     {
       // Combine $HOME and filename, open/create file and close it
-      rlHistoryFile = malloc(strlen(home) + strlen(READLINE_HISFILE) + 1);
-      sprintf(rlHistoryFile, "%s%s", home, READLINE_HISFILE);
+      rlHistoryFile = malloc(strlen(home) + strlen(MCHRON_CONFIG) +
+        strlen(READLINE_HISFILE) + 1);
+      sprintf(rlHistoryFile, "%s%s%s", home, MCHRON_CONFIG, READLINE_HISFILE);
       fp = fopen(rlHistoryFile, "a");
       if (fp == NULL)
       {
-        printf("%s: readline: Cannot open file \"%s%s\".\n", __progname,
-         "$HOME", READLINE_HISFILE);
+        printf("%s: readline: cannot open file \"%s%s%s\"\n", __progname, "~",
+          MCHRON_CONFIG, READLINE_HISFILE);
+        printf("- manually create folder ~%s\n", MCHRON_CONFIG);
         free(rlHistoryFile);
         rlHistoryFile = NULL;
       }

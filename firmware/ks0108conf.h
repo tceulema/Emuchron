@@ -7,8 +7,8 @@
 #define KS0108CONF_H
 
 // Define lcd hardware interface
-// - LCD_MEMORY_INTERFACE assumes that the registers of the lcd have been mapped
-//   into the external memory space of the AVR processor memory bus
+// - LCD_MEMORY_INTERFACE assumes that the registers of the lcd have been
+//   mapped into the external memory space of the AVR processor memory bus
 // - LCD_PORT_INTERFACE is a direct-connection interface from port pins to lcd
 //   SELECT (UNCOMMENT) ONLY ONE!
 // *** NOTE: memory interface is not yet fully supported, but it might work
@@ -49,7 +49,8 @@
 // Example: Display with 128 horizontal pixels uses 2 controllers
 #endif
 #ifndef GLCD_DATA_PORT
-// We split the data port into two 4-byte chunks so we dont bash the SPI or RXTX pins
+// We split the data port into two 4-byte chunks so we dont bash the SPI or
+// RXTX pins
 //#define GLCD_DATA_PORT		PORTD	// PORT for lcd data signals
 //#define GLCD_DATA_DDR			DDRD	// DDR register of LCD_DATA_PORT
 //#define GLCD_DATA_PIN			PIND	// PIN register of LCD_DATA_PORT
@@ -84,8 +85,8 @@
 #define GLCD_CONTROLLER_YPIXELS		64	// Pixel height
 #define GLCD_CONTROLLER_YPAGES		8	// Pixel height pages
 #define GLCD_CONTROLLER_XPIXBITS	6	// Bits used for x pixels
-#define GLCD_CONTROLLER_XPIXMASK	0x3F	// Mask used for x pixels
-#define GLCD_CONTROLLER_YPIXMASK	0x3F	// Mask used for y pixels
+#define GLCD_CONTROLLER_XPIXMASK	0x3f	// Mask used for x pixels
+#define GLCD_CONTROLLER_YPIXMASK	0x3f	// Mask used for y pixels
 #define GLCD_CONTROLLER_YPAGEBITS	3	// Bits used for y pixel page
 #define GLCD_CONTROLLER_YPAGEMASK	0x07	// Mask used for y pixel page
 

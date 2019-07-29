@@ -317,6 +317,10 @@ cmdArg_t argLcdDispSet[] =
 cmdArg_t argLcdGlutGr[] =
 { { ARG_UNUM,    "pixelbezel",  &argNumOffOn },
   { ARG_UNUM,    "gridlines",   &argNumOffOn } };
+// Argument profile for set glcd pixel highlight (glut only)
+cmdArg_t argLcdHl[] =
+{ { ARG_UNUM,    "x",		&argNumPosX },
+  { ARG_UNUM,    "y",		&argNumPosY } };
 // Argument profile for ncurses backlight support
 cmdArg_t argLcdNcurGr[] =
 { { ARG_UNUM,    "backlight",   &argNumOffOn } };
@@ -501,6 +505,8 @@ cmdCommand_t cmdGroupLcd[] =
   { "lds", PC_CONTINUE,     CMDARGS(argLcdDispSet),  CMDHANDLER(doLcdDisplaySet),  "switch controller lcd display on/off" },
   { "le",  PC_CONTINUE,     CMDARGS(NULL),           CMDHANDLER(doLcdErase),       "erase lcd display" },
   { "lgg", PC_CONTINUE,     CMDARGS(argLcdGlutGr),   CMDHANDLER(doLcdGlutGrSet),   "set glut graphics options" },
+  { "lhr", PC_CONTINUE,     CMDARGS(NULL),           CMDHANDLER(doLcdHlReset),     "reset glut glcd pixel highlight" },
+  { "lhs", PC_CONTINUE,     CMDARGS(argLcdHl),       CMDHANDLER(doLcdHlSet),       "set glut glcd pixel highlight" },
   { "li",  PC_CONTINUE,     CMDARGS(NULL),           CMDHANDLER(doLcdInverse),     "inverse lcd display" },
   { "lng", PC_CONTINUE,     CMDARGS(argLcdNcurGr),   CMDHANDLER(doLcdNcurGrSet),   "set ncurses graphics options" },
   { "lp",  PC_CONTINUE,     CMDARGS(NULL),           CMDHANDLER(doLcdPrint),       "print controller state/registers" },

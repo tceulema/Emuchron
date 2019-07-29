@@ -8,7 +8,7 @@
 
 // Max length ncurses tty and the file in $HOME holding the default tty
 #define NCURSES_TTYLEN		100
-#define NCURSES_TTYFILE		"/.mchron"
+#define NCURSES_TTYFILE		"/tty"
 
 // Definition of a structure holding the ncurses lcd init parameters
 typedef struct _lcdNcurInitArgs_t

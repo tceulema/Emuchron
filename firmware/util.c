@@ -10,14 +10,15 @@
 #include "monomain.h"
 #include "util.h"
 
-// Creates a 8N1 UART connect
-// Remember that the BBR is #defined for each F_CPU in util.h
+// Creates a 8N1 UART connect.
+// Remember that the BRR is #defined for each F_CPU in util.h [firmware].
 void uart_init(uint16_t BRR)
 {
-  UBRR0 = BRR;	// set baudrate counter
+  // Set baudrate counter
+  UBRR0 = BRR;
 
   UCSR0B = _BV(RXEN0) | _BV(TXEN0);
-  UCSR0C = _BV(USBS0) | (3<<UCSZ00);
+  UCSR0C = _BV(USBS0) | (3 << UCSZ00);
   DDRD |= _BV(1);
   DDRD &= ~_BV(0);
 }
@@ -31,14 +32,14 @@ int uart_putchar(char c)
 
 void uart_putc_hex(uint8_t b)
 {
-  /* upper nibble */
-  if((b >> 4) < 0x0a)
+  /* Upper nibble */
+  if ((b >> 4) < 0x0a)
     uart_putc((b >> 4) + '0');
   else
     uart_putc((b >> 4) - 0x0a + 'a');
 
-  /* lower nibble */
-  if((b & 0x0f) < 0x0a)
+  /* Lower nibble */
+  if ((b & 0x0f) < 0x0a)
     uart_putc((b & 0x0f) + '0');
   else
     uart_putc((b & 0x0f) - 0x0a + 'a');
@@ -74,9 +75,7 @@ void ROM_putstring(const char *str, uint8_t nl)
     uint8_t i;
 
     for (i = 0; pgm_read_byte(&str[i]); i++)
-    {
       uart_putchar(pgm_read_byte(&str[i]));
-    }
     if (nl)
     {
       uart_putchar('\n');
@@ -100,17 +99,18 @@ void uart_putw_dec(uint16_t w)
   {
     uint16_t num = 10000;
     uint8_t started = 0;
+    uint8_t b;
 
     while (num > 0)
     {
-      uint8_t b = w / num;
+      b = w / num;
       if (b > 0 || started || num == 1)
       {
         uart_putc('0' + b);
         started = 1;
       }
-      w -= b * num;
-      num /= 10;
+      w = w - b * num;
+      num = num / 10;
     }
   }
 }
@@ -121,22 +121,23 @@ void uart_put_dec(int8_t w)
   {
     uint16_t num = 100;
     uint8_t started = 0;
+    int8_t b;
 
     if (w < 0)
     {
       uart_putc('-');
-      w *= -1;
+      w = -w;
     }
     while (num > 0)
     {
-      int8_t b = w / num;
+      b = w / num;
       if (b > 0 || started || num == 1)
       {
         uart_putc('0' + b);
         started = 1;
       }
-      w -= b * num;
-      num /= 10;
+      w = w - b * num;
+      num = num / 10;
     }
   }
 }
@@ -147,17 +148,18 @@ void uart_putdw_dec(uint32_t dw)
   {
     uint32_t num = 1000000000;
     uint8_t started = 0;
+    uint8_t b;
 
     while (num > 0)
     {
-      uint8_t b = dw / num;
+      b = dw / num;
       if (b > 0 || started || num == 1)
       {
         uart_putc('0' + b);
         started = 1;
       }
-      dw -= b * num;
-      num /= 10;
+      dw = dw - b * num;
+      num = num / 10;
     }
   }
 }

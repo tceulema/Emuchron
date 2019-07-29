@@ -27,7 +27,7 @@
 #define CFG_BTN_HOLD_COUNT	10
 
 // How many pixels to indent the menu items
-#define CFG_MENU_INDENT	8
+#define CFG_MENU_INDENT		8
 
 // Several fixed substring instructions
 #define CFG_INSTR_PREFIX_CHANGE	"Press + to change "

@@ -55,5 +55,6 @@ u08 ctrlExecute(u08 method, u08 controller, u08 data);
 void ctrlLcdBacklightSet(u08 brightness);
 void ctrlLcdFlush(void);
 void ctrlLcdGlutGrSet(u08 bezel, u08 grid);
+void ctrlLcdHighlight(u08 highlight, u08 x, u08 y);
 void ctrlLcdNcurGrSet(u08 backlight);
 #endif

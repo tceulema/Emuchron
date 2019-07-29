@@ -27,11 +27,11 @@
 #define TW_MR_DATA_ACK			0x50
 #define TW_MR_DATA_NACK			0x58
 // Slave Transmitter
-#define TW_ST_SLA_ACK			0xA8
-#define TW_ST_ARB_LOST_SLA_ACK		0xB0
-#define TW_ST_DATA_ACK			0xB8
-#define TW_ST_DATA_NACK			0xC0
-#define TW_ST_LAST_DATA			0xC8
+#define TW_ST_SLA_ACK			0xa8
+#define TW_ST_ARB_LOST_SLA_ACK		0xb0
+#define TW_ST_DATA_ACK			0xb8
+#define TW_ST_DATA_NACK			0xc0
+#define TW_ST_LAST_DATA			0xc8
 // Slave Receiver
 #define TW_SR_SLA_ACK			0x60
 #define TW_SR_ARB_LOST_SLA_ACK		0x68
@@ -41,14 +41,14 @@
 #define TW_SR_DATA_NACK			0x88
 #define TW_SR_GCALL_DATA_ACK		0x90
 #define TW_SR_GCALL_DATA_NACK		0x98
-#define TW_SR_STOP			0xA0
+#define TW_SR_STOP			0xa0
 // Misc
-#define TW_NO_INFO			0xF8
+#define TW_NO_INFO			0xf8
 #define TW_BUS_ERROR			0x00
 
 // Defines and constants
-#define TWCR_CMD_MASK			0x0F
-#define TWSR_STATUS_MASK		0xF8
+#define TWCR_CMD_MASK			0x0f
+#define TWSR_STATUS_MASK		0xf8
 
 // Return values
 #define I2C_OK				0x00

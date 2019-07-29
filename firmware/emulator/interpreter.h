@@ -8,6 +8,9 @@
 
 #include <stdio.h>
 
+// The mchron configuration folder relative to $HOME
+#define MCHRON_CONFIG		"/.config/mchron"
+
 // The program counter control block execution logic types
 #define PC_CONTINUE		0
 #define PC_REPEAT_FOR		1
