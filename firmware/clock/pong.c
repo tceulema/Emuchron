@@ -291,8 +291,8 @@ void pongInit(u08 mode)
   if (ballDirY == 0)
     ballDirY = -1;
   ballAngle = ANGLE_NEW;
-  trajX[0] = GLCD_XPIXELS / 2 - 2;
-  trajY[0] = GLCD_YPIXELS / 2 - 2;
+  trajX[0] = GLCD_XPIXELS / 2 - BALL_RADIUS;
+  trajY[0] = GLCD_YPIXELS / 2 - BALL_RADIUS;
 }
 
 //
@@ -417,8 +417,8 @@ static void pongBallTraject(void)
   if (avoidPaddle == GLCD_TRUE)
   {
     // We left the play field so set final trajectory ball to start position
-    trajX[tix] = GLCD_XPIXELS / 2 - 2;
-    trajY[tix] = GLCD_YPIXELS / 2 - 2;
+    trajX[tix] = GLCD_XPIXELS / 2 - BALL_RADIUS;
+    trajY[tix] = GLCD_YPIXELS / 2 - BALL_RADIUS;
     if (bounceY > ballEndY)
     {
       keepoutTop = ballEndY;

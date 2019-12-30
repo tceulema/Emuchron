@@ -224,7 +224,7 @@ static void dictCmdPrint(cmdCommand_t *cmdCommand)
 // Print mchron command dictionary entries using a regexp pattern (where '.'
 // matches every command)
 //
-int dictPrint(char *pattern)
+u08 dictPrint(char *pattern)
 {
   regex_t regex;
   int status = 0;

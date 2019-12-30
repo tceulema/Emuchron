@@ -19,7 +19,7 @@ typedef struct _lcdGlutInitArgs_t
 // Lcd device control methods
 void lcdGlutCleanup(void);
 void lcdGlutFlush(void);
-int lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet);
+unsigned char lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet);
 
 // Lcd device statistics methods
 void lcdGlutStatsPrint(void);

@@ -52,8 +52,8 @@ extern cmdInput_t cmdInput;
 extern const char *__progname;
 
 // Flags indicating active state upon exit
-int invokeExit = GLCD_FALSE;
-static int closeWinMsg = GLCD_FALSE;
+u08 invokeExit = GLCD_FALSE;
+static u08 closeWinMsg = GLCD_FALSE;
 
 // Local function prototypes
 static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
@@ -63,13 +63,13 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
 //
 // Process mchron startup command line arguments
 //
-int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
+u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 {
   FILE *fp;
   int argCount = 1;
   char *tty = emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.tty;
-  int argHelp = GLCD_FALSE;
-  int argError = GLCD_FALSE;
+  u08 argHelp = GLCD_FALSE;
+  u08 argError = GLCD_FALSE;
 
   // Init references to command line argument positions
   emuArgcArgv->argDebug = 0;
@@ -294,7 +294,7 @@ int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 //
 // Release a selected clock
 //
-void emuClockRelease(int echoCmd)
+void emuClockRelease(u08 echoCmd)
 {
   // Clear clock time and detach from current selected clock
   mcClockOldTS = mcClockOldTM = mcClockOldTH = 0;
@@ -332,8 +332,7 @@ void emuClockUpdate(void)
       mcClockPool[mcMchronClock].clockId == CHRON_QR_HMS)
   {
     // Generate the clock cycles needed to display a new QR
-    int i;
-
+    u08 i;
     for (i = 0; i < QR_GEN_CYCLES; i++)
       animClockDraw(DRAW_CYCLE);
   }
@@ -660,7 +659,7 @@ void emuSysTimerStop(timer_t *timer)
 //
 // Print the time/date/alarm
 //
-void emuTimePrint(int type)
+void emuTimePrint(u08 type)
 {
   printf("time   : %02d:%02d:%02d (hh:mm:ss)\n", rtcDateTime.timeHour,
     rtcDateTime.timeMin, rtcDateTime.timeSec);
@@ -756,7 +755,7 @@ char waitDelay(int delay)
 // Wait for keyboard keypress.
 // The keyboard buffer is cleared first to enforce a wait cycle.
 //
-char waitKeypress(int allowQuit)
+char waitKeypress(u08 allowQuit)
 {
   char ch = '\0';
   u08 myKbMode = KB_MODE_LINE;
@@ -815,7 +814,7 @@ void waitSleep(int sleep)
 // Return parameter remaining will indicate the remaining timer time in usec
 // upon entering this function, or -1 in case the timer had already expired.
 //
-char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
+char waitTimerExpiry(struct timeval *tvTimer, int expiry, u08 allowQuit,
   suseconds_t *remaining)
 {
   char ch = '\0';

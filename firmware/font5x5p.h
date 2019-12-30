@@ -1,5 +1,5 @@
 //*****************************************************************************
-// Filename : 'font5x7p.h'
+// Filename : 'font5x5p.h'
 // Title    : Graphic lcd 5x5 proportional font (ascii characters)
 //*****************************************************************************
 
@@ -52,7 +52,7 @@
 // fontByte = (pgm_read_byte(&Font5x5p[idxOffset]) & 0x1f);
 //
 
-// Define the 5x7 proportional character bitmaps
+// Define the 5x5 proportional character bitmaps
 const unsigned char __attribute__ ((progmem)) Font5x5p[] =
 {
   (0x01 << 5) |	0x00,				// (space)
@@ -125,10 +125,10 @@ const unsigned char __attribute__ ((progmem)) Font5x5p[] =
   (0x01 << 5) | 0x1f,				// |
   (0x03 << 5) | 0x11, 0x1f, 0x04,		// }
   (0x04 << 5) | 0x04, 0x15, 0x0e, 0x04,		// ->
-  (0x04 << 5) | 0x04, 0x0e, 0x15, 0x04, 0x00	// <-
+  (0x04 << 5) | 0x04, 0x0e, 0x15, 0x04		// <-
 };
 
-// Define for each character its entry point index in the 5x7 proportional
+// Define for each character its entry point index in the 5x5 proportional
 // character bitmap array
 const unsigned char __attribute__ ((progmem)) Font5x5pIdx[] =
 {

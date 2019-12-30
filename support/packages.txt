@@ -33,7 +33,7 @@ apt-get install gdb
 
 # GDB gui front-ends and IDE's
 # This script no longer installs GDB gui front-ends and/or IDE's.
-# For more information refer to section ?.? of the Emuchron manual.
+# For more information refer to section 3.5 of the Emuchron pdf manual.
 
 # LCD device stubs
 apt-get install libncurses5-dev
@@ -54,7 +54,7 @@ apt-get install alacarte
 # Debian 10 requires specific glibc source files for a non-annoying debugging
 # experience in some gdb front-end gui's. The files that are referenced are
 # usually syscall-template.S and pselect.c.
-# For more info refer to section 3.7.2 of the Emuchron pdf manual.
+# For more info refer to section 3.9.2 of the Emuchron pdf manual.
 myDebianVersion=`lsb_release -c`
 
 # Obtaining glibc sources for Debian 10 (Buster)

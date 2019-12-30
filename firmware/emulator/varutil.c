@@ -12,7 +12,6 @@
 
 // Monochron and emuchron defines
 #include "../ks0108.h"
-#include "interpreter.h"
 #include "mchronutil.h"
 #include "scanutil.h"
 #include "varutil.h"
@@ -20,8 +19,8 @@
 // A structure to hold runtime information for a named numeric variable
 typedef struct _varVariable_t
 {
-  char *name;			// Variable name
-  int active;			// Whether variable is in use
+  char *varName;		// Variable name
+  u08 active;			// Whether variable is in use
   double varValue;		// The current numeric value of the variable
   struct _varVariable_t *prev;	// Pointer to preceding bucket member
   struct _varVariable_t *next;	// Pointer to next bucket member
@@ -53,20 +52,17 @@ typedef struct _varBucket_t
 static varBucket_t varBucket[VAR_BUCKETS];
 static int varCount = 0;
 
-// Local function prototypes
-static int varValPrint(char *var, double value, int detail);
-
 //
 // Function: varClear
 //
 // Clear a variable
 //
-int varClear(int varId)
+u08 varClear(int varId)
 {
   int bucketId;
   int bucketListId;
   int i = 0;
-  int retVal = CMD_RET_OK;
+  u08 retVal = CMD_RET_OK;
   varVariable_t *delVar;
 
   // Get reference to variable
@@ -96,7 +92,7 @@ int varClear(int varId)
   varCount--;
 
   // Return the malloced variable name and the structure itself
-  free(delVar->name);
+  free(delVar->varName);
   free(delVar);
 
   return retVal;
@@ -117,11 +113,11 @@ int varClear(int varId)
 //  -1 : variable bucket overflow occurred while attempting to create new id
 //  -2 : variable not found and no new id is to be created
 //
-int varIdGet(char *var, int create)
+int varIdGet(char *varName, u08 create)
 {
   int bucketId;
   int bucketListId;
-  int found = GLCD_FALSE;
+  u08 found = GLCD_FALSE;
   int compare = 0;
   int i = 0;
   varVariable_t *checkVar;
@@ -129,16 +125,16 @@ int varIdGet(char *var, int create)
 
   // Create a simple hash of first and optionally second character of
   // var name to obtain a variable bucket number
-  if (var[0] < 'a')
-    bucketId = var[0] - 'A';
+  if (varName[0] < 'a')
+    bucketId = varName[0] - 'A';
   else
-    bucketId = var[0] - 'a';
-  if (var[1] != '\0')
+    bucketId = varName[0] - 'a';
+  if (varName[1] != '\0')
   {
-    if (var[1] < 'a')
-      bucketId = bucketId + (var[1] - 'A');
+    if (varName[1] < 'a')
+      bucketId = bucketId + (varName[1] - 'A');
     else
-      bucketId = bucketId + (var[1] - 'a');
+      bucketId = bucketId + (varName[1] - 'a');
   }
   while (bucketId >= VAR_BUCKETS)
     bucketId = bucketId - VAR_BUCKETS;
@@ -147,7 +143,7 @@ int varIdGet(char *var, int create)
   checkVar = varBucket[bucketId].var;
   while (i < varBucket[bucketId].count && found == GLCD_FALSE)
   {
-    compare = strcmp(checkVar->name, var);
+    compare = strcmp(checkVar->varName, varName);
     if (compare == 0)
     {
       found = GLCD_TRUE;
@@ -187,14 +183,14 @@ int varIdGet(char *var, int create)
     // However, first check for bucket overflow.
     if (varBucket[bucketId].count == VAR_BUCKET_SIZE_COUNT)
     {
-      printf("cannot register variable: %s\n", var);
+      printf("cannot register variable: %s\n", varName);
       return -1;
     }
 
     // Add variable to end of the bucket list
     myVar = malloc(sizeof(varVariable_t));
-    myVar->name = malloc(strlen(var) + 1);
-    strcpy(myVar->name, var);
+    myVar->varName = malloc(strlen(varName) + 1);
+    strcpy(myVar->varName, varName);
     myVar->active = GLCD_FALSE;
     myVar->varValue = 0;
     myVar->next = NULL;
@@ -251,7 +247,7 @@ void varInit(void)
 // Print the value of named variables using a regexp pattern (where '.' matches
 // every named variable)
 //
-int varPrint(char *pattern, int summary)
+u08 varPrint(char *pattern, u08 summary)
 {
   const int spaceCountMax = 60;
   regex_t regex;
@@ -260,7 +256,7 @@ int varPrint(char *pattern, int summary)
   int varInUse = 0;
   int i;
   int varIdx = 0;
-  int allSorted = GLCD_FALSE;
+  u08 allSorted = GLCD_FALSE;
 
   // Validate regexp pattern
   if (regcomp(&regex, pattern, REG_EXTENDED | REG_NOSUB) != 0)
@@ -290,7 +286,7 @@ int varPrint(char *pattern, int summary)
       allSorted = GLCD_TRUE;
       for (i = 0; i < varIdx - 1; i++)
       {
-        if (strcmp(varSort[i]->name, varSort[i + 1]->name) > 0)
+        if (strcmp(varSort[i]->varName, varSort[i + 1]->varName) > 0)
         {
           myVar = varSort[i];
           varSort[i] = varSort[i + 1];
@@ -307,12 +303,12 @@ int varPrint(char *pattern, int summary)
       if (varSort[i]->active == GLCD_TRUE)
       {
         // See if variable name matches regexp pattern
-        status = regexec(&regex, varSort[i]->name, (size_t)0, NULL, 0);
+        status = regexec(&regex, varSort[i]->varName, (size_t)0, NULL, 0);
         if (status == 0)
         {
           varInUse++;
-          spaceCount = spaceCount +
-            varValPrint(varSort[i]->name, varSort[i]->varValue, GLCD_FALSE);
+          spaceCount = spaceCount + printf("%s=", varSort[i]->varName) +
+            cmdArgValuePrint(varSort[i]->varValue, GLCD_FALSE);
           if (spaceCount % 10 != 0)
           {
             printf("%*s", 10 - spaceCount % 10, "");
@@ -363,7 +359,7 @@ int varReset(void)
       nextVar = delVar->next;
       if (delVar->active == GLCD_TRUE)
         varInUse++;
-      free(delVar->name);
+      free(delVar->varName);
       free(delVar);
     }
     varBucket[i].count = 0;
@@ -379,7 +375,7 @@ int varReset(void)
 //
 // Get the value of a named variable using its id
 //
-double varValGet(int varId, int *varError)
+double varValGet(int varId, u08 *varStatus)
 {
   int bucketId;
   int bucketListId;
@@ -389,7 +385,7 @@ double varValGet(int varId, int *varError)
   // Check if we have a valid id
   if (varId < 0)
   {
-    *varError = 1;
+    *varStatus = VAR_NOTINUSE;
     return 0;
   }
 
@@ -406,24 +402,14 @@ double varValGet(int varId, int *varError)
   // Only an active variable has a value
   if (myVar->active == 0)
   {
-    printf("variable not in use: %s\n", myVar->name);
-    *varError = 1;
+    printf("variable not in use: %s\n", myVar->varName);
+    *varStatus = VAR_NOTINUSE;
     return 0;
   }
 
   // Return value
-  *varError = 0;
+  *varStatus = VAR_OK;
   return myVar->varValue;
-}
-
-//
-// Function: varValPrint
-//
-// Print a single variable value and return the length of the printed string
-//
-static int varValPrint(char *var, double value, int detail)
-{
-  return printf("%s=", var) + cmdArgValuePrint(value, detail);
 }
 
 //

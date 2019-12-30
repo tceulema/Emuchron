@@ -7,6 +7,7 @@
 #define INTERPRETER_H
 
 #include <stdio.h>
+#include "../global.h"
 
 // The mchron configuration folder relative to $HOME
 #define MCHRON_CONFIG		"/.config/mchron"
@@ -51,9 +52,9 @@
 // The command return values
 #define CMD_RET_OK		0
 #define CMD_RET_EXIT		1
-#define CMD_RET_ERROR		-1
-#define CMD_RET_RECOVER		-2
-#define CMD_RET_INTERRUPT	-3
+#define CMD_RET_ERROR		2
+#define CMD_RET_INTERRUPT	3
+#define CMD_RET_RECOVER		4
 
 // To prevent recursive file loading define a max file depth when executing
 // command files
@@ -74,7 +75,7 @@ typedef struct _cmdLine_t
   int lineNum;				// Line number
   char *input;				// The malloc-ed command from file/prompt
   char **args;				// The command arguments
-  int initialized;			// Are command arguments initialized
+  u08 initialized;			// Are command arguments initialized
   struct _cmdCommand_t *cmdCommand;	// The associated command dictionary entry
   struct _cmdPcCtrl_t *cmdPcCtrlParent;	// Control block completed by this line
   struct _cmdPcCtrl_t *cmdPcCtrlChild;	// Control block started by this line
@@ -85,8 +86,8 @@ typedef struct _cmdLine_t
 // if-then-else and repeat commands
 typedef struct _cmdPcCtrl_t
 {
-  int cmdPcCtrlType;			// The program counter control block type
-  int active;				// Is current block the active code block
+  u08 cmdPcCtrlType;			// The program counter control block type
+  u08 active;				// Is current block the active code block
   cmdLine_t *cmdLineParent;		// Pointer to associated parent command
   cmdLine_t *cmdLineChild;		// Pointer to associated child command
   struct _cmdPcCtrl_t *prev;		// Pointer to previous list element
@@ -99,14 +100,14 @@ typedef struct _cmdInput_t
 {
   FILE *file;				// Input stream (stdin or file)
   char *input;				// Pointer to resulting single input line
-  int readMethod;			// Input read method (readline or manual)
-  int initialized;			// Structure initialized indicator
+  u08 readMethod;			// Input read method (readline or manual)
+  u08 initialized;			// Structure initialized indicator
 } cmdInput_t;
 
 // Definition of a structure holding domain info for a command argument
 typedef struct _cmdArgDomain_t
 {
-  int argDomainType;			// Argument domain type
+  u08 argDomainType;			// Argument domain type
   char *argTextList;			// Char/word argument value list
   double argNumMin;			// Numeric argument min value
   double argNumMax;			// Numeric argument max value
@@ -116,7 +117,7 @@ typedef struct _cmdArgDomain_t
 // Definition of a structure holding a command line argument
 typedef struct _cmdArg_t
 {
-  int argType;				// Argument type
+  u08 argType;				// Argument type
   char *argName;			// Argument name
   cmdArgDomain_t *cmdArgDomain;		// Argument domain
 } cmdArg_t;
@@ -126,11 +127,11 @@ typedef struct _cmdArg_t
 typedef struct _cmdCommand_t
 {
   char *cmdName;			// The mchron command name
-  int cmdPcCtrlType;			// Program counter control block type
+  u08 cmdPcCtrlType;			// Program counter control block type
   cmdArg_t *cmdArg;			// Array of command argument profiles
   int argCount;				// Profile argument count
-  int (*cmdHandler)(cmdLine_t *);	// Handler for regular commands
-  int (*cbHandler)(cmdLine_t **);	// Handler for control block commands
+  u08 (*cmdHandler)(cmdLine_t *);	// Handler for regular commands
+  u08 (*cbHandler)(cmdLine_t **);	// Handler for control block commands
   char *cmdHandlerName;			// Execution handler name
   char *cmdNameDescr;			// Command name description
 } cmdCommand_t;

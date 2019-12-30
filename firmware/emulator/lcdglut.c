@@ -168,10 +168,10 @@ static unsigned char winShowWinSize = GLCD_FALSE;
 static struct timeval tvWinReshapeLast;
 
 // Identifiers right-button down event and pixel highlight location
-static int winRButtonEvent = GLCD_FALSE;
+static unsigned char winRButtonEvent = GLCD_FALSE;
 static int winRButtonX = 0;
 static int winRButtonY = 0;
-static int winPixHighlight = GLCD_FALSE;
+static unsigned char winPixHighlight = GLCD_FALSE;
 static int winPixGlcdX = 0;
 static int winPixGlcdY = 0;
 
@@ -321,7 +321,7 @@ void lcdGlutHighlightSet(unsigned char highlight, unsigned char x,
 //
 // Initialize the lcd display in glut window
 //
-int lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
+unsigned char lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
 {
   // Nothing to do if the glut environment is already initialized
   if (deviceActive == GLCD_TRUE)

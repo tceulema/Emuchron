@@ -93,7 +93,7 @@ extern double exprValue;
 extern int listExecDepth;
 
 // Flag to indicate we're going to exit
-extern int invokeExit;
+extern u08 invokeExit;
 
 // This is me
 extern const char *__progname;
@@ -102,7 +102,7 @@ extern const char *__progname;
 cmdInput_t cmdInput;
 
 // The current command echo state
-int echoCmd = CMD_ECHO_YES;
+u08 echoCmd = CMD_ECHO_YES;
 
 // Initial user definable mchron alarm time
 uint8_t emuAlarmH = 22;
@@ -117,8 +117,8 @@ static struct timeval tvTimer;
 // The emulator background/foreground color of the lcd display and backlight
 // GLCD_OFF = 0 = black color (=0x0 bit value in lcd memory)
 // GLCD_ON  = 1 = white color (=0x1 bit value in lcd memory)
-static u08 emuBgColor = GLCD_OFF;
-static u08 emuFgColor = GLCD_ON;
+static uint8_t emuBgColor = GLCD_OFF;
+static uint8_t emuFgColor = GLCD_ON;
 static u08 emuBacklight = 16;
 
 // The clocks supported in the mchron clock test environment.
@@ -162,10 +162,10 @@ static int emuMonochronCount = sizeof(emuMonochron) / sizeof(clockDriver_t);
 //
 int main(int argc, char *argv[])
 {
-  cmdLine_t cmdLine;
+  cmdLine_t *cmdLine;
   char *prompt;
   emuArgcArgv_t emuArgcArgv;
-  int retVal = CMD_RET_OK;
+  u08 retVal = CMD_RET_OK;
 
   // Setup signal handlers to either recover from signal or to attempt graceful
   // non-standard exit
@@ -254,30 +254,21 @@ int main(int argc, char *argv[])
   // We're in business: give prompt and process keyboard commands until the
   // last proton in the universe has desintegrated (or use 'x' or ^D to exit)
 
-  // Initialize a command line for the interpreter
-  cmdLine.lineNum = 0;
-  cmdLine.input = NULL;
-  cmdLine.args = NULL;
-  cmdLine.initialized = GLCD_FALSE;
-  cmdLine.cmdCommand = NULL;
-  cmdLine.cmdPcCtrlParent = NULL;
-  cmdLine.cmdPcCtrlChild = NULL;
-  cmdLine.next = NULL;
-
   // Do the first command line read
   prompt = malloc(strlen(__progname) + 3);
   sprintf(prompt, "%s> ", __progname);
   cmdInputRead(prompt, &cmdInput);
 
-  // Keep processing input lines until done
+  // Create a command line and keep processing input lines until done
+  cmdLine = cmdLineCreate(NULL, NULL);
   while (cmdInput.input != NULL)
   {
     // Process input
-    cmdLine.lineNum++;
-    cmdLine.input = cmdInput.input;
-    cmdLine.cmdCommand = NULL;
-    retVal = cmdLineExecute(&cmdLine, &cmdInput);
-    cmdArgCleanup(&cmdLine);
+    cmdLine->lineNum++;
+    cmdLine->input = cmdInput.input;
+    cmdLine->cmdCommand = NULL;
+    retVal = cmdLineExecute(cmdLine, &cmdInput);
+    cmdArgCleanup(cmdLine);
     if (retVal == CMD_RET_EXIT)
       break;
 
@@ -289,14 +280,17 @@ int main(int argc, char *argv[])
   if (retVal != CMD_RET_EXIT)
     printf("\n<ctrl>d - exit\n");
 
-  // Cleanup command line read interface
+  // Cleanup command line and command line read interface
   free(prompt);
+  cmdLine->input = NULL;
+  cmdListCleanup(cmdLine, NULL);
   cmdInputCleanup(&cmdInput);
 
-  // Shutdown gracefully by killing audio and stopping the controller and lcd
-  // device(s)
+  // Shutdown gracefully by killing audio, stopping the controller and lcd
+  // device(s) and cleaning up named variables
   alarmSoundStop();
   ctrlCleanup();
+  varReset();
 
   // Stop debug output
   DEBUGP("**** logging stopped");
@@ -327,10 +321,10 @@ int main(int argc, char *argv[])
 //
 // Set alarm switch position
 //
-int doAlarmPos(cmdLine_t *cmdLine)
+u08 doAlarmPos(cmdLine_t *cmdLine)
 {
-  uint8_t on;
-  uint8_t newPosition = TO_UINT8_T(argDouble[0]);
+  u08 on;
+  u08 newPosition = TO_U08(argDouble[0]);
 
   // Define new alarm switch position
   if (newPosition == 1)
@@ -365,7 +359,7 @@ int doAlarmPos(cmdLine_t *cmdLine)
 //
 // Set clock alarm time
 //
-int doAlarmSet(cmdLine_t *cmdLine)
+u08 doAlarmSet(cmdLine_t *cmdLine)
 {
   // Set new alarm time
   emuAlarmH = TO_UINT8_T(argDouble[0]);
@@ -424,7 +418,7 @@ int doAlarmSet(cmdLine_t *cmdLine)
 //
 // Toggle alarm switch position
 //
-int doAlarmToggle(cmdLine_t *cmdLine)
+u08 doAlarmToggle(cmdLine_t *cmdLine)
 {
   // Toggle alarm switch position
   alarmSwitchToggle(GLCD_FALSE);
@@ -453,7 +447,7 @@ int doAlarmToggle(cmdLine_t *cmdLine)
 //
 // Give audible beep
 //
-int doBeep(cmdLine_t *cmdLine)
+u08 doBeep(cmdLine_t *cmdLine)
 {
   // Sound beep
   beep(TO_UINT16_T(argDouble[0]), TO_UINT8_T(argDouble[1]));
@@ -466,10 +460,10 @@ int doBeep(cmdLine_t *cmdLine)
 //
 // Feed clock with time and keyboard events
 //
-int doClockFeed(cmdLine_t *cmdLine)
+u08 doClockFeed(cmdLine_t *cmdLine)
 {
   char ch = '\0';
-  int startWait = GLCD_FALSE;
+  u08 startWait = GLCD_FALSE;
   u08 myKbMode = KB_MODE_LINE;
 
   // Get the start mode
@@ -533,7 +527,7 @@ int doClockFeed(cmdLine_t *cmdLine)
 //
 // Select clock from list of available clocks
 //
-int doClockSelect(cmdLine_t *cmdLine)
+u08 doClockSelect(cmdLine_t *cmdLine)
 {
   uint8_t clock;
 
@@ -569,7 +563,7 @@ int doClockSelect(cmdLine_t *cmdLine)
 //
 // Process comments
 //
-int doComments(cmdLine_t *cmdLine)
+u08 doComments(cmdLine_t *cmdLine)
 {
   // Dump comments in the log only when we run at root command level
   if (listExecDepth == 0)
@@ -583,7 +577,7 @@ int doComments(cmdLine_t *cmdLine)
 //
 // Reset internal clock date
 //
-int doDateReset(cmdLine_t *cmdLine)
+u08 doDateReset(cmdLine_t *cmdLine)
 {
   // Reset date to system date
   stubTimeSet(70, 0, 0, 0, 80, 0, 0);
@@ -606,9 +600,9 @@ int doDateReset(cmdLine_t *cmdLine)
 //
 // Set internal clock date
 //
-int doDateSet(cmdLine_t *cmdLine)
+u08 doDateSet(cmdLine_t *cmdLine)
 {
-  int dateOk = GLCD_TRUE;
+  u08 dateOk = GLCD_TRUE;
 
   // Set new date
   dateOk = stubTimeSet(70, 0, 0, 0, TO_UINT8_T(argDouble[0]),
@@ -634,13 +628,13 @@ int doDateSet(cmdLine_t *cmdLine)
 //
 // Execute mchron commands from a file
 //
-int doExecute(cmdLine_t *cmdLine)
+u08 doExecute(cmdLine_t *cmdLine)
 {
   int myEchoCmd;
   char *fileName;
   cmdLine_t *cmdLineRoot = NULL;
   cmdPcCtrl_t *cmdPcCtrlRoot = NULL;
-  int retVal = CMD_RET_OK;
+  u08 retVal = CMD_RET_OK;
 
   // Verify too deep nested 'e' commands (prevent potential recursive call)
   if (fileExecDepth >= CMD_FILE_DEPTH_MAX)
@@ -710,9 +704,9 @@ int doExecute(cmdLine_t *cmdLine)
 //
 // Prepare to exit mchron
 //
-int doExit(cmdLine_t *cmdLine)
+u08 doExit(cmdLine_t *cmdLine)
 {
-  int retVal = CMD_RET_OK;
+  u08 retVal = CMD_RET_OK;
 
   if (listExecDepth > 0)
   {
@@ -734,7 +728,7 @@ int doExit(cmdLine_t *cmdLine)
 //
 // Dump helppage
 //
-int doHelp(cmdLine_t *cmdLine)
+u08 doHelp(cmdLine_t *cmdLine)
 {
   if (listExecDepth > 0)
   {
@@ -752,9 +746,9 @@ int doHelp(cmdLine_t *cmdLine)
 //
 // Print the mchron dictionary content for a command
 //
-int doHelpCmd(cmdLine_t *cmdLine)
+u08 doHelpCmd(cmdLine_t *cmdLine)
 {
-  int retVal;
+  u08 retVal;
 
   if (listExecDepth > 0)
   {
@@ -775,7 +769,7 @@ int doHelpCmd(cmdLine_t *cmdLine)
 //
 // Print the result of an expression
 //
-int doHelpExpr(cmdLine_t *cmdLine)
+u08 doHelpExpr(cmdLine_t *cmdLine)
 {
   cmdArgValuePrint(argDouble[0], GLCD_TRUE);
   printf("\n");
@@ -788,7 +782,7 @@ int doHelpExpr(cmdLine_t *cmdLine)
 //
 // Show help message
 //
-int doHelpMsg(cmdLine_t *cmdLine)
+u08 doHelpMsg(cmdLine_t *cmdLine)
 {
   // Show message in the command shell
   printf("%s\n", argString);
@@ -801,7 +795,7 @@ int doHelpMsg(cmdLine_t *cmdLine)
 //
 // Initiate an if and determine where to continue
 //
-int doIf(cmdLine_t **cmdProgCounter)
+u08 doIf(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
@@ -832,7 +826,7 @@ int doIf(cmdLine_t **cmdProgCounter)
 //
 // The start of an if-else block
 //
-int doIfElse(cmdLine_t **cmdProgCounter)
+u08 doIfElse(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
@@ -861,7 +855,7 @@ int doIfElse(cmdLine_t **cmdProgCounter)
 //
 // The start of an if-else-if block
 //
-int doIfElseIf(cmdLine_t **cmdProgCounter)
+u08 doIfElseIf(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
@@ -905,7 +899,7 @@ int doIfElseIf(cmdLine_t **cmdProgCounter)
 //
 // The closing of an if-then-else block
 //
-int doIfEnd(cmdLine_t **cmdProgCounter)
+u08 doIfEnd(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
@@ -922,7 +916,7 @@ int doIfEnd(cmdLine_t **cmdProgCounter)
 //
 // Set lcd backlight (0 = almost dark .. 16 = full power).
 //
-int doLcdBacklightSet(cmdLine_t *cmdLine)
+u08 doLcdBacklightSet(cmdLine_t *cmdLine)
 {
   // Process backlight
   emuBacklight = TO_U08(argDouble[0]);
@@ -937,7 +931,7 @@ int doLcdBacklightSet(cmdLine_t *cmdLine)
 //
 // Reset controller lcd cursors and sync with software cursor to (0,0)
 //
-int doLcdCursorReset(cmdLine_t *cmdLine)
+u08 doLcdCursorReset(cmdLine_t *cmdLine)
 {
   // Reset the controller hardware cursors to (0,0) and by doing so sync the y
   // location with the glcd administered cursor y location
@@ -954,7 +948,7 @@ int doLcdCursorReset(cmdLine_t *cmdLine)
 //
 // Send x and y cursor position to controller
 //
-int doLcdCursorSet(cmdLine_t *cmdLine)
+u08 doLcdCursorSet(cmdLine_t *cmdLine)
 {
   u08 payload;
   u08 controller = TO_U08(argDouble[0]);
@@ -973,7 +967,7 @@ int doLcdCursorSet(cmdLine_t *cmdLine)
 //
 // Switch controller displays on/off
 //
-int doLcdDisplaySet(cmdLine_t *cmdLine)
+u08 doLcdDisplaySet(cmdLine_t *cmdLine)
 {
   u08 payload;
 
@@ -992,7 +986,7 @@ int doLcdDisplaySet(cmdLine_t *cmdLine)
 //
 // Erase the contents of the lcd screen
 //
-int doLcdErase(cmdLine_t *cmdLine)
+u08 doLcdErase(cmdLine_t *cmdLine)
 {
   // Erase lcd display
   glcdClearScreen(mcBgColor);
@@ -1006,14 +1000,14 @@ int doLcdErase(cmdLine_t *cmdLine)
 //
 // Set glut graphics options
 //
-int doLcdGlutGrSet(cmdLine_t *cmdLine)
+u08 doLcdGlutGrSet(cmdLine_t *cmdLine)
 {
   // Ignore if glut device is not used
   if (ctrlDeviceActive(CTRL_DEVICE_GLUT) == GLCD_FALSE)
     return CMD_RET_OK;
 
   // Set glut pixel bezel and gridline options on/off
-  ctrlLcdGlutGrSet(TO_UINT8_T(argDouble[0]), TO_UINT8_T(argDouble[1]));
+  ctrlLcdGlutGrSet(TO_U08(argDouble[0]), TO_U08(argDouble[1]));
 
   return CMD_RET_OK;
 }
@@ -1023,7 +1017,7 @@ int doLcdGlutGrSet(cmdLine_t *cmdLine)
 //
 // Reset (clear) glcd pixel highlight (glut only)
 //
-int doLcdHlReset(cmdLine_t *cmdLine)
+u08 doLcdHlReset(cmdLine_t *cmdLine)
 {
   // Disable glcd pixel highlight
   ctrlLcdHighlight(GLCD_FALSE, 0, 0);
@@ -1037,7 +1031,7 @@ int doLcdHlReset(cmdLine_t *cmdLine)
 //
 // Enable glcd pixel highlight (glut only)
 //
-int doLcdHlSet(cmdLine_t *cmdLine)
+u08 doLcdHlSet(cmdLine_t *cmdLine)
 {
   // Enable glcd pixel highlight
   ctrlLcdHighlight(GLCD_TRUE, TO_U08(argDouble[0]), TO_U08(argDouble[1]));
@@ -1051,7 +1045,7 @@ int doLcdHlSet(cmdLine_t *cmdLine)
 //
 // Inverse the contents of the lcd screen
 //
-int doLcdInverse(cmdLine_t *cmdLine)
+u08 doLcdInverse(cmdLine_t *cmdLine)
 {
   // Toggle the foreground and background colors
   if (mcBgColor == GLCD_OFF)
@@ -1078,14 +1072,14 @@ int doLcdInverse(cmdLine_t *cmdLine)
 //
 // Set ncurses graphics options
 //
-int doLcdNcurGrSet(cmdLine_t *cmdLine)
+u08 doLcdNcurGrSet(cmdLine_t *cmdLine)
 {
   // Ignore if ncurses device is not used
   if (ctrlDeviceActive(CTRL_DEVICE_NCURSES) == GLCD_FALSE)
     return CMD_RET_OK;
 
   // Set ncurses backlight option on/off
-  ctrlLcdNcurGrSet(TO_UINT8_T(argDouble[0]));
+  ctrlLcdNcurGrSet(TO_U08(argDouble[0]));
   ctrlLcdFlush();
 
   return CMD_RET_OK;
@@ -1096,7 +1090,7 @@ int doLcdNcurGrSet(cmdLine_t *cmdLine)
 //
 // Print controller state and registers
 //
-int doLcdPrint(cmdLine_t *cmdLine)
+u08 doLcdPrint(cmdLine_t *cmdLine)
 {
   // Print controller state and registers
   ctrlRegPrint();
@@ -1109,7 +1103,7 @@ int doLcdPrint(cmdLine_t *cmdLine)
 //
 // Read data from controller lcd using the internal controller cursor
 //
-int doLcdRead(cmdLine_t *cmdLine)
+u08 doLcdRead(cmdLine_t *cmdLine)
 {
   char *varName;
   int varId;
@@ -1144,7 +1138,7 @@ int doLcdRead(cmdLine_t *cmdLine)
 //
 // Set display startline in controllers
 //
-int doLcdStartLineSet(cmdLine_t *cmdLine)
+u08 doLcdStartLineSet(cmdLine_t *cmdLine)
 {
   u08 payload;
 
@@ -1163,7 +1157,7 @@ int doLcdStartLineSet(cmdLine_t *cmdLine)
 //
 // Write data to controller lcd using the internal controller cursor
 //
-int doLcdWrite(cmdLine_t *cmdLine)
+u08 doLcdWrite(cmdLine_t *cmdLine)
 {
   // Write data to controller lcd
   ctrlExecute(CTRL_METHOD_WRITE, TO_U08(argDouble[0]), TO_U08(argDouble[1]));
@@ -1177,7 +1171,7 @@ int doLcdWrite(cmdLine_t *cmdLine)
 //
 // Start the stubbed Monochron application
 //
-int doMonochron(cmdLine_t *cmdLine)
+u08 doMonochron(cmdLine_t *cmdLine)
 {
   u08 myBacklight = 16;
   u08 startWait = GLCD_FALSE;
@@ -1255,7 +1249,7 @@ int doMonochron(cmdLine_t *cmdLine)
 //
 // Paint ascii
 //
-int doPaintAscii(cmdLine_t *cmdLine)
+u08 doPaintAscii(cmdLine_t *cmdLine)
 {
   u08 len = 0;
   u08 color;
@@ -1295,7 +1289,7 @@ int doPaintAscii(cmdLine_t *cmdLine)
 //
 // Paint circle
 //
-int doPaintCircle(cmdLine_t *cmdLine)
+u08 doPaintCircle(cmdLine_t *cmdLine)
 {
   u08 color;
 
@@ -1315,7 +1309,7 @@ int doPaintCircle(cmdLine_t *cmdLine)
 //
 // Paint circle with fill pattern
 //
-int doPaintCircleFill(cmdLine_t *cmdLine)
+u08 doPaintCircleFill(cmdLine_t *cmdLine)
 {
   u08 color;
 
@@ -1335,7 +1329,7 @@ int doPaintCircleFill(cmdLine_t *cmdLine)
 //
 // Paint dot
 //
-int doPaintDot(cmdLine_t *cmdLine)
+u08 doPaintDot(cmdLine_t *cmdLine)
 {
   u08 color;
 
@@ -1354,7 +1348,7 @@ int doPaintDot(cmdLine_t *cmdLine)
 //
 // Paint line
 //
-int doPaintLine(cmdLine_t *cmdLine)
+u08 doPaintLine(cmdLine_t *cmdLine)
 {
   u08 color;
 
@@ -1374,7 +1368,7 @@ int doPaintLine(cmdLine_t *cmdLine)
 //
 // Paint a number using a c printf format
 //
-int doPaintNumber(cmdLine_t *cmdLine)
+u08 doPaintNumber(cmdLine_t *cmdLine)
 {
   u08 len = 0;
   u08 color;
@@ -1421,7 +1415,7 @@ int doPaintNumber(cmdLine_t *cmdLine)
 //
 // Paint rectangle
 //
-int doPaintRect(cmdLine_t *cmdLine)
+u08 doPaintRect(cmdLine_t *cmdLine)
 {
   u08 color;
 
@@ -1441,7 +1435,7 @@ int doPaintRect(cmdLine_t *cmdLine)
 //
 // Paint rectangle with fill pattern
 //
-int doPaintRectFill(cmdLine_t *cmdLine)
+u08 doPaintRectFill(cmdLine_t *cmdLine)
 {
   u08 color;
 
@@ -1462,7 +1456,7 @@ int doPaintRectFill(cmdLine_t *cmdLine)
 //
 // Initiate a new or continue a repeat loop
 //
-int doRepeatFor(cmdLine_t **cmdProgCounter)
+u08 doRepeatFor(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
@@ -1510,7 +1504,7 @@ int doRepeatFor(cmdLine_t **cmdProgCounter)
 //
 // Complete current repeat loop and determine end-of-loop
 //
-int doRepeatNext(cmdLine_t **cmdProgCounter)
+u08 doRepeatNext(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
   cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
@@ -1536,7 +1530,7 @@ int doRepeatNext(cmdLine_t **cmdProgCounter)
 //
 // Print stub, glcd interface and lcd performance statistics
 //
-int doStatsPrint(cmdLine_t *cmdLine)
+u08 doStatsPrint(cmdLine_t *cmdLine)
 {
   printf("statistics:\n");
 
@@ -1554,7 +1548,7 @@ int doStatsPrint(cmdLine_t *cmdLine)
 //
 // Reset stub, glcd interface and lcd performance statistics
 //
-int doStatsReset(cmdLine_t *cmdLine)
+u08 doStatsReset(cmdLine_t *cmdLine)
 {
   // Reset stub statistics
   stubStatsReset();
@@ -1573,7 +1567,7 @@ int doStatsReset(cmdLine_t *cmdLine)
 //
 // Sync with and then report and update clock with date/time/alarm
 //
-int doTimeFlush(cmdLine_t *cmdLine)
+u08 doTimeFlush(cmdLine_t *cmdLine)
 {
   // Get current time+date
   rtcTimeRead();
@@ -1596,7 +1590,7 @@ int doTimeFlush(cmdLine_t *cmdLine)
 //
 // Report current date/time/alarm
 //
-int doTimePrint(cmdLine_t *cmdLine)
+u08 doTimePrint(cmdLine_t *cmdLine)
 {
   // Get current time+date
   rtcTimeRead();
@@ -1612,7 +1606,7 @@ int doTimePrint(cmdLine_t *cmdLine)
 //
 // Reset internal clock time
 //
-int doTimeReset(cmdLine_t *cmdLine)
+u08 doTimeReset(cmdLine_t *cmdLine)
 {
   // Reset time to system time
   stubTimeSet(80, 0, 0, 0, 70, 0, 0);
@@ -1635,9 +1629,9 @@ int doTimeReset(cmdLine_t *cmdLine)
 //
 // Set internal clock time
 //
-int doTimeSet(cmdLine_t *cmdLine)
+u08 doTimeSet(cmdLine_t *cmdLine)
 {
-  int timeOk = GLCD_TRUE;
+  u08 timeOk = GLCD_TRUE;
 
   // Overide time
   timeOk = stubTimeSet(TO_UINT8_T(argDouble[2]), TO_UINT8_T(argDouble[1]),
@@ -1663,9 +1657,9 @@ int doTimeSet(cmdLine_t *cmdLine)
 //
 // Print value of variables in rows with max 8 variable values per row
 //
-int doVarPrint(cmdLine_t *cmdLine)
+u08 doVarPrint(cmdLine_t *cmdLine)
 {
-  int retVal;
+  u08 retVal;
 
   // Print all variables matching a regexp pattern where '.' is all
   retVal = varPrint(argWord[1], GLCD_TRUE);
@@ -1680,11 +1674,11 @@ int doVarPrint(cmdLine_t *cmdLine)
 //
 // Clear one or all used named variables
 //
-int doVarReset(cmdLine_t *cmdLine)
+u08 doVarReset(cmdLine_t *cmdLine)
 {
   int varId;
   int varInUse;
-  int retVal;
+  u08 retVal;
 
   // Clear all variables
   if (strcmp(argWord[1], ".") == 0)
@@ -1719,7 +1713,7 @@ int doVarReset(cmdLine_t *cmdLine)
 // but there's nothing else left for us to do except for returning the
 // successful technical result of the expression evaluator.
 //
-int doVarSet(cmdLine_t *cmdLine)
+u08 doVarSet(cmdLine_t *cmdLine)
 {
   return CMD_RET_OK;
 }
@@ -1729,7 +1723,7 @@ int doVarSet(cmdLine_t *cmdLine)
 //
 // Wait for keypress or pause in multiples of 1 msec.
 //
-int doWait(cmdLine_t *cmdLine)
+u08 doWait(cmdLine_t *cmdLine)
 {
   int delay = 0;
   char ch = '\0';
@@ -1764,7 +1758,7 @@ int doWait(cmdLine_t *cmdLine)
 //
 // Wait for timer expiry in multiples of 1 msec.
 //
-int doWaitTimerExpiry(cmdLine_t *cmdLine)
+u08 doWaitTimerExpiry(cmdLine_t *cmdLine)
 {
   int delay = 0;
   suseconds_t remaining;
@@ -1789,7 +1783,7 @@ int doWaitTimerExpiry(cmdLine_t *cmdLine)
 //
 // Start a new wait timer
 //
-int doWaitTimerStart(cmdLine_t *cmdLine)
+u08 doWaitTimerStart(cmdLine_t *cmdLine)
 {
   waitTimerStart(&tvTimer);
   return CMD_RET_OK;

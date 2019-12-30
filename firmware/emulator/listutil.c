@@ -23,7 +23,7 @@
 extern int fileExecDepth;
 
 // The current command echo state
-extern int echoCmd;
+extern u08 echoCmd;
 
 // This is me
 extern const char *__progname;
@@ -42,11 +42,9 @@ static int cmdCmdCount = 0;
 static int cmdLineCount = 0;
 
 // Local function prototypes
-static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast,
-  cmdLine_t **cmdLineRoot);
 static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine);
-static int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
+static u08 cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdInput_t *cmdInput, int fileExecDepth);
 static void cmdListRaiseScan(void);
 static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
@@ -56,18 +54,26 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine);
 //
 // Function: cmdLineCreate
 //
-// Create a new cmdLine structure and add it in the command linked list
+// Create a new cmdLine structure and, when provided, add it in the command
+// linked list
 //
-static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast,
-  cmdLine_t **cmdLineRoot)
+cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
 {
   cmdLine_t *cmdLine = NULL;
 
-  // Allocate the new command line
+  // Allocate and init a new command line
   cmdLine = malloc(sizeof(cmdLine_t));
+  cmdLine->lineNum = 0;
+  cmdLine->input = NULL;
+  cmdLine->args = NULL;
+  cmdLine->initialized = GLCD_FALSE;
+  cmdLine->cmdCommand = NULL;
+  cmdLine->cmdPcCtrlParent = NULL;
+  cmdLine->cmdPcCtrlChild = NULL;
+  cmdLine->next = NULL;
 
   // Take care of some administrative pointers
-  if (*cmdLineRoot == NULL)
+  if (cmdLineRoot != NULL && *cmdLineRoot == NULL)
   {
     // This is the first list element
     *cmdLineRoot = cmdLine;
@@ -77,16 +83,6 @@ static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast,
     // Not the first list elemant
     cmdLineLast->next = cmdLine;
   }
-
-  // Init the new structure
-  cmdLine->lineNum = 0;
-  cmdLine->input = NULL;
-  cmdLine->args = NULL;
-  cmdLine->initialized = GLCD_FALSE;
-  cmdLine->cmdCommand = NULL;
-  cmdLine->cmdPcCtrlParent = NULL;
-  cmdLine->cmdPcCtrlChild = NULL;
-  cmdLine->next = NULL;
 
   return cmdLine;
 }
@@ -98,11 +94,11 @@ static cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast,
 // This is the main command input handler that can be called recursively via
 // the mchron 'e' command.
 //
-int cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
+u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
 {
   char *input = cmdLine->input;
   cmdCommand_t *cmdCommand;
-  int retVal = CMD_RET_OK;
+  u08 retVal = CMD_RET_OK;
 
   // Have we scanned the command line arguments yet
   if (cmdLine->initialized == GLCD_FALSE)
@@ -153,7 +149,7 @@ int cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
     if (retVal == CMD_RET_OK)
     {
       // Execute the commands in the command list
-      int myEchoCmd = echoCmd;
+      u08 myEchoCmd = echoCmd;
       echoCmd = CMD_ECHO_NO;
       cmdListStatsInit();
       retVal = cmdListExecute(cmdLineRoot, (char *)__progname);
@@ -195,7 +191,7 @@ static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
   int lineNumErr = 0;
   cmdCommand_t *cmdCommand;
   char *input;
-  int retVal;
+  u08 retVal;
 
   // Start command line scanner by getting command and its dictionary entry
   input = cmdLine->input;
@@ -276,7 +272,8 @@ void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot)
     // Return the malloc-ed scanned command line arguments in the command and
     // the command itself
     cmdArgCleanup(cmdLineRoot);
-    free(cmdLineRoot->input);
+    if (cmdLineRoot->input != NULL)
+      free(cmdLineRoot->input);
 
     // Return the malloc-ed command line
     nextLine = cmdLineRoot->next;
@@ -309,16 +306,16 @@ void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot)
 // We may encounter program control blocks that will influence the program
 // counter by creating loops or jumps in the execution plan of the list.
 //
-int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
+u08 cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
 {
+  int i;
   char ch = '\0';
   cmdLine_t *cmdProgCounter = NULL;
   cmdLine_t *cmdProgCounterNext = NULL;
   cmdCommand_t *cmdCommand;
   char *input;
-  int cmdPcCtrlType;
-  int i;
-  int retVal = CMD_RET_OK;
+  u08 cmdPcCtrlType;
+  u08 retVal = CMD_RET_OK;
 
   // See if we need to switch to keypress mode. We only need to do this at the
   // root of nested list executions. Switching to keypress mode allows the
@@ -436,7 +433,7 @@ int cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
 //
 // Load command file contents in a linked list structure
 //
-int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
+u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   char *fileName, int fileExecDepth)
 {
   FILE *fp;				// Input file pointer
@@ -543,7 +540,7 @@ int cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
 //
 // Load keyboard commands interactively in a linked list structure
 //
-static int cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
+static u08 cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
   cmdPcCtrl_t **cmdPcCtrlRoot, cmdInput_t *cmdInput, int fileExecDepth)
 {
   cmdLine_t *cmdLineLast = NULL;	// The last cmdline in linked list
@@ -743,8 +740,8 @@ static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
 static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
 {
   cmdPcCtrl_t *searchPcCtrl = cmdPcCtrlLast;
-  int cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
-  int searchPcCtrlType;
+  u08 cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
+  u08 searchPcCtrlType;
 
   while (searchPcCtrl != NULL)
   {

@@ -20,7 +20,7 @@ typedef struct _lcdNcurInitArgs_t
 // Lcd device control methods
 void lcdNcurCleanup(void);
 void lcdNcurFlush(void);
-int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgs);
+unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgs);
 
 // Lcd device statistics methods
 void lcdNcurStatsPrint(void);

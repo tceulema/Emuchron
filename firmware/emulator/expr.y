@@ -22,11 +22,11 @@
 
 // The following expression evaluator objects are the only ones that are
 // externally accessible
-double exprValue;		// The resulting expression value
-unsigned char exprAssign;	// Indicates if input expression is an assignment
+double exprValue;	// The resulting expression value
+u08 exprAssign;		// Indicates if input expression is an assignment
 
 // Variable error status flag (variable is not active)
-static int varError;
+static u08 varStatus;
 
 // Dummy value to be used in c library math functions
 static double myDummy;
@@ -117,7 +117,7 @@ static double exprCompare(double valLeft, double valRight, int cond)
 // Generic parser error handling
 static int yyerror(char *s)
 {
-  //printf("%d %s\n", varError, s);
+  //printf("%d %s\n", varStatus, s);
   return 0;
 }
 %}
@@ -171,15 +171,16 @@ Line:
 
 Assignment:
     // Assignment expression to set value of variable
-    VARIABLE IS Expression { $$ = varValSet((int)$1, $3); exprAssign = 1; }
+    VARIABLE IS Expression { $$ = varValSet((int)$1, $3);
+        exprAssign = GLCD_TRUE; }
 ;
 
 Expression:
     // Fixed input number or constant (pi/true/false/null)
     NUMBER { $$ = $1; }
     // Get variable value
-    | VARIABLE { $$ = varValGet((int)$1, &varError);
-        if (varError == 1) { YYERROR; } }
+    | VARIABLE { $$ = varValGet((int)$1, &varStatus);
+        if (varStatus == VAR_NOTINUSE) { YYERROR; } }
     // Mathematical operator expressions
     | Expression PLUS Expression { $$ = $1 + $3; }
     | Expression MINUS Expression { $$ = $1 - $3; }

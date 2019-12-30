@@ -10,5 +10,5 @@
 
 // mchron command dictionary functions
 cmdCommand_t *dictCmdGet(char *cmdName);
-int dictPrint(char *pattern);
+u08 dictPrint(char *pattern);
 #endif

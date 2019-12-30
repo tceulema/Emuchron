@@ -28,7 +28,7 @@
 
 // External data from expression evaluator
 extern double exprValue;
-extern unsigned char exprAssign;
+extern u08 exprAssign;
 
 // This is me
 extern const char *__progname;
@@ -40,9 +40,9 @@ char *argWord[ARG_TYPE_COUNT_MAX];
 char *argString = NULL;
 
 // Index in the several scan result arrays
-static int argCharIdx = 0;
-static int argDoubleIdx = 0;
-static int argWordIdx = 0;
+static u08 argCharIdx = 0;
+static u08 argDoubleIdx = 0;
+static u08 argWordIdx = 0;
 
 // The current readline history in-memory cache length and history file
 static int rlCacheLen = 0;
@@ -50,10 +50,10 @@ static char *rlHistoryFile = NULL;
 
 // Local function prototypes
 static char *cmdArgCreate(char *arg, int len, int isExpr);
-static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue);
-static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue);
-static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue);
-static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue);
+static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char argValue);
+static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue);
+static u08 cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue);
+static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue);
 
 //
 // Function: cmdArgCleanup
@@ -125,7 +125,7 @@ static char *cmdArgCreate(char *arg, int len, int isExpr)
 // When done the input pointer points to the start of the first command
 // argument or '\0'.
 //
-int cmdArgInit(char **input, cmdLine_t *cmdLine)
+u08 cmdArgInit(char **input, cmdLine_t *cmdLine)
 {
   char *workPtr;
   char *name;
@@ -173,13 +173,13 @@ int cmdArgInit(char **input, cmdLine_t *cmdLine)
 // checked. In case of a numeric argument we need to run it through the
 // expression evaluator and then check its domain profile.
 //
-int cmdArgPublish(cmdLine_t *cmdLine)
+u08 cmdArgPublish(cmdLine_t *cmdLine)
 {
   cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
   int argCount = cmdLine->cmdCommand->argCount;
   int i = 0;
-  int argType;
-  int retVal = CMD_RET_OK;
+  u08 argType;
+  u08 retVal = CMD_RET_OK;
 
   // Reset the argument array pointers and set number of args to publish
   argCharIdx = 0;
@@ -228,9 +228,9 @@ int cmdArgPublish(cmdLine_t *cmdLine)
         printf("\n");
         return CMD_RET_ERROR;
       }
-      if (argType == ARG_ASSIGN && exprAssign == 0)
+      if (argType == ARG_ASSIGN && exprAssign == GLCD_FALSE)
       {
-        printf("%s? syntax error\n", cmdArg[i].argName);
+        printf("%s? parse error\n", cmdArg[i].argName);
         return CMD_RET_ERROR;
       }
       if (cmdArg[i].cmdArgDomain->argDomainType != DOM_NULL_INFO)
@@ -279,16 +279,17 @@ int cmdArgPublish(cmdLine_t *cmdLine)
 // Note: We assume that *input points to the first non-white character after
 //       the command name or to '\0'.
 //
-int cmdArgRead(char *input, cmdLine_t *cmdLine)
+u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
 {
   char *workPtr = input;
   char c;
   cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
-  int argType;
+  u08 argType;
+  u08 argDomainType;
   int argCount = cmdLine->cmdCommand->argCount;
   int i = 0;
   int j = 0;
-  int retVal = CMD_RET_OK;
+  u08 retVal = CMD_RET_OK;
 
   // Allocate and init pointer array for split-up command line arguments
   if (argCount > 0)
@@ -303,6 +304,7 @@ int cmdArgRead(char *input, cmdLine_t *cmdLine)
   {
     c = *workPtr;
     argType = cmdArg[i].argType;
+    argDomainType = cmdArg[i].cmdArgDomain->argDomainType;
 
     // Verify unexpected end-of-string
     if (argType != ARG_STR_OPT && c == '\0')
@@ -324,7 +326,7 @@ int cmdArgRead(char *input, cmdLine_t *cmdLine)
       cmdLine->args[i] = cmdArgCreate(workPtr, 1, GLCD_FALSE);
 
       // Validate the character (if a validation rule has been setup)
-      if (cmdArg[i].cmdArgDomain->argDomainType != DOM_NULL_INFO)
+      if (argDomainType != DOM_NULL_INFO)
       {
         retVal = cmdArgValidateChar(&cmdArg[i], *cmdLine->args[i]);
         if (retVal != CMD_RET_OK)
@@ -348,14 +350,14 @@ int cmdArgRead(char *input, cmdLine_t *cmdLine)
       // Validate the word (if a validation rule has been setup)
       if (argType == ARG_WORD)
       {
-        if (cmdArg[i].cmdArgDomain->argDomainType == DOM_WORD)
+        if (argDomainType == DOM_WORD)
         {
           retVal = cmdArgValidateWord(&cmdArg[i], cmdLine->args[i]);
           if (retVal != CMD_RET_OK)
             return retVal;
         }
-        else if (cmdArg[i].cmdArgDomain->argDomainType == DOM_VAR_NAME ||
-            cmdArg[i].cmdArgDomain->argDomainType == DOM_VAR_NAME_ALL)
+        else if (argDomainType == DOM_VAR_NAME ||
+            argDomainType == DOM_VAR_NAME_ALL)
         {
           retVal = cmdArgValidateVar(&cmdArg[i], cmdLine->args[i]);
           if (retVal != CMD_RET_OK)
@@ -398,10 +400,10 @@ int cmdArgRead(char *input, cmdLine_t *cmdLine)
 //
 // Validate a character argument with a validation profile
 //
-static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue)
+static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char argValue)
 {
   int i = 0;
-  int charFound = GLCD_FALSE;
+  u08 charFound = GLCD_FALSE;
   char *argCharList = cmdArg->cmdArgDomain->argTextList;
 
   if (cmdArg->cmdArgDomain->argDomainType != DOM_CHAR)
@@ -433,9 +435,9 @@ static int cmdArgValidateChar(cmdArg_t *cmdArg, char argValue)
 //
 // Validate a numeric argument with a validation profile
 //
-static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
+static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
 {
-  int argDomainType = cmdArg->cmdArgDomain->argDomainType;
+  u08 argDomainType = cmdArg->cmdArgDomain->argDomainType;
 
   // Validate internal integrity of validation structure
   if (argDomainType != DOM_NUM_MIN && argDomainType != DOM_NUM_MAX &&
@@ -484,11 +486,11 @@ static int cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
 // NOTE: When the scan profile for a variable name, as defined in expr.l
 // [firmware/emulator], is modified, this function must be changed as well.
 //
-static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue)
+static u08 cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue)
 {
   regex_t regex;
   int status = 0;
-  int argDomainType = cmdArg->cmdArgDomain->argDomainType;
+  u08 argDomainType = cmdArg->cmdArgDomain->argDomainType;
 
   if (argDomainType != DOM_VAR_NAME && argDomainType != DOM_VAR_NAME_ALL)
   {
@@ -518,11 +520,11 @@ static int cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue)
 //
 // Validate a word argument with a validation profile
 //
-static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
+static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
 {
   int i = 0;
   int j = 0;
-  int wordFound = GLCD_FALSE;
+  u08 wordFound = GLCD_FALSE;
   char *argWordList = cmdArg->cmdArgDomain->argTextList;
 
   if (cmdArg->cmdArgDomain->argDomainType != DOM_WORD)
@@ -587,9 +589,9 @@ static int cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
 //
 // Function: cmdArgValuePrint
 //
-// Print a number in the desired format and return print length
+// Print a number in the desired format and return print length in characters
 //
-int cmdArgValuePrint(double value, int detail)
+u08 cmdArgValuePrint(double value, u08 detail)
 {
   if (fabs(value) >= 10000 || fabs(value) < 0.01L)
   {
@@ -774,7 +776,7 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
     // Use our own input mechanism to read an input line from a text file.
     // Command line input uses the readline library.
     char inputCli[CMD_BUILD_LEN];
-    int done = GLCD_FALSE;
+    u08 done = GLCD_FALSE;
     char *inputPtr = NULL;
     char *mergePtr = NULL;
     char *buildPtr = NULL;

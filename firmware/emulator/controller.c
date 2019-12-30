@@ -10,7 +10,6 @@
 // Monochron and emuchron defines
 #include "../monomain.h"
 #include "../ks0108.h"
-#include "interpreter.h"
 #include "mchronutil.h"
 #include "controller.h"
 
@@ -25,7 +24,7 @@ extern uint16_t OCR2B;
 //  <- 64 px -><- 64 px->
 //  ^          ^
 //  |  64 px   |  64 px
-//  v          V
+//  v          v
 //
 // An lcd byte represents 8 px and is implemented vertically.
 // So, when lcd byte bit 0 starts at px[x,y] then bit 7 ends at px[x,y+7].
@@ -287,7 +286,7 @@ static ctrlController_t ctrlControllers[GLCD_NUM_CONTROLLERS];
 // Identifiers to indicate what lcd stub devices are used
 static u08 useGlut = GLCD_FALSE;
 static u08 useNcurses = GLCD_FALSE;
-static u08 useDevice = 0;
+static u08 useDevice = CTRL_DEVICE_NULL;
 
 // Statistics counters on glcd interface. The ncurses and glut devices
 // have their own dedicated statistics counters that are administered
@@ -603,12 +602,12 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
 u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 {
   u08 i;
-  int initOk = GLCD_TRUE;
+  unsigned char initOk = GLCD_TRUE;
 
   // Administer which lcd stub devices are used
   useGlut = ctrlDeviceArgs->useGlut;
   useNcurses = ctrlDeviceArgs->useNcurses;
-  useDevice = 0;
+  useDevice = CTRL_DEVICE_NULL;
   if (useNcurses == GLCD_TRUE)
     useDevice = useDevice | CTRL_DEVICE_NCURSES;
   if (useGlut == GLCD_TRUE)
@@ -653,7 +652,7 @@ void ctrlCleanup(void)
     lcdGlutCleanup();
   useNcurses = GLCD_FALSE;
   useGlut = GLCD_FALSE;
-  useDevice = 0;
+  useDevice = CTRL_DEVICE_NULL;
 }
 
 //
@@ -737,8 +736,8 @@ void ctrlLcdNcurGrSet(u08 backlight)
 //
 void ctrlRegPrint(void)
 {
-  ctrlRegister_t *ctrlRegister;
   u08 i;
+  ctrlRegister_t *ctrlRegister;
   char *state;
 
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
@@ -769,9 +768,9 @@ void ctrlRegPrint(void)
 // Print statistics of the high level glcd interface and (optional)
 // lcd controllers and display devices
 //
-void ctrlStatsPrint(int type)
+void ctrlStatsPrint(u08 type)
 {
-  int i;
+  u08 i;
   ctrlStats_t *ctrlStats;
 
   // Report the lcd interface statistics
@@ -834,9 +833,9 @@ void ctrlStatsPrint(int type)
 //
 // Reset the statistics for the glcd interface, controllers and lcd devices
 //
-void ctrlStatsReset(int type)
+void ctrlStatsReset(u08 type)
 {
-  int i;
+  u08 i;
 
   // glcd statistics
   if ((type & CTRL_STATS_GLCD) != 0)

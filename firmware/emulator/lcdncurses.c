@@ -148,22 +148,8 @@ void lcdNcurCleanup(void)
   echo();
   curs_set(1);
 
-  // End the ncurses session.
-  // Okay... it turns out that the combination of ncurses, readline and using
-  // ncurses endwin() on the ncurses tty makes the mchron command terminal go
-  // haywire after exiting mchron, requiring to use the 'reset' command to make
-  // it function properly again. It turns out that omitting endwin() keeps the
-  // mchron terminal in a proper state. So, what to do?
-  // Implement ending an ncurses session according specs (= use endwin()) and
-  // then prohibit the use of the readline library, or, don't call endwin() so
-  // we can use the readline library thereby deviating from the official
-  // ncurses specs.
-  // The verdict: The readline library is awesome! Sorry endwin()...
-  //endwin();
-
-  // Since we're not calling endwin() we clear the display ourselves
-  clear();
-  refresh();
+  // End the ncurses session
+  endwin();
 
   // Unlink ncurses from tty
   delscreen(ttyScreen);
@@ -298,7 +284,7 @@ static void lcdNcurDrawModeSet(unsigned char controller, unsigned char color)
 void lcdNcurFlush(void)
 {
   int i;
-  int refreshDone = GLCD_FALSE;
+  unsigned char refreshDone = GLCD_FALSE;
   struct stat buffer;
 
   // Check the ncurses tty if the previous check was in a preceding second
@@ -338,7 +324,7 @@ void lcdNcurFlush(void)
 //
 void lcdNcurGraphicsSet(unsigned char backlight)
 {
-  int refresh = GLCD_FALSE;
+  unsigned char refresh = GLCD_FALSE;
   int brightness;
   int i;
 
@@ -377,7 +363,7 @@ void lcdNcurGraphicsSet(unsigned char backlight)
 //
 // Initialize the lcd display in ncurses window
 //
-int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
+unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
 {
   int brightWin;
   int brightBorder;
@@ -426,10 +412,8 @@ int lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   // Init our window lcd image copy to blank
   memset(lcdNcurImage, 0, sizeof(lcdNcurImage));
 
-  // Make ncurses believe we're dealing with a 256 color terminal
-  setenv("TERM", "xterm-256color", 1);
-
   // Open destination tty, assign to ncurses screen and allow using colors
+  // by forcing a 256 color profile
   ttyFile = fopen(lcdNcurInitArgs.tty, "r+");
   ttyScreen = newterm("xterm-256color", ttyFile, ttyFile);
   start_color();

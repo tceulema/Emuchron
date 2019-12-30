@@ -15,8 +15,8 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput);
 
 // mchron command line argument scanning functions
 void cmdArgCleanup(cmdLine_t *cmdLine);
-int cmdArgInit(char **input, cmdLine_t *cmdLine);
-int cmdArgPublish(cmdLine_t *cmdLine);
-int cmdArgRead(char *input, cmdLine_t *cmdLine);
-int cmdArgValuePrint(double value, int detail);
+u08 cmdArgInit(char **input, cmdLine_t *cmdLine);
+u08 cmdArgPublish(cmdLine_t *cmdLine);
+u08 cmdArgRead(char *input, cmdLine_t *cmdLine);
+u08 cmdArgValuePrint(double value, u08 detail);
 #endif

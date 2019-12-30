@@ -403,7 +403,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
     else if (fillType == FILL_HALF)
       virY = (b + startBit + 1) & 0x1;
   }
-  else if (align == ALIGN_AUTO)
+  else //if (align == ALIGN_AUTO)
   {
     virX = x;
     if (fillType == FILL_THIRDUP)

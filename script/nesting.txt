@@ -4,7 +4,7 @@
 # Purpose: Test whether lots of nested repeat-for loops works.
 #          Consider this a performance test for the interpreter/CPU.
 #          Run this test a few times to average out the result duration.
-#          On a decent Intel VM machine this script takes about 14 secs to run.
+#          On a decent Intel VM machine this script takes about 15 secs to run.
 #
 # Result : x = 2^22 = 4194304
 #

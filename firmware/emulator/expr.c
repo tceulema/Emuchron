@@ -11,7 +11,6 @@
 
 // Monochron and emuchron defines
 #include "../ks0108.h"
-#include "interpreter.h"
 #include "varutil.h"
 #include "expr.h"
 
@@ -31,10 +30,11 @@
 // CMD_RET_ERROR	- Error in evaluation of expression
 //
 // Global variables containing evaluator results upon successful evaluation:
-// extern double exprValue;         - The resulting expression value
-// extern unsigned char exprAssign; - The expression is an assignment (0 or 1)
+// extern double exprValue;	- The resulting expression value
+// extern u08 exprAssign;	- The expression is an assignment
+//				  (GLCD_FALSE or GLCD_TRUE)
 //
-int exprEvaluate(char *argName, char *exprString)
+u08 exprEvaluate(char *argName, char *exprString)
 {
   struct yy_buffer_state *buf;
   int parseResult;
@@ -47,8 +47,8 @@ int exprEvaluate(char *argName, char *exprString)
   //yydebug = 1;
 
   // Reset previous error and assignment expression indicator
-  varError = 0;
-  exprAssign = 0;
+  varStatus = VAR_OK;
+  exprAssign = GLCD_FALSE;
 
   // Scan and parse the expression and cleanup flex/bison
   buf = yy_scan_string(exprString);
@@ -56,13 +56,13 @@ int exprEvaluate(char *argName, char *exprString)
   yy_delete_buffer(buf);
 
   // Handle all kinds of erroneous end result situations
-  if (varError == 1)
+  if (varStatus == VAR_NOTINUSE)
   {
     // Inactive variable
     printf("%s? parse error\n", argName);
     return CMD_RET_ERROR;
   }
-  else if (varError == 2)
+  else if (varStatus == VAR_OVERFLOW)
   {
     // Variable bucket overflow
     printf("%s? internal: bucket overflow\n", argName);

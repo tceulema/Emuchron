@@ -106,8 +106,8 @@ uint16_t PIND = 0;
 FILE *stubDebugStream = NULL;
 
 // Keypress hold data
-static uint8_t hold = GLCD_FALSE;
-static uint8_t lastChar = '\0';
+static u08 hold = GLCD_FALSE;
+static char lastChar = '\0';
 
 // Stubbed eeprom data. An atmega328p has 1KB of eeprom.
 static uint8_t stubEeprom[EE_SIZE];
@@ -122,8 +122,8 @@ static u08 stubBacklight = 16;
 static void (*stubHelp)(void) = NULL;
 
 // Event handler stub data
-static int eventCycleState = CYCLE_NOWAIT;
-static int eventInit = GLCD_TRUE;
+static u08 eventCycleState = CYCLE_NOWAIT;
+static u08 eventInit = GLCD_TRUE;
 
 // Date/time and timer statistics data
 static double timeDelta = 0L;
@@ -239,7 +239,7 @@ void alarmSoundStop(void)
 //
 // Set the alarm switch position to on or off
 //
-void alarmSwitchSet(uint8_t on, uint8_t show)
+void alarmSwitchSet(u08 on, u08 show)
 {
   uint16_t pinMask = 0;
 
@@ -408,7 +408,7 @@ void kbModeSet(u08 mode)
 //
 // Stub for system beep
 //
-void stubBeep(uint16_t hz, uint16_t msec)
+void stubBeep(uint16_t hz, uint8_t msec)
 {
   char shellCmd[160];
 
@@ -973,7 +973,7 @@ void stubStatsReset(void)
 // 80 = reset time or date to system value
 // other = use parameters for new time or date
 //
-int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
+u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   uint8_t date, uint8_t mon, uint8_t yr)
 {
   double timeDeltaNew = 0L;

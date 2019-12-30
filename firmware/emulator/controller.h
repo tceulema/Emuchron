@@ -8,6 +8,7 @@
 
 #include "lcdglut.h"
 #include "lcdncurses.h"
+#include "interpreter.h"
 
 // The controller interface source methods
 #define CTRL_METHOD_COMMAND	0	// A glcdControlWrite() method
@@ -15,6 +16,7 @@
 #define CTRL_METHOD_WRITE	2	// A glcdDataWrite() method
 
 // The mergeable graphics statistics report and reset types
+#define CTRL_STATS_NULL		0x0	// No stats
 #define CTRL_STATS_GLCD		0x1	// glcd stats
 #define CTRL_STATS_CTRL		0x2	// Controller stats
 #define CTRL_STATS_LCD		0x4	// Lcd (glut/ncurses) stats
@@ -23,6 +25,7 @@
 					// All stats
 
 // The mergeable lcd devices types
+#define CTRL_DEVICE_NULL	0x0	// No device
 #define CTRL_DEVICE_NCURSES	0x1	// Ncurses device
 #define CTRL_DEVICE_GLUT	0x2	// Glut device
 #define CTRL_DEVICE_ALL		\
@@ -45,8 +48,8 @@ u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs);
 // Controller and device status and statistics methods
 u08 ctrlDeviceActive(u08 device);
 void ctrlRegPrint(void);
-void ctrlStatsPrint(int type);
-void ctrlStatsReset(int type);
+void ctrlStatsPrint(u08 type);
+void ctrlStatsReset(u08 type);
 
 // Controller device emulator method
 u08 ctrlExecute(u08 method, u08 controller, u08 data);

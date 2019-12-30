@@ -60,7 +60,7 @@
 
 // Misc stub stuff
 #define _BV(x) 			(0x01 << (x))
-#define pgm_read_byte(x) 	((u08)(*(x)))
+#define pgm_read_byte(x) 	((uint8_t)(*(x)))
 #define asm			__asm__
 
 // Eeprom stubs
@@ -69,13 +69,13 @@ void stubEepWrite(uint8_t *eprombyte, uint8_t value);
 void stubEepReset(void);
 
 // Beep stub
-void stubBeep(uint16_t hz, uint16_t msec);
+void stubBeep(uint16_t hz, uint8_t msec);
 
 // Delay stub
 void stubDelay(int x);
 
 // RTC interface stubs
-int stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
+u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   uint8_t date, uint8_t mon, uint8_t yr);
 u08 stubI2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data);
 u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data);
@@ -105,7 +105,7 @@ int stubLogfileOpen(char debugFile[]);
 // Alarm sound and switch stubs
 void alarmSoundReset(void);
 void alarmSoundStop(void);
-void alarmSwitchSet(uint8_t on, uint8_t show);
+void alarmSwitchSet(u08 on, u08 show);
 void alarmSwitchShow(void);
 void alarmSwitchToggle(uint8_t show);
 

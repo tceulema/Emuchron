@@ -53,8 +53,8 @@ void spotSpeedDialCycle(void)
   DEBUGP("Update SpeedDial");
 
   // Verify changes in sec + min + hour
-  spotSpeedNeedleUpdate(SPEED_X_START + 2 * SPEED_X_OFFSET_SIZE,
-    mcClockOldTS, mcClockNewTS);
+  spotSpeedNeedleUpdate(SPEED_X_START + 2 * SPEED_X_OFFSET_SIZE, mcClockOldTS,
+    mcClockNewTS);
   spotSpeedNeedleUpdate(SPEED_X_START + SPEED_X_OFFSET_SIZE, mcClockOldTM,
     mcClockNewTM);
   spotSpeedNeedleUpdate(SPEED_X_START, mcClockOldTH, mcClockNewTH);

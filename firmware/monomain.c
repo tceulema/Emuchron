@@ -70,8 +70,8 @@ extern volatile uint8_t btnTickerHold;
 extern volatile uint8_t btnTickerConv;
 
 // The following variables drive the realtime clock.
-// In case the clock fails to init set it to noon 1/7/2019.
-volatile rtcDateTime_t rtcDateTime = { 0, 0, 12, 1, 7, 19 };
+// In case the clock fails to init set it to noon 1/1/2020.
+volatile rtcDateTime_t rtcDateTime = { 0, 0, 12, 1, 1, 20 };
 volatile rtcDateTime_t rtcDateTimeNext;
 volatile uint8_t rtcTimeEvent = GLCD_FALSE;
 
@@ -252,8 +252,6 @@ int main(void)
     }
     else // BTN_SET or BTN_PLUS
     {
-      u08 actionDefault = GLCD_FALSE;
-
       // Check the Set button
       if (btnPressed & BTN_SET)
       {
@@ -261,13 +259,13 @@ int main(void)
         {
           // No button method has been defined for the active clock.
           // Default to the action set for the + button.
-          actionDefault = GLCD_TRUE;
+          btnPressed = BTN_PLUS;
           DEBUGP("Set button dflt to +");
         }
       }
 
-      // Check the + button and default Set button action
-      if ((btnPressed & BTN_PLUS) || actionDefault == GLCD_TRUE)
+      // Check the + button
+      if (btnPressed & BTN_PLUS)
       {
         u08 initType;
         u08 myClock = mcMchronClock;

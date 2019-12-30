@@ -6,5 +6,8 @@
 #ifndef EXPR_H
 #define EXPR_H
 
-int exprEvaluate(char *argName, char *exprString);
+#include "interpreter.h"
+
+// Evaluate mchron numeric expression
+u08 exprEvaluate(char *argName, char *exprString);
 #endif

@@ -38,16 +38,16 @@ u08 emuOrientationGet(char orientationId);
 u08 emuStartModeGet(char startId);
 
 // mchron environment functions
-int emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv);
+u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv);
 void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   int arg3, int arg4);
 void emuSigSetup(void);
 void emuShutdown(void);
 
 // mchron interpreter support functions
-void emuClockRelease(int echoCmd);
+void emuClockRelease(u08 echoCmd);
 void emuClockUpdate(void);
-void emuTimePrint(int type);
+void emuTimePrint(u08 type);
 void emuTimeSync(void);
 
 // mchron system interval timer functions
@@ -56,9 +56,9 @@ void emuSysTimerStop(timer_t *timer);
 
 // mchron delay, sleep and timer functions
 char waitDelay(int delay);
-char waitKeypress(int allowQuit);
+char waitKeypress(u08 allowQuit);
 void waitSleep(int sleep);
-char waitTimerExpiry(struct timeval *tvTimer, int expiry, int allowQuit,
+char waitTimerExpiry(struct timeval *tvTimer, int expiry, u08 allowQuit,
   suseconds_t *remaining);
 void waitTimerStart(struct timeval *tvTimer);
 #endif
