@@ -2,11 +2,13 @@
 # Test command script for the Monochron emulator
 #
 # Purpose: Draw a bunch of circles using only integer math. This script
-# replicates the base logic of the glcdCircle() function in Emuchron
-# scripting language.
-# Why? Because we can! It also helps in understanding the draw logic
-# and testing out optimizations prior to implementing them in the
-# actual function in glcd.c
+# replicates the base of such drawing logic in Emuchron scripting language.
+# Why? Because we can! It also helps in understanding the draw logic and
+# testing out optimizations prior to implementing them in the actual function
+# in glcd.c.
+# The glcdCircle2() code logic is a bit more advanced as it only calculates
+# the right side of the circle and then mirrors it to the left side, with both
+# sides using the glcdBuffer[] array, thereby improving the drawing speed.
 #
 # This demo runs continuously.
 # Quit the demo by pressing the 'q' key.

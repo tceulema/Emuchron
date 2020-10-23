@@ -1,8 +1,8 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: This script is used for testing gldcdLine() when painting
-#          sin() and cos() based lines.
+# Purpose: This script is used for testing gldcdLine() when painting sin() and
+# cos() based lines
 #
 
 # Erase lcd display
@@ -48,4 +48,3 @@ rn
 pr f 80 1 34 15
 pa f 83 3 5x5p h 1 1 glcdline
 pa f 82 9 5x5p h 1 1 sin / cos
-

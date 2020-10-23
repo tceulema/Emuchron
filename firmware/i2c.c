@@ -12,7 +12,8 @@
 // 100KHz for slow speed
 // 400KHz for high speed
 
-#define I2C_DEBUG 0
+// Generate i2c debug strings. Uncomment to enable.
+//#define I2C_DEBUG
 
 // I2C state and address variables
 static volatile eI2cStateType I2cState;
@@ -416,7 +417,7 @@ SIGNAL(TWI_vect)
     putstring("I2C: MR->DATA_ACK\r\n");
     #endif
     // Store received data byte
-    uint8_t x = inb(TWDR);
+    ; uint8_t x = inb(TWDR);
     I2cReceiveData[I2cReceiveDataIndex++] = x;
     uart_putw_hex(x);
     // Fall-through to see if more bytes will be received
@@ -496,7 +497,7 @@ SIGNAL(TWI_vect)
   case TW_ST_SLA_ACK:			// 0xa8: own SLA+R received, ACK returned
   case TW_ST_ARB_LOST_SLA_ACK:		// 0xb0:     GCA+R received, ACK returned
     #ifdef I2C_DEBUG
-          putstring("I2C: ST->SLA_ACK\r\n");
+    putstring("I2C: ST->SLA_ACK\r\n");
     #endif
     // We are addressed as slave for reading (data must be xmit back to master)
     // Set state

@@ -6,7 +6,7 @@
 
 le
 
-pa f 1 1 5x5p h 1 1 Examples 'pn' format strings:
+pa f 1 1 5x5p h 1 1 Examples cmd 'pn' format strings:
 
 # In general, if the format is too small to fit the number to be printed,
 # the size of the field will be expanded to make it fit.
@@ -40,4 +40,3 @@ pn f 1 44 5x5p h 1 1 1.2345678e7 7) %g
 
 # 8) Let %g decide what should be the best format for this number
 pn f 1 50 5x5p h 1 1 123.45678 8) %g
-

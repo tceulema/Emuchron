@@ -3,7 +3,7 @@ mchron - Emuchron emulator command line tool
 
 Use: mchron [-d <logfile>] [-g <geometry>] [-h] [-l <device>] [-p <position>]
             [-t <tty>]
-            
+
   -d <logfile>  - Debug logfile name
   -g <geometry> - Geometry (x,y) of glut window
                   Default: "520x264"
@@ -19,7 +19,7 @@ Use: mchron [-d <logfile>] [-g <geometry>] [-h] [-l <device>] [-p <position>]
 
 Examples:
   ./mchron
-  ./mchron -l glut -p "768,128"
+  ./mchron -l glut -p 768,128
   ./mchron -l ncurses
   ./mchron -l ncurses -t /dev/pts/1 -d debug.log
 
@@ -83,7 +83,7 @@ Commands:
               backlight: 0..16 (0 = dim .. 16 = bright)
   'lcr' - Reset controller lcd cursors
   'lcs' - Set controller lcd cursor
-          Arguments: <controller> <x> <yline> 
+          Arguments: <controller> <x> <yline>
               controller: 0, 1
               x: 0..63
               yline: 0..7
@@ -107,28 +107,38 @@ Commands:
               backlight: 0 = off, 1 = on
   'lp'  - Print controller state/registers
   'lr'  - Read controller lcd data in variable
-          Arguments: <controller> <variable> 
+          Arguments: <controller> <variable>
               controller: 0, 1
               variable: word of [a-zA-Z_] characters
   'lss' - Set controller lcd start line
-          Arguments: <controller-0> <controller-1> 
+          Arguments: <controller-0> <controller-1>
               controller-0: 0..63
               controller-1: 0..63
   'lw'  - Write data to controller lcd
-          Arguments: <controller> <data> 
+          Arguments: <controller> <data>
               controller: 0, 1
               data: 0..255
   'm'   - Run Monochron application
-          Arguments: <mode> <eeprom>
+          Argument: <mode>
               mode: 'c' = start in single cycle mode, 'n' = start normal
-              eeprom: 'k' = keep, 'r' = reset
+  'mc'  - Run Monochron configuration
+          Arguments: <mode> <timeout> <restart>
+              mode: 'c' = start in single cycle mode, 'n' = start normal
+              timeout: 0 = off, 1 = on
+              restart: 0 = off, 1 = on
+  'mep' - Print Monochron eeprom settings
+  'mer' - Reset Monochron eeprom
+  'mew' - Write data to Monochron eeprom
+          Arguments: <address> <data>
+              address: 0..1023
+              data: 0..255
   'pa'  - Paint ascii
           Arguments: <color> <x> <y> <font> <orientation> <xscale> <yscale>
                      <text>
               color: 'f' = foreground, 'b' = background
               x: 0..127
               y: 0..63
-              font: '5x5p' = 5x5 proportional, '5x7n' = 5x7 non-proportional
+              font: '5x5p' = 5x5 proportional, '5x7m' = 5x7 monospace
               orientation: 'b' = bottom-up vertical, 'h' = horizontal,
                            't' = top-down vertical
               xscale: 1..64
@@ -140,7 +150,7 @@ Commands:
               x: 0..127
               y: 0..63
               radius: 0..31
-              pattern: 0 = full line, 1 = half (even), 2 = half (uneven), 
+              pattern: 0 = full line, 1 = half (even), 2 = half (uneven),
                        3 = 3rd line
   'pcf' - Paint circle with fill pattern
           Arguments: <color> <x> <y> <radius> <pattern>
@@ -168,7 +178,7 @@ Commands:
               color: 'f' = foreground, 'b' = background
               x: 0..127
               y: 0..63
-              font: '5x5p' = 5x5 proportional, '5x7n' = 5x7 non-proportional
+              font: '5x5p' = 5x5 proportional, '5x7m' = 5x7 monospace
               orientation: 'b' = bottom-up vertical, 'h' = horizontal,
                            't' = top-down vertical
               xscale: 1..64
@@ -214,7 +224,7 @@ Commands:
   'vr'  - Reset variable(s)
           Argument: <variable>
               variable: word of [a-zA-Z_] characters, '.' = all
-  'vs'  - Set value of variable 
+  'vs'  - Set value of variable
           Argument: <assignment>
               assignment: <variable>=<expression>
   'w'   - Wait for keypress or amount of time
@@ -237,7 +247,7 @@ Examples:
     Paint rectangle in foreground color at position 10,20 with size 15x18
   pcf f 64 32 20 1
     Paint filled circle in foreground color with center at position 64,32 and
-    radius 20 using fill pattern 'half'  
+    radius 20 using fill pattern 'half'
   ts 19 12 34
     Set mchron time to 19:12:34
 

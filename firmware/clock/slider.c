@@ -208,7 +208,7 @@ void sliderInit(u08 mode)
   }
 
   // Draw separator between date/time and alarm and the alarm text
-  glcdRectangle(0, 48, 128, 1, mcFgColor);
+  glcdRectangle(0, 48, GLCD_XPIXELS, 1, mcFgColor);
 
   // Draw the date and time elements
   sliderElementInit(SLIDER_LEFT_X_START, SLIDER_HOUR_Y_START, 2, animHour);
@@ -253,7 +253,8 @@ static void sliderAlarmAreaUpdate(void)
       // Clear area (remove alarm time elements)
       glcdFillRectangle(SLIDER_LEFT_X_START - 1,
         SLIDER_ALARM_Y_START + SLIDER_MARKER_Y_OFFSET,
-        128 - SLIDER_LEFT_X_START, SLIDER_MARKER_HEIGHT * 2 + 1, mcBgColor);
+        GLCD_XPIXELS - SLIDER_LEFT_X_START, SLIDER_MARKER_HEIGHT * 2 + 1,
+        mcBgColor);
       mcU8Util1 = GLCD_FALSE;
     }
   }

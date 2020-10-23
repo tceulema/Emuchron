@@ -70,6 +70,9 @@ extern int16_t almTickerAlarm;
 extern volatile rtcDateTime_t rtcDateTime;
 extern volatile uint8_t mcAlarming;
 
+// Monochron config event timeout counter
+extern volatile uint8_t cfgTickerActivity;
+
 // This is me
 extern const char *__progname;
 
@@ -109,7 +112,7 @@ FILE *stubDebugStream = NULL;
 static u08 hold = GLCD_FALSE;
 static char lastChar = '\0';
 
-// Stubbed eeprom data. An atmega328p has 1KB of eeprom.
+// Stubbed eeprom data. An atmega328p has 1 KB of eeprom.
 static uint8_t stubEeprom[EE_SIZE];
 
 // Stubbed alarm play pid
@@ -123,6 +126,8 @@ static void (*stubHelp)(void) = NULL;
 
 // Event handler stub data
 static u08 eventCycleState = CYCLE_NOWAIT;
+static u08 eventCfgTimeout = GLCD_TRUE;
+static u08 eventQuitReq = GLCD_FALSE;
 static u08 eventInit = GLCD_TRUE;
 
 // Date/time and timer statistics data
@@ -279,7 +284,7 @@ void alarmSwitchShow(void)
 //
 // Toggle the alarm switch position
 //
-void alarmSwitchToggle(uint8_t show)
+void alarmSwitchToggle(u08 show)
 {
   uint16_t pinMask = 0;
 
@@ -458,16 +463,6 @@ void stubDelay(int x)
 }
 
 //
-// Function: stubEepReset
-//
-// Stub for eeprom initialization
-//
-void stubEepReset(void)
-{
-  memset(stubEeprom, 0xff, EE_SIZE);
-}
-
-//
 // Function: stubEepRead
 //
 // Stub for eeprom data read
@@ -477,6 +472,16 @@ uint8_t stubEepRead(uint8_t *eprombyte)
   if ((size_t)eprombyte >= EE_SIZE)
     emuCoreDump(CD_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
   return stubEeprom[(size_t)eprombyte];
+}
+
+//
+// Function: stubEepReset
+//
+// Stub for eeprom initialization
+//
+void stubEepReset(void)
+{
+  memset(stubEeprom, 0xff, EE_SIZE);
 }
 
 //
@@ -506,6 +511,10 @@ char stubEventGet(void)
 
   // Flush the lcd device
   ctrlLcdFlush();
+
+  // Prevent config menu event timeout
+  if (eventCfgTimeout == GLCD_FALSE)
+    cfgTickerActivity = CFG_TICK_ACTIVITY_SEC;
 
   // Sleep the remainder of the current cycle
   if (eventInit == GLCD_TRUE)
@@ -581,11 +590,16 @@ char stubEventGet(void)
       ch = kbKeypressScan(GLCD_FALSE);
     }
 
+    // Detect cascading quit that overides keypress
+    if (eventQuitReq == GLCD_TRUE)
+      ch = 'q';
+
     // Verify keypress and its impact on the wait state
     if (ch == 'q')
     {
       // Quit the clock emulator mode
       eventCycleState = CYCLE_REQ_NOWAIT;
+      eventQuitReq = GLCD_TRUE;
       printf("\n");
       return ch;
     }
@@ -667,6 +681,12 @@ char stubEventGet(void)
       if (eventCycleState == CYCLE_NOWAIT)
         eventCycleState = CYCLE_REQ_WAIT;
     }
+    else if (ch == 'e')
+    {
+      // Print monochron eeprom settings
+      printf("\n");
+      emuEepromPrint();
+    }
     else if (ch == 'h')
     {
       // Provide help
@@ -687,6 +707,11 @@ char stubEventGet(void)
       printf("\nstatistics:\n");
       stubStatsPrint();
       ctrlStatsPrint(CTRL_STATS_ALL);
+    }
+    else if (ch == 'q')
+    {
+      // Signal request to quit
+      eventQuitReq = GLCD_TRUE;
     }
     else if (ch == 'r')
     {
@@ -733,17 +758,23 @@ char stubEventGet(void)
     }
   }
 
+  // Detect cascading quit that overides any keypress
+  if (eventQuitReq == GLCD_TRUE)
+    ch = 'q';
+
   return ch;
 }
 
 //
 // Function: stubEventInit
 //
-// Prepare the event generator for initial use by a requesting process.
+// Prepare the event generator for initial use by a requesting process
 //
-void stubEventInit(u08 startWait, void (*stubHelpHandler)(void))
+void stubEventInit(u08 startWait, u08 cfgTimeout, void (*stubHelpHandler)(void))
 {
   eventInit = GLCD_TRUE;
+  eventCfgTimeout = cfgTimeout;
+  eventQuitReq = GLCD_FALSE;
   if (startWait == GLCD_TRUE)
     eventCycleState = CYCLE_REQ_WAIT;
   else
@@ -751,6 +782,16 @@ void stubEventInit(u08 startWait, void (*stubHelpHandler)(void))
   btnPressed = BTN_NONE;
   stubHelp = stubHelpHandler;
   stubHelp();
+}
+
+//
+// Function: stubEventQuitGet
+//
+// Has a quit keypress event occurred
+//
+u08 stubEventQuitGet(void)
+{
+  return eventQuitReq;
 }
 
 //
@@ -762,6 +803,7 @@ void stubHelpClockFeed(void)
 {
   printf("emuchron clock emulator:\n");
   printf("  c = execute single application clock cycle\n");
+  printf("  e = print monochron eeprom settings\n");
   printf("  h = provide emulator help\n");
   printf("  p = print performance statistics\n");
   printf("  q = quit\n");
@@ -782,9 +824,10 @@ void stubHelpMonochron(void)
 {
   printf("emuchron monochron emulator:\n");
   printf("  c = execute single application clock cycle\n");
+  printf("  e = print monochron eeprom settings\n");
   printf("  h = provide emulator help\n");
   printf("  p = print performance statistics\n");
-  printf("  q = quit (valid only when clock is displayed)\n");
+  printf("  q = quit\n");
   printf("  r = reset performance statistics\n");
   printf("  t = print time/date/alarm\n");
   printf("hardware stub keys:\n");

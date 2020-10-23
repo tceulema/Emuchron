@@ -160,8 +160,8 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
     u08 fillType;
     u08 align;
 
-    // Depending on whether the left or right bar is bigger we need
-    // to draw the delta bar differently
+    // Depending on whether the left or right bar is bigger we need to draw the
+    // delta bar differently
     if (newValLeft > newValRight)
     {
       fillType = FILL_THIRDDOWN;

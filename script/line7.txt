@@ -1,10 +1,10 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: This script is used for testing gldcdLine().
+# Purpose: This script is used for testing gldcdLine()
 #
-# Note: This script was used in creating performance test glcdline-2
-#       in perftest.c [firmware/emulator].
+# Note: This script was used in creating performance test glcdline-2 in
+# perftest.c [firmware/emulator].
 #
 
 # Give help message
@@ -38,4 +38,3 @@ rf null true null
     pl b xA yA xB yB
   rn
 rn
-

@@ -172,8 +172,8 @@ static void nerdPrintNumber(u08 maskLen, u08 digits, u16 oldVal, u16 newVal,
   x = pgm_read_byte(&nerdFormat[x]);
   y = pgm_read_byte(&nerdFormat[y]);
 
-  // Generate the requested length of characters starting at the last digit
-  // up to the first
+  // Generate the requested length of characters starting at the last digit up
+  // to the first
   mask = ~(0xffff << maskLen);
   for (i = 0; i < digits; i++)
   {

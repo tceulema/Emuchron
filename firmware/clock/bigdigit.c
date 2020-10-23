@@ -207,7 +207,7 @@ void bigDigCycle(void)
     if (mcU8Util2 == CHRON_BIGDIG_ONE)
     {
       // Draw the single big digit
-      glcdPutStr3(BIGDIG_ONE_X_START, BIGDIG_ONE_Y_START, FONT_5X7N,
+      glcdPutStr3(BIGDIG_ONE_X_START, BIGDIG_ONE_Y_START, FONT_5X7M,
         &digits[1], BIGDIG_ONE_X_SCALE, BIGDIG_ONE_Y_SCALE, mcFgColor);
     }
     else
@@ -225,7 +225,7 @@ void bigDigCycle(void)
       }
 
       // Draw both big digits or only the right-most one
-      glcdPutStr3(BIGDIG_TWO_X_START + addLocX, BIGDIG_TWO_Y_START, FONT_5X7N,
+      glcdPutStr3(BIGDIG_TWO_X_START + addLocX, BIGDIG_TWO_Y_START, FONT_5X7M,
         digitsPtr, BIGDIG_TWO_X_SCALE, BIGDIG_TWO_Y_SCALE, mcFgColor);
     }
   }
@@ -260,7 +260,7 @@ void bigDigInit(u08 mode)
 
   // (Re)draw the labels. Redrawing is needed for a partial init to clear an
   // inverted clock item
-  labelLen = glcdPutStr3v(BIGDIG_HMS_X_START, BIGDIG_HMS_Y_START, FONT_5X7N,
+  labelLen = glcdPutStr3v(BIGDIG_HMS_X_START, BIGDIG_HMS_Y_START, FONT_5X7M,
     ORI_VERTICAL_BU, labelTime, 1, 1, mcFgColor);
   if (mode == DRAW_INIT_PARTIAL)
   {
@@ -268,7 +268,7 @@ void bigDigInit(u08 mode)
     glcdRectangle(BIGDIG_HMS_X_START - 1, BIGDIG_HMS_Y_START - labelLen,
       BIGDIG_FONT_HEIGHT + 2, labelLen + 2, mcBgColor);
   }
-  labelLen = glcdPutStr3v(BIGDIG_DMY_X_START, BIGDIG_DMY_Y_START, FONT_5X7N,
+  labelLen = glcdPutStr3v(BIGDIG_DMY_X_START, BIGDIG_DMY_Y_START, FONT_5X7M,
     ORI_VERTICAL_TD, labelDate, 1, 1, mcFgColor);
   if (mode == DRAW_INIT_PARTIAL)
   {

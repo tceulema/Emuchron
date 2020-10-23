@@ -31,8 +31,8 @@
 // Monochron hardware.
 //
 // Running a test using the glut device, a test usually completes within a
-// second. Running a test using the ncurses device a test will take much
-// longer to complete but still less than on actual hardware. From a glcd and
+// second. Running a test using the ncurses device a test will take much longer
+// to complete but still less than on actual hardware. From a glcd and
 // controller statistics point of view it does not matter which lcd device is
 // used. It is therefor recommended to use the glut device only since it runs
 // in its own thread and is therefor so much faster than the ncurses device.
@@ -55,8 +55,8 @@
 // generating many function calls to the function to be tested.
 // The user interface to a test suite is split-up into the following elements:
 // Part 1: Main entry for a test suite.
-// - Press a button to enter the test suite or skip to the next suite (that
-//   may be a restart at the first suite).
+// - Press a button to enter the test suite or skip to the next suite (that may
+//   be a restart at the first suite).
 // Part 2: The following steps are repeated for each test in a test suite:
 // - Press a button to start or skip the test.
 // - Upon test start, sync on current time.
@@ -340,8 +340,8 @@ static u08 perfTestCircle2(void)
   }
 
   // Test 2: Non-overlapping small circles, with remove redraw in phase 2.
-  // The circles are identical to the ones drawn in puzzle.c, allowing a
-  // good real-life measurement of draw optimizations.
+  // The circles are identical to the ones drawn in puzzle.c, allowing a good
+  // real-life measurement of draw optimizations.
   button = perfTestInit("glcdCircle2", 2);
   while (button == BTN_PLUS)
   {
@@ -469,8 +469,8 @@ static u08 perfTestDot(void)
     button = perfTestEnd(interruptTest);
   }
 
-  // Test 2: Paint dots where, on average, each dot is inverted once in
-  // every two update cycles.
+  // Test 2: Paint dots where, on average, each dot is inverted once in every
+  // two update cycles.
   button = perfTestInit("glcdDot", 2);
   while (button == BTN_PLUS)
   {
@@ -548,8 +548,8 @@ static u08 perfTestLine(void)
   else if (button != BTN_PLUS)
     return GLCD_FALSE;
 
-  // Test 1: Draw analog clock updates. This gives a real-life measurement
-  // of draw optimizations.
+  // Test 1: Draw analog clock updates. This gives a real-life measurement of
+  // draw optimizations.
   button = perfTestInit("glcdLine", 1);
   while (button == BTN_PLUS)
   {
@@ -707,8 +707,8 @@ static u08 perfTestFillCircle2(void)
   }
 
   // Test 2: Non-overlapping small filled circles.
-  // The circles are identical to the ones drawn in puzzle.c, allowing a
-  // good real-life measurement of draw optimizations.
+  // The circles are identical to the ones drawn in puzzle.c, allowing a good
+  // real-life measurement of draw optimizations.
   button = perfTestInit("glcdFillCircle2", 2);
   while (button == BTN_PLUS)
   {
@@ -739,8 +739,8 @@ static u08 perfTestFillCircle2(void)
       // Set draw parameters for next iteration
       if (pattern == 3)
       {
-        // Skip pattern inverse (as it is not supported) and pattern clear
-        // and restart. However, at restarting swap draw color.
+        // Skip pattern inverse (as it is not supported) and pattern clear and
+        // restart. However, at restarting swap draw color.
         pattern = 0;
         if (color == mcFgColor)
           color = mcBgColor;
@@ -1018,7 +1018,7 @@ static u08 perfTestPutStr3(void)
       // Paint strings
       for (y = 3; y < GLCD_YPIXELS - 8; y = y + 8)
       {
-        glcdPutStr3(1, y, FONT_5X7N, textLine, 1, 1, mcFgColor);
+        glcdPutStr3(1, y, FONT_5X7M, textLine, 1, 1, mcFgColor);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1061,7 +1061,7 @@ static u08 perfTestPutStr3(void)
       // Paint strings
       for (y = 0; y < GLCD_YPIXELS - 21; y = y + 21)
       {
-        glcdPutStr3(2, y, FONT_5X7N, textLine, 3, 3, mcFgColor);
+        glcdPutStr3(2, y, FONT_5X7M, textLine, 3, 3, mcFgColor);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1189,7 +1189,7 @@ static u08 perfTestPutStr3(void)
       // Paint strings
       for (y = 0; y <= GLCD_YPIXELS - 8; y = y + 8)
       {
-        glcdPutStr3(1, y, FONT_5X7N, textLine, 1, 1, mcFgColor);
+        glcdPutStr3(1, y, FONT_5X7M, textLine, 1, 1, mcFgColor);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1298,7 +1298,7 @@ static u08 perfTestPutStr3v(void)
       // Paint strings
       for (x = 1; x < GLCD_XPIXELS - 21; x = x + 21)
       {
-        glcdPutStr3v(x, 60, FONT_5X7N, ORI_VERTICAL_BU, textLine, 3, 2,
+        glcdPutStr3v(x, 60, FONT_5X7M, ORI_VERTICAL_BU, textLine, 3, 2,
           mcFgColor);
 #ifdef EMULIN
         ctrlLcdFlush();
@@ -1342,7 +1342,7 @@ static u08 perfTestPutStr3v(void)
       // Paint strings
       for (x = 7; x < GLCD_XPIXELS; x = x + 9)
       {
-        glcdPutStr3v(x, 2, FONT_5X7N, ORI_VERTICAL_TD, textLine, 1, 1,
+        glcdPutStr3v(x, 2, FONT_5X7M, ORI_VERTICAL_TD, textLine, 1, 1,
           mcFgColor);
 #ifdef EMULIN
         ctrlLcdFlush();

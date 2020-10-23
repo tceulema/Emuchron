@@ -1,11 +1,10 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Skip through all days in a month and see how a clock
-#          redraws itself
+# Purpose: Skip through all days in a month and see how a clock redraws itself
 #
-# This script is being used by script year.txt to browse quickly
-# through all days of an entire year.
+# This script is being used by script year.txt to browse quickly through all
+# days of an entire year.
 #
 # Prerequisites:
 # - Select a clock (if not selected there's no visual feedback)
@@ -23,9 +22,9 @@
 # e s ../script/month.txt
 #
 
+wts
 rf dr=1 dr<=d dr=dr+1
   ts 22 09 30
   ds dr m y
-  w w
+  wte w
 rn
-

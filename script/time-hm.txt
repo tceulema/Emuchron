@@ -1,8 +1,8 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Use repeat loops to quickly skip through the time of a day
-#          and see how a clock redraws itself
+# Purpose: Use repeat loops to quickly skip through the time of a day and see
+# how a clock redraws itself
 #
 # Prerequisites:
 # - Select a clock (if not selected there's no visual feedback)
@@ -24,10 +24,9 @@ rf h=0 h<24 h=h+1
     # Change the time using the 'h' and 'm' variables
     # This will update the layout of the selected clock
     ts h m 30
-    # Wait 'w'*0.001 second
+    # Wait remainder of 'w'*0.001 seconds since last wts or wte call
     wte w
   # Next m(inute)
   rn
 # Next h(our)
 rn
-

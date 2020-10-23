@@ -140,7 +140,7 @@ static void spotLineUpdate(u08 axisEnd, u08 xLeft, u08 xRight, u08 oldValLeft,
   // Add/repaint new left line value
   animValToStr(newValLeft, lineValue);
   glcdPutStr2(xLeft + LINE_VALUE_X_OFFSET,
-    LINE_Y_START - newLeftHeight + LINE_VALUE_Y_OFFSET, FONT_5X7N, lineValue,
+    LINE_Y_START - newLeftHeight + LINE_VALUE_Y_OFFSET, FONT_5X7M, lineValue,
     mcFgColor);
   glcdRectangle(xLeft + LINE_VALUE_X_OFFSET - 1,
     LINE_Y_START - newLeftHeight + LINE_VALUE_Y_OFFSET - 1, 13, 9,
@@ -149,7 +149,7 @@ static void spotLineUpdate(u08 axisEnd, u08 xLeft, u08 xRight, u08 oldValLeft,
   // Add/repaint new right line value
   animValToStr(newValRight, lineValue);
   glcdPutStr2(xRight + LINE_VALUE_X_OFFSET,
-    LINE_Y_START - newRightHeight + LINE_VALUE_Y_OFFSET, FONT_5X7N, lineValue,
+    LINE_Y_START - newRightHeight + LINE_VALUE_Y_OFFSET, FONT_5X7M, lineValue,
     mcFgColor);
   glcdRectangle(xRight + LINE_VALUE_X_OFFSET - 1,
     LINE_Y_START - newRightHeight + LINE_VALUE_Y_OFFSET - 1, 13, 9,

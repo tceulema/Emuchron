@@ -18,11 +18,14 @@ ap 0
 ds 31 8 13
 ts 23 59 50
 tp
+hm
+hm --- check end of month ---
 cf n
 
 # Check leap year
 ds 28 2 12
 ts 23 59 50
 tp
+hm
+hm --- check leap year ---
 cf n
-

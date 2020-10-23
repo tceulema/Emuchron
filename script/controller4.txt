@@ -1,9 +1,8 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Fill the screen using only controller commands and
-#          minimal cursor commands by making use of how the
-#          controller auto-increments its x cursor
+# Purpose: Fill the screen using only controller commands and minimal cursor
+# commands by making use of how the controller auto-increments its x cursor
 #
 
 # Clear lcd, let glut clear its message buffers, and then reset statistics
@@ -33,4 +32,3 @@ sp
 
 # Reset and sync hardware with glcd software cursor to (0,0)
 lcr
-

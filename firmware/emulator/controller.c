@@ -200,10 +200,9 @@ typedef struct _ctrlRegister_t
   u08 dataWrite;			// Last data written to the lcd
 } ctrlRegister_t;
 
-// A controller is represented in the data it holds. It is a combination of
-// its current software machine state, the input/output registers, its lcd
-// image data, and for software emulation purposes a set of statistics
-// counters.
+// A controller is represented in the data it holds. It is a combination of its
+// current software machine state, the input/output registers, its lcd image
+// data, and for software emulation purposes a set of statistics counters.
 // Definition of a structure holding the data for a controller.
 typedef struct _ctrlController_t
 {
@@ -288,9 +287,9 @@ static u08 useGlut = GLCD_FALSE;
 static u08 useNcurses = GLCD_FALSE;
 static u08 useDevice = CTRL_DEVICE_NULL;
 
-// Statistics counters on glcd interface. The ncurses and glut devices
-// have their own dedicated statistics counters that are administered
-// independent from these.
+// Statistics counters on glcd interface. The ncurses and glut devices have
+// their own dedicated statistics counters that are administered independent
+// from these.
 static long long ctrlLcdByteRead = 0;	// Bytes read from lcd
 static long long ctrlLcdByteWrite = 0;	// Bytes written to lcd
 long long ctrlLcdSetAddress = 0;	// Cursor address set in lcd
@@ -596,8 +595,8 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
 //
 // Function: ctrlInit
 //
-// Initialize the data, registers and state of all controllers and
-// the lcd stub device(s)
+// Initialize the data, registers and state of all controllers and the lcd stub
+// device(s)
 //
 u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 {
@@ -732,7 +731,7 @@ void ctrlLcdNcurGrSet(u08 backlight)
 //
 // Function: ctrlRegPrint
 //
-// Print controllers state and registers.
+// Print controllers state and registers
 //
 void ctrlRegPrint(void)
 {
@@ -765,8 +764,8 @@ void ctrlRegPrint(void)
 //
 // Function: ctrlStatsPrint
 //
-// Print statistics of the high level glcd interface and (optional)
-// lcd controllers and display devices
+// Print statistics of the high level glcd interface and (optional) lcd
+// controllers and display devices
 //
 void ctrlStatsPrint(u08 type)
 {
@@ -774,12 +773,12 @@ void ctrlStatsPrint(u08 type)
   ctrlStats_t *ctrlStats;
 
   // Report the lcd interface statistics
-  if ((type & CTRL_STATS_GLCD) != 0)
+  if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
     printf("glcd   : dataWrite=%llu, dataRead=%llu, setAddress=%llu\n",
       ctrlLcdByteWrite, ctrlLcdByteRead, ctrlLcdSetAddress);
 
   // Report controller statistics
-  if ((type & CTRL_STATS_CTRL) != 0)
+  if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
   {
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
     {
@@ -819,7 +818,7 @@ void ctrlStatsPrint(u08 type)
   }
 
   // Report lcd stub device statistics
-  if ((type & CTRL_STATS_LCD) != 0)
+  if ((type & CTRL_STATS_LCD) != CTRL_STATS_NULL)
   {
     if (useGlut == GLCD_TRUE)
       lcdGlutStatsPrint();
@@ -838,7 +837,7 @@ void ctrlStatsReset(u08 type)
   u08 i;
 
   // glcd statistics
-  if ((type & CTRL_STATS_GLCD) != 0)
+  if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
   {
     ctrlLcdByteRead = 0;
     ctrlLcdByteWrite = 0;
@@ -846,12 +845,12 @@ void ctrlStatsReset(u08 type)
   }
 
   // Lcd controller statistics
-  if ((type & CTRL_STATS_CTRL) != 0)
+  if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
       memset(&ctrlControllers[i].ctrlStats, 0, sizeof(ctrlStats_t));
 
   // Glut and/or ncurses statistics
-  if ((type & CTRL_STATS_LCD) != 0)
+  if ((type & CTRL_STATS_LCD) != CTRL_STATS_NULL)
   {
     if (useGlut == GLCD_TRUE)
       lcdGlutStatsReset();

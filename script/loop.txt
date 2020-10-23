@@ -2,9 +2,9 @@
 # Test command script for the Monochron emulator
 #
 # Purpose: Consider this a performance test for the interpreter/CPU by running
-#          a time consuming loop.
-#          Run this test a few times to average out the result duration.
-#          On a decent Intel VM machine this script takes about 13 secs to run.
+# a time consuming loop.
+# Run this test a few times to average out the result duration.
+# On a decent Intel VM machine this script takes about 14 secs to run.
 #
 
 hm -- wait for the script to complete or abort with 'q' --

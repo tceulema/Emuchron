@@ -87,8 +87,8 @@ static void analogElementDraw(s08 position[], u08 color);
 static void analogElementSync(s08 position[], s08 positionNew[]);
 static void analogInit(u08 mode);
 
-// Arrays holding the [x,y] positions of the three arrow points
-// for the hour and minute arrows and the seconds needle
+// Arrays holding the [x,y] positions of the three arrow points for the hour
+// and minute arrows and the seconds needle
 // arr[0+1] = x,y arrow endpoint
 // arr[2+3] = x,y arrow leg endpoint 1
 // arr[4+5] = x,y arrow leg endpoint 2
@@ -215,16 +215,14 @@ void analogCycle(void)
     analogElementSync(posMin, posMinNew);
     analogElementDraw(posMin, mcFgColor);
 
-    // Redraw the seconds needle as it got distorted by the minute
-    // arrow draw
+    // Redraw the seconds needle as it got distorted by the minute arrow draw
     if (mcU8Util3 == GLCD_TRUE)
       analogElementDraw(posSec, mcFgColor);
   }
   else if (secElementChanged == GLCD_TRUE)
   {
     // The minute arrow has not changed but the sec needle has.
-    // Redraw the minute arrow as it got distorted by the seconds
-    // needle draw.
+    // Redraw the minute arrow as it got distorted by the seconds needle draw.
     analogElementDraw(posMin, mcFgColor);
   }
 
@@ -236,16 +234,16 @@ void analogCycle(void)
     analogElementSync(posHour, posHourNew);
     analogElementDraw(posHour, mcFgColor);
 
-    // Redraw the seconds needle and minute arrow as they get distorted
-    // by the arrow redraw
+    // Redraw the seconds needle and minute arrow as they get distorted by the
+    // arrow redraw
     if (mcU8Util3 == GLCD_TRUE)
       analogElementDraw(posSec, mcFgColor);
     analogElementDraw(posMin, mcFgColor);
   }
   else if (secElementChanged == GLCD_TRUE || minElementChanged == GLCD_TRUE)
   {
-    // The hour arrow has not changed but the seconds needle and/or
-    // minute arrow has.
+    // The hour arrow has not changed but the seconds needle and/or minute
+    // arrow has.
     // Redraw the hour arrow as it got distorted by the other draws.
     analogElementDraw(posHour, mcFgColor);
   }
@@ -254,8 +252,8 @@ void analogCycle(void)
 //
 // Function: analogHmInit
 //
-// Initialize the lcd display of a very simple analog clock with
-// Hour and Minutes arrow
+// Initialize the lcd display of a very simple analog clock with Hour and
+// Minutes arrow
 //
 void analogHmInit(u08 mode)
 {
@@ -266,8 +264,8 @@ void analogHmInit(u08 mode)
 //
 // Function: analogHmsInit
 //
-// Initialize the lcd display of a very simple analog clock with
-// Hour and Minutes arrow and Seconds needle
+// Initialize the lcd display of a very simple analog clock with Hour and
+// Minutes arrow and Seconds needle
 //
 void analogHmsInit(u08 mode)
 {
@@ -328,7 +326,6 @@ static void analogAlarmAreaUpdate(void)
   if (newAlmDisplayState != mcU8Util1)
   {
     // Inverse the alarm area
-    //inverseAlarmArea = GLCD_TRUE;
     mcU8Util1 = newAlmDisplayState;
     glcdFillRectangle2(ANA_ALARM_X_START - ANA_ALARM_RADIUS - 1,
       ANA_ALARM_Y_START - ANA_ALARM_RADIUS - 1, ANA_ALARM_RADIUS * 2 + 3,
@@ -371,8 +368,8 @@ static u08 analogElementCalc(s08 position[], s08 positionNew[], float radial,
 //
 static void analogElementDraw(s08 position[], u08 color)
 {
-  // An arrow consists of three points, so draw lines between each
-  // of them. If it turns out to be a needle only draw the first line.
+  // An arrow consists of three points, so draw lines between each of them. If
+  // it turns out to be a needle only draw the first line.
   glcdLine(position[0], position[1], position[2], position[3], color);
   if (position[2] != ANA_X_START || position[3] != ANA_Y_START)
   {
@@ -442,8 +439,8 @@ static void analogInit(u08 mode)
       }
     }
 
-    // Init the arrow point position arrays with harmless values
-    // inside the clock area
+    // Init the arrow point position arrays with harmless values inside the
+    // clock area
     for (i = 0; i < 6; i++)
     {
       posSec[i] = 40;
@@ -463,8 +460,8 @@ static void analogInit(u08 mode)
   }
   else if (mcU8Util3 == GLCD_FALSE)
   {
-    // Assume this is a partial init from an analog HMS clock to an
-    // analog HM clock. So, we should remove the seconds needle.
+    // Assume this is a partial init from an analog HMS clock to an analog HM
+    // clock. So, we should remove the seconds needle.
     analogElementDraw(posSec, mcBgColor);
 
     // Restore dot at center of clock

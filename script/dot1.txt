@@ -1,31 +1,30 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Test the random generator function by drawing random dots
-#          resulting in a good old fashioned static tv signal image
+# Purpose: Test the random generator function by drawing random dots resulting
+# in a good old fashioned static tv signal image
 #
 # Notes on using function rand(x)
-#  x>=1    : seed the generator with x and return first random number
-#            (not used in this script)
-#  x=0     : seed the generator with system time (making it a random
-#            seed) and return first random number
+#  x>=1    : seed the generator with x and return first random number (not used
+#            in this script)
+#  x=0     : seed the generator with system time (making it a random seed) and
+#            return first random number
 #  <empty> : return next random number
 # The random number returned is between 0 and 1.
 #
-# NOTE: Only use this script in combination with the glut lcd device.
-# The ncurses device is simply not fast enough to cope with the large
-# number of screen updates. It'll work but it just gives a poor UI
-# experience.
+# Note: Only use this script in combination with the glut lcd device. The
+# ncurses device is simply not fast enough to cope with the large number of
+# screen updates. It'll work but it just gives a poor UI experience.
 #
 
 # Show message and reset statistics.
-# NOTE: After quiting the script use 'sp' to print statistics so we
-# can see how many read/write/cursor actions were made, as well as
-# how the emulated lcd controllers and glut lcd device did.
+# Note: After quiting the script use 'sp' to print statistics so we can see how
+# many read/write/cursor actions were made, as well as how the emulated lcd
+# controllers and glut lcd device did.
 hm --- press 'q' to quit ---
 sr
 
-# Set ratio for number of black vs white dots
+# Set ratio for number of black vs white dots (vary between 0..1)
 vs ratio=0.5
 
 # Seed random generator with current time
@@ -41,4 +40,3 @@ rf null true null
     pd f int(rand()*x) int(rand()*y)
   ien
 rn
-

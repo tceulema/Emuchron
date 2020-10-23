@@ -55,6 +55,14 @@ cmdArgDomain_t argNumDuration =
 cmdArgDomain_t argNumFrequency =
 { DOM_NUM_RANGE, "", 150, 10000, "Hz" };
 
+// Byte data
+cmdArgDomain_t argNumByteData =
+{ DOM_NUM_MAX, "", 0, 255, NULL };
+
+// Eeprom address
+cmdArgDomain_t argNumKBAddress =
+{ DOM_NUM_MAX, "", 0, 1023, NULL };
+
 // Circle draw pattern: max 3
 cmdArgDomain_t argNumCirclePattern =
 { DOM_NUM_MAX, "", 0, 3, "full, half even, half uneven, third" };
@@ -99,10 +107,6 @@ cmdArgDomain_t argCharEcho =
 cmdArgDomain_t argCharMode =
 { DOM_CHAR, "cn", 0, 0, "c = single cycle, n = normal" };
 
-// Emulator eeprom use: 'k'eep or 'r'eset
-cmdArgDomain_t argCharEeprom =
-{ DOM_CHAR, "kr", 0, 0, "k = keep, r = reset" };
-
 // Lcd backlight: max 16
 cmdArgDomain_t argNumBacklight =
 { DOM_NUM_MAX, "", 0, 16, "0 = dim .. 16 = bright" };
@@ -114,10 +118,6 @@ cmdArgDomain_t argCharColor =
 // Lcd controller id: 0..1
 cmdArgDomain_t argNumController =
 { DOM_NUM_MAX, "", 0, GLCD_NUM_CONTROLLERS - 1, NULL };
-
-// Lcd controller lcd data
-cmdArgDomain_t argNumLcdData =
-{ DOM_NUM_MAX, "", 0, 255, NULL };
 
 // Lcd x position: max 127
 cmdArgDomain_t argNumPosX =
@@ -143,9 +143,9 @@ cmdArgDomain_t argNumCtrlStartLine =
 cmdArgDomain_t argNumAlign =
 { DOM_NUM_MAX, "", 0, 2, "0 = top left, 1 = bottom left, 2 = auto" };
 
-// Text font: 5x5-proportional, 5x7-non-proportional
+// Text font: 5x5-proportional, 5x7-monospace
 cmdArgDomain_t argWordFont =
-{ DOM_WORD, "5x5p\n5x7n", 0, 0, "5x5 proportional, 5x7 non-proportional" };
+{ DOM_WORD, "5x5p\n5x7m", 0, 0, "5x5p = 5x5 proportional, 5x7m = 5x7 monospace" };
 
 // Text orientation: 'b'ottom-up, 'h'orizontal, 't'op-down
 cmdArgDomain_t argCharOrient =
@@ -331,17 +331,25 @@ cmdArg_t argLcdRead[] =
 // Argument profile for controller lcd write
 cmdArg_t argLcdWrite[] =
 { { ARG_UNUM,    "controller",  &argNumController },
-  { ARG_UNUM,    "data",        &argNumLcdData } };
+  { ARG_UNUM,    "data",        &argNumByteData } };
 // Argument profile for controller startline
 cmdArg_t argLcdSLineSet[] =
 { { ARG_UNUM,    "controller-0",&argNumCtrlStartLine },
   { ARG_UNUM,    "controller-1",&argNumCtrlStartLine } };
 
 // Command 'm'
-// Argument profile for Monochron emulator
+// Argument profile for Monochron and eeprom emulator
 cmdArg_t argMonochron[] =
+{ { ARG_CHAR,    "mode",        &argCharMode } };
+
+cmdArg_t argMonoConfig[] =
 { { ARG_CHAR,    "mode",        &argCharMode },
-  { ARG_CHAR,    "eeprom",      &argCharEeprom } };
+  { ARG_UNUM,    "timeout",     &argNumOffOn },
+  { ARG_UNUM,    "restart",     &argNumOffOn } };
+
+cmdArg_t argMonoEeWrite[] =
+{ { ARG_UNUM,    "address",     &argNumKBAddress },
+  { ARG_UNUM,    "data",        &argNumByteData } };
 
 // Command 'p*'
 // Argument profile for paint ascii
@@ -516,7 +524,11 @@ cmdCommand_t cmdGroupLcd[] =
 
 // All commands for command group 'm' (monochron)
 cmdCommand_t cmdGroupMonochron[] =
-{ { "m",   PC_CONTINUE,     CMDARGS(argMonochron),   CMDHANDLER(doMonochron),      "run monochron application" } };
+{ { "m",   PC_CONTINUE,     CMDARGS(argMonochron),   CMDHANDLER(doMonochron),      "run monochron application" },
+  { "mc",  PC_CONTINUE,     CMDARGS(argMonoConfig),  CMDHANDLER(doMonoConfig),     "run monochron config" },
+  { "mep", PC_CONTINUE,     CMDARGS(NULL),           CMDHANDLER(doEepromPrint),    "print monochron eeprom settings" },
+  { "mer", PC_CONTINUE,     CMDARGS(NULL),           CMDHANDLER(doEepromReset),    "reset monochron eeprom" },
+  { "mew", PC_CONTINUE,     CMDARGS(argMonoEeWrite), CMDHANDLER(doEepromWrite),    "write data to monochron eeprom" } };
 
 // All commands for command group 'p' (paint)
 cmdCommand_t cmdGroupPaint[] =

@@ -4,19 +4,17 @@
 //*****************************************************************************
 
 #ifndef EMULIN
-#include <avr/io.h>
-#include <avr/pgmspace.h>
 #include "util.h"
 #else
 #include <stdlib.h>
 #include "emulator/stub.h"
 #include "emulator/mchronutil.h"
 #endif
-#include "glcd.h"
 #include "monomain.h"
 #include "ks0108.h"
+#include "glcd.h"
 
-// Include 5x7 non-proportional and 5x5 proportional fonts
+// Include 5x7 monospace and 5x5 proportional fonts
 #include "font5x7.h"
 #include "font5x5p.h"
 
@@ -1250,7 +1248,7 @@ static u16 glcdFontIdxGet(unsigned char c)
   {
     return glcdFontInfoGet(c);
   }
-  else // font == FONT_5X7NP
+  else // font == FONT_5X7M
   {
     fontWidth = 5;
     return (c - 0x20) * 5;

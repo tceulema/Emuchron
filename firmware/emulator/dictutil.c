@@ -185,7 +185,7 @@ static void dictCmdPrint(cmdCommand_t *cmdCommand)
         default:
           printf("*** internal: invalid domain profile");
           break;
-      }
+        }
       }
       break;
     case ARG_STRING:

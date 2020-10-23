@@ -49,7 +49,7 @@ void exampleCycle(void)
   animValToStr(mcClockNewTM, &dtInfo[3]);
   dtInfo[5] = ':';
   animValToStr(mcClockNewTS, &dtInfo[6]);
-  glcdPutStr2(41, 20, FONT_5X7N, dtInfo, mcFgColor);
+  glcdPutStr2(41, 20, FONT_5X7M, dtInfo, mcFgColor);
 
   // Only paint the date when it has changed or when initializing the clock
   if (mcClockDateEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
@@ -60,7 +60,7 @@ void exampleCycle(void)
     animValToStr(mcClockNewDD, &dtInfo[3]);
     dtInfo[5] = '/';
     animValToStr(mcClockNewDY, &dtInfo[6]);
-    glcdPutStr2(41, 29, FONT_5X7N, dtInfo, mcFgColor);
+    glcdPutStr2(41, 29, FONT_5X7M, dtInfo, mcFgColor);
   }
 }
 
@@ -76,5 +76,5 @@ void exampleInit(u08 mode)
   DEBUGP("Init Example");
 
   // Paint a text on the lcd with 2x horizontal scaling
-  glcdPutStr3(11, 2, FONT_5X7N, "-Example-", 2, 1, mcFgColor);
+  glcdPutStr3(11, 2, FONT_5X7M, "-Example-", 2, 1, mcFgColor);
 }

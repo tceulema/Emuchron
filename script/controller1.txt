@@ -1,11 +1,11 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Test the controller stub by combining changes in the
-#          controller startline and display registers.
+# Purpose: Test the controller stub by combining changes in the controller
+# startline and display registers
 #
-# Note: After quiting this script reset the display and controller
-#       registers using command 'le' (erase lcd display)
+# Note: After quiting this script reset the display and controller registers
+# using command 'le' (erase lcd display)
 #
 
 # Clear display and show a static clock for 4 seconds
@@ -38,8 +38,8 @@ rf null true null
     wte 75
     tf
 
-    # Display for controller 0 with a 3% chance it will
-    # be turned off for the next 5 script loop cycles
+    # Display for controller 0 with a 3% chance it will be turned off for the
+    # next 5 script loop cycles
     iif countera>0
       vs countera=countera-1
       vs ctrla=false
@@ -52,8 +52,8 @@ rf null true null
       ien
     ien
 
-    # Display for controller 1 with a 3% chance it will
-    # be turned off for the next 5 script loop cycles
+    # Display for controller 1 with a 3% chance it will be turned off for the
+    # next 5 script loop cycles
     iif counterb>0
       vs counterb=counterb-1
       vs ctrlb=false
@@ -72,4 +72,3 @@ rf null true null
     tf
   rn
 rn
-

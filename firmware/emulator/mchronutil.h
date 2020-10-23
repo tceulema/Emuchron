@@ -47,11 +47,12 @@ void emuShutdown(void);
 // mchron interpreter support functions
 void emuClockRelease(u08 echoCmd);
 void emuClockUpdate(void);
+void emuEepromPrint(void);
 void emuTimePrint(u08 type);
 void emuTimeSync(void);
 
 // mchron system interval timer functions
-void emuSysTimerStart(timer_t *timer, int interval, void(*handler)(void));
+void emuSysTimerStart(timer_t *timer, int interval, void (*handler)(void));
 void emuSysTimerStop(timer_t *timer);
 
 // mchron delay, sleep and timer functions

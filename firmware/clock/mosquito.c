@@ -129,9 +129,11 @@ void mosquitoCycle(void)
   // all elements each cycle. However, the lcd display response is so slow that
   // moving each element in every clock cycle makes the time barely readable
   // (especially when the display is inversed (=black on white)).
-  // In other words: the lcd display has a very bad response time for its pixels.
+  // In other words: the lcd display has a very bad response time for its
+  // pixels.
   // So, it's a trade-off between eye candy + eye strain versus slowly moving
-  // elements + actually being able to read the time. I've chosen for the latter.
+  // elements + actually being able to read the time. I've chosen for the
+  // latter.
   if ((mcCycleCounter & 1) == 1)
   {
     if (elementSec.startDelay > 0)
@@ -235,7 +237,7 @@ static void mosquitoElementDraw(timeElement_t *element, u08 value)
   animValToStr(value, msg);
 
   // Draw element value
-  glcdPutStr2(element->posX, element->posY, FONT_5X7N, msg, mcFgColor);
+  glcdPutStr2(element->posX, element->posY, FONT_5X7M, msg, mcFgColor);
   // Draw border around element value
   glcdRectangle(element->posX - 1, element->posY - 1, 13, 9, mcBgColor);
 
@@ -250,8 +252,8 @@ static void mosquitoElementDraw(timeElement_t *element, u08 value)
 //
 // Function: mosquitoElementMovePrep
 //
-// Set new position of element in mosquito clock and remove stuff that
-// won't be overwritten by the element redraw
+// Set new position of element in mosquito clock and remove stuff that won't be
+// overwritten by the element redraw
 //
 static void mosquitoElementMovePrep(timeElement_t *element)
 {

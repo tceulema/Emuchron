@@ -17,22 +17,22 @@
 
 // Specifics for filter panel
 // FP = Filter Panel
-// RF = Range Filter
-// RS = Range Slider
+// RS = Range Slider bar
+// RF = Range Filter box
 #define FP_X_START 	105
 #define FP_Y_START	18
 #define FP_Y_OFFSET_SIZE 15
 #define FP_HOUR_MAX	23
 #define FP_MIN_MAX	59
 #define FP_SEC_MAX	59
-#define FP_RF_X_OFFSET	-1
-#define FP_RF_Y_OFFSET	6
-#define FP_RF_WIDTH	22
-#define FP_RF_HEIGHT	7
 #define FP_RS_X_OFFSET	1
 #define FP_RS_Y_OFFSET	9
 #define FP_RS_WIDTH	18
 #define FP_RS_HEIGHT	1
+#define FP_RF_X_OFFSET	-1
+#define FP_RF_Y_OFFSET	6
+#define FP_RF_WIDTH	FP_RS_WIDTH + 4
+#define FP_RF_HEIGHT	FP_RS_HEIGHT + 6
 
 // Specifics for the menu bar layout
 #define MBAR_TXT_LEFT	0
@@ -192,7 +192,7 @@ void spotBarUpdate(u08 x, u08 width, u08 oldVal, u08 newVal, s08 valXOffset,
   // Add the bar value (depending on bar value font size)
   animValToStr(newVal, barValue);
   glcdPutStr2(x + valXOffset, SPOT_BAR_Y_START - newBarHeight +
-    SPOT_BAR_VAL_Y_OFFSET, FONT_5X7N, barValue, mcFgColor);
+    SPOT_BAR_VAL_Y_OFFSET, FONT_5X7M, barValue, mcFgColor);
 
   // Clear the first line between the bar and the bar value
   glcdFillRectangle(x, SPOT_BAR_Y_START - newBarHeight - 1, width, 1,
@@ -384,14 +384,12 @@ static void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal)
   // Only update if there's a need to
   if (sliderXPosOld != sliderXPosNew || mcClockInit == GLCD_TRUE)
   {
-    // Remove old range slider location marker
-    glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET + sliderXPosOld,
-      y + FP_RS_Y_OFFSET - 1, 2, 1, mcBgColor);
-    glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET + sliderXPosOld,
-      y + FP_RS_Y_OFFSET + 1, 2, 1, mcBgColor);
+    // Clear range slider location marker area
+    glcdRectangle(FP_X_START + FP_RS_X_OFFSET - 1, y + FP_RS_Y_OFFSET - 1,
+      FP_RS_WIDTH + 2, FP_RS_HEIGHT + 2, mcBgColor);
 
     // Add new range slider location markers
     glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET + sliderXPosNew,
-      y + FP_RS_Y_OFFSET - 1, 2, 3, mcFgColor);
+      y + FP_RS_Y_OFFSET - 1, 2, FP_RS_HEIGHT + 2, mcFgColor);
   }
 }

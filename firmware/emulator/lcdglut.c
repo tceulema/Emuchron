@@ -94,7 +94,7 @@
 // cmd = GLUT_CMD_DISPLAY	- arg1 = controller, arg2 = display value
 // cmd = GLUT_CMD_STARTLINE	- arg1 = controller, arg2 = startline value
 // cmd = GLUT_CMD_OPTIONS	- arg1 = pixel bezel, arg2 = gridlines
-// cmd = GLUT_CMD_HIGHLIGHT	- arg1 = highlight, arg = x, arg3 = y
+// cmd = GLUT_CMD_HIGHLIGHT	- arg1 = highlight, arg2 = x, arg3 = y
 typedef struct _lcdGlutMsg_t
 {
   unsigned char cmd;		// Message command (draw, backlight (etc))

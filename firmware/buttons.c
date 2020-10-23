@@ -3,14 +3,11 @@
 // Title    : Button debouncing/switches handling
 //*****************************************************************************
 
-#include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
-#include <avr/pgmspace.h>
-#include <avr/eeprom.h>
-#include "util.h"
 #include "monomain.h"
 #include "ks0108.h"
+#include "util.h"
 #include "buttons.h"
 
 //

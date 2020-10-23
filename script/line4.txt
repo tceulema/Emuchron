@@ -1,8 +1,8 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: This script is used for testing gldcdLine()
-#          and numeric argument expressions
+# Purpose: This script is used for testing gldcdLine() and numeric argument
+# expressions
 #
 
 # Erase lcd display
@@ -34,4 +34,3 @@ pr f 17 27 31 9
 pa f 19 29 5x5p h 1 1 glcdline
 pr f 81 27 31 9
 pa f 83 29 5x5p h 1 1 glcdline
-

@@ -108,8 +108,7 @@ static void spotCrossTextBox(u08 x, u08 y, u08 direction, char *data)
     dx = 2; dy = 3;
 
     // Get the width+height and top-left x+y position for the textbox
-    textLen = glcdPutStr3v(x, y, FONT_5X5P, direction, data, 1, 1,
-      mcFgColor);
+    textLen = glcdPutStr3v(x, y, FONT_5X5P, direction, data, 1, 1, mcFgColor);
     w = 9;
     h = 7 + textLen;
     bx = x - 2;
@@ -140,5 +139,5 @@ static void spotCrossValDraw(u08 x, u08 oldVal, u08 newVal)
     return;
 
   animValToStr(newVal, strVal);
-  glcdPutStr2(x, 40, FONT_5X7N, strVal, mcFgColor);
+  glcdPutStr2(x, 40, FONT_5X7M, strVal, mcFgColor);
 }

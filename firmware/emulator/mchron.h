@@ -18,7 +18,11 @@ u08 doClockSelect(cmdLine_t *cmdLine);
 u08 doComments(cmdLine_t *cmdLine);
 u08 doDateSet(cmdLine_t *cmdLine);
 u08 doDateReset(cmdLine_t *cmdLine);
+u08 doEepromPrint(cmdLine_t *cmdLine);
+u08 doEepromReset(cmdLine_t *cmdLine);
+u08 doEepromWrite(cmdLine_t *cmdLine);
 u08 doExecute(cmdLine_t *cmdLine);
+u08 doExit(cmdLine_t *cmdLine);
 u08 doHelp(cmdLine_t *cmdLine);
 u08 doHelpCmd(cmdLine_t *cmdLine);
 u08 doHelpExpr(cmdLine_t *cmdLine);
@@ -38,6 +42,7 @@ u08 doLcdRead(cmdLine_t *cmdLine);
 u08 doLcdStartLineSet(cmdLine_t *cmdLine);
 u08 doLcdWrite(cmdLine_t *cmdLine);
 u08 doMonochron(cmdLine_t *cmdLine);
+u08 doMonoConfig(cmdLine_t *cmdLine);
 u08 doPaintAscii(cmdLine_t *cmdLine);
 u08 doPaintCircle(cmdLine_t *cmdLine);
 u08 doPaintCircleFill(cmdLine_t *cmdLine);
@@ -58,7 +63,6 @@ u08 doVarSet(cmdLine_t *cmdLine);
 u08 doWait(cmdLine_t *cmdLine);
 u08 doWaitTimerExpiry(cmdLine_t *cmdLine);
 u08 doWaitTimerStart(cmdLine_t *cmdLine);
-u08 doExit(cmdLine_t *cmdLine);
 
 // Program counter control block handler prototypes
 u08 doIf(cmdLine_t **cmdProgCounter);

@@ -33,7 +33,7 @@
 // Apart from this, the QR logic in this module has remained untouched apart
 // from an occasional optimization. It just works. And this includes the use of
 // __AVR__, PROGMEM, memcpy_P and __LPM that is not seen anywhere else in
-// Emuchron. If it ain't broke, don't fix it.
+// Emuchron. If it ain't broken, don't fix it.
 //
 // Please note that the code below is not intended to run on anything else than
 // Monochron for a L,l2 QR. So, if you want to use QR encoding functionality in

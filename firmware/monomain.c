@@ -4,9 +4,7 @@
 //*****************************************************************************
 
 #ifndef EMULIN
-#include <avr/io.h>
 #include <avr/interrupt.h>
-#include <avr/pgmspace.h>
 #include <avr/eeprom.h>
 #include <avr/wdt.h>
 #include <util/delay.h>
@@ -60,8 +58,7 @@ extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcBgColor, mcFgColor;
 
-// The following variables drive the configuration menu
-extern volatile uint8_t cfgScreenMutex;
+// The following variable drives the configuration menu timeout ticker
 extern volatile uint8_t cfgTickerActivity;
 
 // The following variables drive the button state and ADC conversion rate
@@ -70,8 +67,8 @@ extern volatile uint8_t btnTickerHold;
 extern volatile uint8_t btnTickerConv;
 
 // The following variables drive the realtime clock.
-// In case the clock fails to init set it to noon 1/1/2020.
-volatile rtcDateTime_t rtcDateTime = { 0, 0, 12, 1, 1, 20 };
+// In case the clock fails to init set it to noon 1/1/2021.
+volatile rtcDateTime_t rtcDateTime = { 0, 0, 12, 1, 1, 21 };
 volatile rtcDateTime_t rtcDateTimeNext;
 volatile uint8_t rtcTimeEvent = GLCD_FALSE;
 
@@ -83,9 +80,8 @@ uint16_t almTickerSnooze = 0;
 static uint8_t almStopRequest = GLCD_FALSE;
 volatile uint8_t almSwitchOn = GLCD_FALSE;
 
-// The following variables drive the clock animation and display state
+// The following variable drives the clock animation cycle countdown ticker
 static volatile uint8_t animTickerCycle;
-volatile uint8_t animDisplayMode = SHOW_TIME;
 
 // Runtime sound data for Mario or two-tone alarm
 static volatile uint16_t sndTickerTone = 0;
@@ -136,9 +132,9 @@ const uint8_t __attribute__ ((progmem)) eepDefault[] =
 //
 // Function: main
 //
-// The Monochron main() function. It initializes the Monochron environment
-// and ends up in an infinite loop that processes button presses and
-// switches between and updates Monochron clocks.
+// The Monochron main() function. It initializes the Monochron environment and
+// ends up in an infinite loop that processes button presses and switches
+// between and updates Monochron clocks.
 //
 #ifdef EMULIN
 int monoMain(void)
@@ -149,10 +145,9 @@ int main(void)
   // Check if we were reset
   MCUSR = 0;
 
-  // Just in case we were reset inside of the glcd init function
-  // which would happen if the lcd is not plugged in. The end result
-  // of that is it will beep, pause, for as long as there is no lcd
-  // plugged in.
+  // Just in case we were reset inside of the glcd init function which would
+  // happen if the lcd is not plugged in. The end result of that is it will
+  // beep, pause, for as long as there is no lcd plugged in.
   wdt_disable();
 
   // Init uart
@@ -201,7 +196,7 @@ int main(void)
   TCCR2A |= _BV(WGM21) | _BV(WGM20); // fast PWM
   TCCR2B |= _BV(WGM22);
   OCR2A = OCR2A_VALUE;
-  OCR2B = eeprom_read_byte((uint8_t *)EE_BRIGHT);
+  OCR2B = eeprom_read_byte((uint8_t *)EE_BRIGHT) % 17 << OCR2B_BITSHIFT;
 #endif
   DDRB |= _BV(5);
 
@@ -432,8 +427,7 @@ SIGNAL(TIMER0_COMPA_vect)
 // Time signal handler
 //
 // Read and sync the RTC with internal system time. It can result in a
-// a Monochron time event, alarm trip event or alarm-end event when
-// appropriate.
+// Monochron time event, alarm trip event or alarm-end event when appropriate.
 // Runs at about every 2 msec, but will sync time considerably less due to
 // time dividers.
 //
@@ -463,8 +457,9 @@ SIGNAL(TIMER2_OVF_vect)
     return;
   }
 
-  // This occurs at approx 5.7Hz, 8.5Hz or 13.6Hz.
+  // The code below runs at approx 5.7Hz, 8.5Hz or 13.6Hz.
   // For this refer to defs of TIMER2_RETURN_x above.
+
   uint8_t lastSec = rtcDateTime.timeSec;
 
   //DEBUGP("* RTC");
@@ -506,12 +501,6 @@ SIGNAL(TIMER2_OVF_vect)
     DEBUG(uart_putw_dec(rtcDateTime.timeHour); uart_putchar(':'));
     DEBUG(uart_putw_dec(rtcDateTime.timeMin); uart_putchar(':'));
     DEBUG(uart_putw_dec(rtcDateTime.timeSec); putstring_nl(""));
-
-    // If we're in the config main menu we have a continuous time update
-    // except when editing time itself or alarms or when we're changing
-    // menu (cfgScreenMutex)
-    if (animDisplayMode != SHOW_TIME && cfgScreenMutex == GLCD_FALSE)
-      cfgMenuTimeShow();
   }
 
   // Signal a clock time event only when the previous has not been processed
@@ -757,12 +746,9 @@ void eepInit(void)
   // Check the integrity of the eeprom for Monochron defaults
   if (eeprom_read_byte((uint8_t *)EE_INIT) != EE_INITIALIZED)
   {
-    // Set eeprom to a default state. The last address to update is EE_INIT
-    // since that location identifies the integrity of the eeprom data.
-    // So, start at address 1 up to the end of the init array.
-    for (i = (uint8_t *)1; i < (uint8_t *)sizeof(eepDefault); i++)
+    // Not initialized. Set eeprom to a default state.
+    for (i = (uint8_t *)0; i < (uint8_t *)sizeof(eepDefault); i++)
       eeprom_write_byte(EE_OFFSET + i, pgm_read_byte(&eepDefault[(size_t)i]));
-    eeprom_write_byte((uint8_t *)EE_INIT, EE_INITIALIZED);
   }
 }
 
@@ -821,8 +807,8 @@ uint8_t rtcLeapYear(uint16_t year)
 // Function: rtcMchronTimeInit
 //
 // (Re-)initialize the functional Monochron clock time. It will discard a
-// pending time event (may be zero seconds old, a few seconds or even
-// minutes) and will create a fresh time event that is based on *now*.
+// pending time event (may be zero seconds old, a few seconds or even minutes)
+// and will create a fresh time event that is based on *now*.
 //
 void rtcMchronTimeInit(void)
 {
@@ -831,19 +817,16 @@ void rtcMchronTimeInit(void)
 #ifndef EMULIN
   // First wait for a registered time event (that may pass immediately)
   while (rtcTimeEvent == GLCD_FALSE);
-  // Then restart the time scan mechanism while forcing a new time to
-  // be generated
+#endif
+  // Get a new time event immediately after restarting the time scan mechanism
   DEBUGTP("Clear time event");
   rtcDateTimeNext.timeSec = 60;
   rtcTimeEvent = GLCD_FALSE;
+#ifndef EMULIN
   // And finally wait for a new registered time event in next time scan cycle
   while (rtcTimeEvent == GLCD_FALSE);
 #else
-  // As the emulator event loop is not in a separate thread nor is
-  // interrupt driven we have to do things a bit differently
-  DEBUGTP("Clear time event");
-  rtcTimeEvent = GLCD_FALSE;
-  rtcDateTimeNext.timeSec = 60;
+  // Create a new time event
   monoTimer();
 #endif
   mcClockTimeEvent = GLCD_TRUE;
@@ -910,8 +893,9 @@ uint8_t rtcTimeRead(void)
     return 1;
 
   // Process the time from the RTC
-  rtcDateTime.timeSec = bcdDecode(clockdata[0], 0x7);
-  rtcDateTime.timeMin = bcdDecode(clockdata[1], 0x7);
+  rtcDateTime.dateYear = bcdDecode(clockdata[6], 0xf);
+  rtcDateTime.dateMon = bcdDecode(clockdata[5], 0x1);
+  rtcDateTime.dateDay = bcdDecode(clockdata[4], 0x3);
   if (clockdata[2] & _BV(6))
   {
     // "12 hr" mode
@@ -923,9 +907,8 @@ uint8_t rtcTimeRead(void)
     // "24 hr" mode
     rtcDateTime.timeHour = bcdDecode(clockdata[2], 0x3);
   }
-  rtcDateTime.dateDay = bcdDecode(clockdata[4], 0x3);
-  rtcDateTime.dateMon = bcdDecode(clockdata[5], 0x1);
-  rtcDateTime.dateYear = bcdDecode(clockdata[6], 0xf);
+  rtcDateTime.timeMin = bcdDecode(clockdata[1], 0x7);
+  rtcDateTime.timeSec = bcdDecode(clockdata[0], 0x7);
 
   return 0;
 }

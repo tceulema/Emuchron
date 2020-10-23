@@ -3,12 +3,12 @@
 #
 # Purpose: Test the fill circle inverse functionality
 #
-# NOTE: Due to graphics speed limitations use either the glut device
-# (recommended) or the ncurses device, but NOT both or be prepared
-# to see lots of graphic glitches. Even if you do use only the glut or
-# ncurses lcd device you may still see some occasional graphic glitch.
-# Don't adjust your tv set for this, it's just the way ncurses works
-# and how the glut lcd device is implemented.
+# Note: Due to graphics speed limitations use either the glut device
+# (recommended) or the ncurses device, but NOT both or be prepared to see lots
+# of graphic glitches. Even if you do use only the glut or ncurses lcd device
+# you may still see some occasional graphic glitch.
+# Don't adjust your tv set for this, it's just the way ncurses works and how
+# the glut lcd device is implemented.
 #
 
 # Show message and a clock

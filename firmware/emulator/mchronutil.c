@@ -28,6 +28,9 @@
 #include "varutil.h"
 #include "mchronutil.h"
 
+// Avoid typos in eeprom item name when printing the eeprom contents
+#define EEPNAME(a)	a, #a
+
 // Monochron defined data
 extern volatile rtcDateTime_t rtcDateTime;
 extern volatile rtcDateTime_t rtcDateTimeNext;
@@ -56,6 +59,7 @@ u08 invokeExit = GLCD_FALSE;
 static u08 closeWinMsg = GLCD_FALSE;
 
 // Local function prototypes
+static void emuEepromPrintItem(uint16_t item, char *name);
 static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
 
 //
@@ -314,8 +318,8 @@ void emuClockRelease(u08 echoCmd)
 //
 // Most clocks update their layout in a single clock cycle.
 // However, consider the QR clock. This clock requires multiple clock cycles
-// to update its layout due to the above average computing power needed to
-// do so.
+// to update its layout due to the above average computing power needed to do
+// so.
 // For specific clocks, like the QR clock, this function generates multiple
 // clock cycles, enough to update its layout.
 // By default for any other clock, only a single clock cycle is generated,
@@ -366,11 +370,11 @@ u08 emuColorGet(char colorId)
 // Function: emuCoreDump
 //
 // There's something terribly wrong in Emuchron. It may be caused by bad
-// (functional clock) code, a bad mchron command line request or a bug in
-// the Emuchron emulator.
+// (functional clock) code, a bad mchron command line request or a bug in the
+// Emuchron emulator.
 // Provide some feedback and generate a coredump file (when enabled).
-// Note: A graceful environment shutdown is taken care of by the SIGABRT
-// signal handler, invoked by abort().
+// Note: A graceful environment shutdown is taken care of by the SIGABRT signal
+// handler, invoked by abort().
 // Note: In order to get a coredump file it requires to run shell command
 // "ulimit -c unlimited" once in the mchron shell.
 //
@@ -420,9 +424,9 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   // screen. After aborting mchron, the ncurses image will be retained.
   // In case we're only using the glut device, give end-user the means to have
   // a look at the glut device to get a clue what's going on before its display
-  // is killed by the application that is being aborted. Note that at this
-  // point glut is still running in its own thread and will have its layout
-  // constantly refreshed. This allows a glut screendump to be made if needed.
+  // is killed by aborting mchron. Note that at this point glut is still
+  // running in its own thread and will have its layout constantly refreshed.
+  // This allows a glut screendump to be made if needed.
   if (ctrlDeviceActive(CTRL_DEVICE_NCURSES) == GLCD_TRUE)
   {
     // Flush the ncurses device so we get its contents as-is at the time of
@@ -445,6 +449,65 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
 }
 
 //
+// Function: emuEepromPrint
+//
+// Warning: This function assumes the contents of the eeprom is according the
+// sequence of EE_* defines in monomain.h [firmware]. Keep this function in
+// line with these #define's.
+//
+void emuEepromPrint(void)
+{
+  uint8_t value;
+
+  printf("eeprom:\n");
+
+  // Memory address offset Monochron settings in eeprom
+  printf("monochron eeprom offset = %d (0x%03x)\n", EE_OFFSET, EE_OFFSET);
+  // Status Monochron eeprom settings based on value of location EE_INIT
+  value = eeprom_read_byte((uint8_t *)EE_INIT);
+  printf("monochron eeprom status = ");
+  if (value == EE_INITIALIZED)
+    printf("initialized\n");
+  else if (value == 0xff)
+    printf("erased\n");
+  else
+    printf("invalid\n");
+
+  // All Monochron eeprom settings
+  printf("byte address name             value\n");
+  emuEepromPrintItem(EEPNAME(EE_INIT));
+  emuEepromPrintItem(EEPNAME(EE_BRIGHT));
+  emuEepromPrintItem(EEPNAME(EE_VOLUME));
+  emuEepromPrintItem(EEPNAME(EE_REGION));
+  emuEepromPrintItem(EEPNAME(EE_TIME_FORMAT));
+  emuEepromPrintItem(EEPNAME(EE_SNOOZE));
+  emuEepromPrintItem(EEPNAME(EE_BGCOLOR));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_SELECT));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_HOUR1));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_MIN1));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_HOUR2));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_MIN2));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_HOUR3));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_MIN3));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_HOUR4));
+  emuEepromPrintItem(EEPNAME(EE_ALARM_MIN4));
+}
+
+//
+// Function: emuEepromPrintItem
+//
+// Print eeprom info for a single Monochron eeprom settings item
+//
+static void emuEepromPrintItem(uint16_t item, char *name)
+{
+  uint8_t value;
+
+  value = eeprom_read_byte((uint8_t *)(size_t)item);
+  printf("%2d   0x%03x   %-15s %3d (0x%02x)\n", item - EE_OFFSET, item, name,
+    value, value);
+}
+
+//
 // Function: emuFontGet
 //
 // Get the requested font
@@ -455,7 +518,7 @@ u08 emuFontGet(char *fontName)
   if (strcmp(fontName, "5x5p") == 0)
     return FONT_5X5P;
   else // fontName == "5x7n")
-    return FONT_5X7N;
+    return FONT_5X7M;
 }
 
 //
@@ -619,7 +682,7 @@ u08 emuStartModeGet(char startId)
 //
 // Start a repeating msec realtime interval timer
 //
-void emuSysTimerStart(timer_t *timer, int interval, void(*handler)(void))
+void emuSysTimerStart(timer_t *timer, int interval, void (*handler)(void))
 {
   struct itimerspec iTimer;
   struct sigevent sEvent;

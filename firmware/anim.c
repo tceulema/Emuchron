@@ -439,8 +439,8 @@ void animValToStr(u08 value, char valString[])
 void animWelcome(void)
 {
   // Give startup welcome message and (optionally) firmware version
-  glcdPutStr2(33, 14, FONT_5X7N, "Welcome to", mcFgColor);
-  glcdPutStr2(18, 30, FONT_5X7N, "-- T1 clocks --", mcFgColor);
+  glcdPutStr2(33, 14, FONT_5X7M, "Welcome to", mcFgColor);
+  glcdPutStr2(18, 30, FONT_5X7M, "-- T1 clocks --", mcFgColor);
   //glcdPutStr2(1, 58, FONT_5X5P, EMUCHRON_VERSION, mcFgColor);
 
 #ifdef EMULIN

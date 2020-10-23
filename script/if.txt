@@ -1,16 +1,17 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Test the implementation of if-then-else-end logic.
+# Purpose: Test the implementation of if-then-else-end logic
 #
 # Instructions:
-# - Uncomment one of the two 'rf' commands below to generate ascending
-#   or descending numbers for x
+# - Uncomment one of the two 'rf' commands below to generate ascending or
+#   descending numbers for x
 # - Execute the script
-# - The result must be that sequential values for y are printed in the
-#   range 0..7 in ascending or descending order
+# - The result must be that sequential values for y are printed in the range
+#   0..7 in ascending or descending order
 #
 
+# Uncomment a single 'rf' command to select descending or ascending order
 # rf x=7 x>=0 x=x-1
 rf x=0 x<8 x=x+1
   iif x==0

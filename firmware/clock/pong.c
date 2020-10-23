@@ -23,9 +23,9 @@
 // per pi rad, preventing too steep ball motion angles. The angle range also
 // influences the length of the calculated ball trajectory; the steeper the
 // angle, the more trajectory steps are needed. So, when reducing the angle
-// you many need to increase the trajectory length. With the angle set to 40
-// a max total of 36 trajectory steps are needed. However in the define below
-// two additional steps are added to be *really* sure we'll never overflow.
+// you may need to increase the trajectory length. With the angle set to 40 a
+// max total of 36 trajectory steps are needed. However in the define below two
+// additional steps are added to be *really* sure we'll never overflow.
 #define BALL_ANGLE_MIN		40
 #define TRAJ_LEN		38
 
@@ -377,8 +377,7 @@ static void pongBallTraject(void)
       paddleColl = COLL_REQ;
       dx = PADDLE_RIGHT_X - (oldBallX + BALL_RADIUS * 2);
     }
-    else if ((s08)ballX <= PADDLE_LEFT_X + PADDLE_W &&
-        paddleColl == COLL_NONE)
+    else if ((s08)ballX <= PADDLE_LEFT_X + PADDLE_W && paddleColl == COLL_NONE)
     {
       // Prepare to determine exact collision position with left paddle
       paddleColl = COLL_REQ;
@@ -393,8 +392,8 @@ static void pongBallTraject(void)
       paddleTick = tix;
       if (avoidPaddle == GLCD_FALSE)
       {
-        // Set final ball position in bounce trajectory and bounce the ball
-        // x direction in preparation for the next trajectory calculation
+        // Set final ball position in bounce trajectory and bounce the ball x
+        // direction in preparation for the next trajectory calculation
         trajX[tix] = oldBallX + dx;
         trajY[tix] = pongBarBounce(oldBallY + dy, &ballDy);
         ballDirX = -ballDirX;

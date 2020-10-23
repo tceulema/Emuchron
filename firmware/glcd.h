@@ -34,7 +34,7 @@
 
 // Text fonts
 #define FONT_5X5P	0
-#define FONT_5X7N	1
+#define FONT_5X7M	1
 
 // Basic math
 #define SIGN(x) ((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))

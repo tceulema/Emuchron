@@ -14,8 +14,7 @@ pa f 0 0 5x5p h 1 1 glcdFillRectangle2
 # Enclose the paint area with a big rectangle
 pr f 3 6 122 57
 
-# Indefinitely keep animating filled rectangles of
-# mixed length and width
+# Indefinitely keep animating filled rectangles of mixed length and width
 wts
 rf pattern=5 true pattern=(pattern==0?5:pattern-1)
   vs dx=1
@@ -29,4 +28,3 @@ rf pattern=5 true pattern=(pattern==0?5:pattern-1)
   rn
   wte 100
 rn
-

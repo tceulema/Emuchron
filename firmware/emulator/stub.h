@@ -65,8 +65,8 @@
 
 // Eeprom stubs
 uint8_t stubEepRead(uint8_t *eprombyte);
-void stubEepWrite(uint8_t *eprombyte, uint8_t value);
 void stubEepReset(void);
+void stubEepWrite(uint8_t *eprombyte, uint8_t value);
 
 // Beep stub
 void stubBeep(uint16_t hz, uint8_t msec);
@@ -96,7 +96,9 @@ void wdt_reset();
 // Below is emulator oriented stub functionality
 // Monochron emulator stubs
 char stubEventGet(void);
-void stubEventInit(u08 startWait, void (*stubHelpHandler)(void));
+void stubEventInit(u08 startWait, u08 cfgTimeout,
+  void (*stubHelpHandler)(void));
+u08 stubEventQuitGet(void);
 
 // Logfile functions
 void stubLogfileClose(void);
@@ -107,7 +109,7 @@ void alarmSoundReset(void);
 void alarmSoundStop(void);
 void alarmSwitchSet(u08 on, u08 show);
 void alarmSwitchShow(void);
-void alarmSwitchToggle(uint8_t show);
+void alarmSwitchToggle(u08 show);
 
 // Keyboard input and keypress events
 char kbKeypressScan(u08 quitFind);

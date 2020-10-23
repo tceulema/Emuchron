@@ -78,21 +78,21 @@ void spotSpiderPlotCycle(void)
   {
     // Second
     animValToStr(mcClockNewTS, newVal);
-    glcdPutStr2(SPDR_SEC_VAL_X_START, SPDR_SEC_VAL_Y_START, FONT_5X7N,
+    glcdPutStr2(SPDR_SEC_VAL_X_START, SPDR_SEC_VAL_Y_START, FONT_5X7M,
       newVal, mcFgColor);
   }
   if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
   {
     // Minute
     animValToStr(mcClockNewTM, newVal);
-    glcdPutStr2(SPDR_MIN_VAL_X_START, SPDR_MIN_VAL_Y_START, FONT_5X7N,
+    glcdPutStr2(SPDR_MIN_VAL_X_START, SPDR_MIN_VAL_Y_START, FONT_5X7M,
       newVal, mcFgColor);
   }
   if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
   {
     // Hour
     animValToStr(mcClockNewTH, newVal);
-    glcdPutStr2(SPDR_HOUR_VAL_X_START, SPDR_HOUR_VAL_Y_START, FONT_5X7N,
+    glcdPutStr2(SPDR_HOUR_VAL_X_START, SPDR_HOUR_VAL_Y_START, FONT_5X7M,
       newVal, mcFgColor);
   }
 

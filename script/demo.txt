@@ -54,4 +54,3 @@ e i ../script/rectangle3.txt
 w 0
 # Demo fillrectangle fill alignment
 e i ../script/rectangle2.txt
-

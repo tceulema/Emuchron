@@ -1,11 +1,9 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: This obviously fake Kubrick's 2001 HAL report on its Monochron
-#          (MON) subsystem is used for testing gldcdLine() when painting sin
-#          and cos curves and lines between the two.
-#          For ultimate graphics fun run it in the glut device as the script
-#          uses backlight settings to pulse the graph and fade graph axis.
+# Purpose: This obviously fake Kubrick's 2001 HAL report on its Monochron (MON)
+# subsystem is used for testing gldcdLine() when painting sin and cos curves
+# and lines between the two.
 #
 
 # Erase LCD display
@@ -15,9 +13,9 @@ w 1000
 
 # Provide HAL MON status report page
 pa f 28 15 5x5p h 1 1 gpr: 21-tf
-pa f 35 25 5x7n h 3 2 M
-pa f 58 25 5x7n h 3 2 O
-pa f 81 25 5x7n h 3 2 N
+pa f 35 25 5x7m h 3 2 M
+pa f 58 25 5x7m h 3 2 O
+pa f 81 25 5x7m h 3 2 N
 
 # Set start (xs), length (xl) and step (xe) values for graph x-axis
 # For step use divider values of 120, such as 2, 3, 4, 5, 6, 8, 10, 12

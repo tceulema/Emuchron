@@ -27,7 +27,7 @@ vs firstDraw=true
 vs drawSize=0
 
 rf true x<=y true
-  hm .
+  hm
   vp ^x$|^y$|^tswitch$|^drawSize$
 
   iif x!=y

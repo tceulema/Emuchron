@@ -9,7 +9,7 @@
 #include "global.h"
 
 // Version of our emuchron code base
-#define EMUCHRON_VERSION	"v5.1"
+#define EMUCHRON_VERSION	"v6.0"
 
 // Debugging macros.
 // Note that DEBUGGING is the master switch for generating debug output.

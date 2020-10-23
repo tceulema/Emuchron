@@ -110,10 +110,10 @@ void digitalCycle(void)
   // Verify changes in date
   if (mcClockDateEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
   {
-    glcdPutStr2(DIGI_DATE_X_START, digiDateYStart, FONT_5X7N,
+    glcdPutStr2(DIGI_DATE_X_START, digiDateYStart, FONT_5X7M,
       (char *)animDays[rtcDotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)],
       mcFgColor);
-    glcdPutStr2(DIGI_DATE_X_START + 24, digiDateYStart, FONT_5X7N,
+    glcdPutStr2(DIGI_DATE_X_START + 24, digiDateYStart, FONT_5X7M,
       (char *)animMonths[mcClockNewDM - 1], mcFgColor);
     animValToStr(mcClockNewDD, clockInfo);
     clockInfo[2] = ',';
@@ -121,7 +121,7 @@ void digitalCycle(void)
     clockInfo[4] = '2';
     clockInfo[5] = '0';
     animValToStr(mcClockNewDY, &clockInfo[6]);
-    glcdPutStr2(DIGI_DATE_X_START + 48, digiDateYStart, FONT_5X7N, clockInfo,
+    glcdPutStr2(DIGI_DATE_X_START + 48, digiDateYStart, FONT_5X7M, clockInfo,
       mcFgColor);
   }
 
@@ -260,10 +260,10 @@ static void digitalInit(u08 mode)
 
   // Draw the ":" separators between hour:min(:sec)
   glcdPutStr3(digiTimeXStart + 2 * 6 * digiTimeXScale + digiTimeXScale,
-    digiTimeYStart, FONT_5X7N, ":", digiTimeXScale, digiTimeYScale, mcFgColor);
+    digiTimeYStart, FONT_5X7M, ":", digiTimeXScale, digiTimeYScale, mcFgColor);
   if (digiSecShow == GLCD_TRUE)
     glcdPutStr3(digiTimeXStart + 5 * 6 * digiTimeXScale + 2 * digiTimeXScale,
-      digiTimeYStart, FONT_5X7N, ":", digiTimeXScale, digiTimeYScale,
+      digiTimeYStart, FONT_5X7M, ":", digiTimeXScale, digiTimeYScale,
       mcFgColor);
 
 #ifdef DIGI_GLITCH
@@ -288,7 +288,7 @@ static void digitalTimeValDraw(u08 oldVal, u08 newVal, u08 factor)
 
   animValToStr(newVal, clockInfo);
   glcdPutStr3(digiTimeXStart + factor * 19 * digiTimeXScale, digiTimeYStart,
-    FONT_5X7N, clockInfo, digiTimeXScale, digiTimeYScale, mcFgColor);
+    FONT_5X7M, clockInfo, digiTimeXScale, digiTimeYScale, mcFgColor);
 }
 
 //

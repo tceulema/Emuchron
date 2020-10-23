@@ -1,9 +1,8 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose:
-# Use repeat loop to quickly skip through the minutes of one
-# hour and see how a clock redraws itself
+# Purpose: Use repeat loop to quickly skip through the minutes of one hour and
+# see how how a clock redraws itself
 #
 # Prerequisites:
 # - Select a clock (if not selected there's no visual feedback)
@@ -27,4 +26,3 @@ rf m=0 m<60 m=m+1
   # Let the wait timer expire after 0.2 second and start a new one
   wte 200
 rn
-

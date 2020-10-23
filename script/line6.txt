@@ -2,10 +2,10 @@
 # Test command script for the Monochron emulator
 #
 # Purpose: This script is used for testing gldcdLine() when painting sin()
-#          and cos() curves and lines between the two.
+# and cos() curves and lines between the two
 #
 # Note: This script is based on script hal.txt (that provides much more
-#       graphics fun than this one).
+# graphics fun than this one)
 #
 
 # Erase lcd display
@@ -60,4 +60,3 @@ rf x=xs+xe x<=xs+xl x=x+xe
   vs sp=sy
   vs cp=cy
 rn
-

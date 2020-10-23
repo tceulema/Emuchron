@@ -1,7 +1,7 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Test glcdLine()
+# Purpose: This script is used for testing gldcdLine()
 #
 
 # Erase lcd display
@@ -22,4 +22,3 @@ rn
 # Paint the function name in a cleared rectangle
 prf f 49 28 29 7 0 5
 pa f 50 29 5x5p h 1 1 glcdline
-

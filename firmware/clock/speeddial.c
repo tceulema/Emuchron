@@ -136,7 +136,7 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
   // Update speed dial value
   animValToStr(newVal, needleValue);
   glcdPutStr2(x + SPEED_VALUE_X_OFFSET, SPEED_Y_START + SPEED_VALUE_Y_OFFSET,
-    FONT_5X7N, needleValue, mcFgColor);
+    FONT_5X7M, needleValue, mcFgColor);
 }
 
 //

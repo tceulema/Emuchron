@@ -4,7 +4,8 @@
 # Purpose: Test the auto align type for fill types in glcdFillRectangle2()
 #
 
-# Variables defining the screen size, rectangle size, speed and align type (auto)
+# Variables defining the screen size, rectangle size, speed and align type
+# (aligh type auto)
 vs h=127
 vs v=63
 vs sz=19
@@ -19,30 +20,31 @@ pa f 32 26 5x5p h 1 1 glcdfillrectangle2
 pa f 40 32 5x5p h 1 1 - auto align -
 
 # Repeat for each fill type (1..3)
+wts
 rf ft=1 ft<4 ft=ft+1
   # Move from top left to top right
   rf x=0 x<=(h-sz+1) x=x+1
     prf f x 0 sz sz al ft
-    w w
+    wte w
     pr b x 0 1 sz
   rn
   # Move from top right to bottom right
   rf y=0 y<=(v-sz+1) y=y+1
     prf f (h-sz+1) y sz sz al ft
-    w w
+    wte w
     pr b (h-sz+1) y sz 1
   rn
   # Move from bottom right to bottom left
   rf x=h-sz x>=0 x=x-1
     prf f x (v-sz+1) sz sz al ft
     pr b (x+sz) (v-sz+1) 1 sz
-    w w
+    wte w
   rn
   # Move from bottom left to top left
   rf y=v-sz y>=0 y=y-1
     prf f 0 y sz sz al ft
     pr b 0 (y+sz) sz 1
-    w w
+    wte w
   rn
 rn
 
@@ -54,12 +56,13 @@ pa f 60 1 5x5p h 1 1 glcdfillrectangle2
 pa f 68 8 5x5p h 1 1 - auto align -
 
 # Repeat for each fill type (1..3)
+wts
 rf ft=1 ft<4 ft=ft+1
   # Move from top left to bottom right
   rf x=0 x<=(h-sz+1) x=x+1
     vs y=x/(h-sz+1)*(v-sz+1)
     prf f x y sz sz al ft
-    w w
+    wte w
     pr b x y 1 sz
     pr b x y sz 1
   rn
@@ -74,12 +77,13 @@ pa f 60 50 5x5p h 1 1 glcdfillrectangle2
 pa f 68 57 5x5p h 1 1 - auto align -
 
 # Repeat for each fill type (1..3)
+wts
 rf ft=1 ft<4 ft=ft+1
   # Move from bottom left to top right
   rf x=0 x<=(h-sz+1) x=x+1
     vs dy=x/(h-sz+1)*(v-sz+1)
     prf f x v-sz+1-dy sz sz al ft
-    w w
+    wte w
     pr b x v-sz+1-dy 1 sz
     pr b x v-dy sz 1
   rn
@@ -90,4 +94,3 @@ rn
 w 1000
 le
 w 1000
-

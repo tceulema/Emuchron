@@ -61,7 +61,6 @@
 #define TO_UINT16_T(d)	((uint16_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 
 // Monochron defined data
-extern volatile uint8_t animDisplayMode;
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
@@ -76,6 +75,7 @@ extern clockDriver_t *mcClockPool;
 extern clockDriver_t monochron[];
 extern volatile uint8_t almSwitchOn;
 extern volatile uint8_t almAlarming;
+extern volatile uint8_t almAlarmSelect;
 extern int16_t almTickerAlarm;
 extern uint16_t almTickerSnooze;
 
@@ -313,7 +313,7 @@ int main(int argc, char *argv[])
 //
 // A control block handler (for if-logic and repeat commands) however must
 // decide which command arguments are evaluated, depending on the state of its
-// control block. In other words, command arguments are evaluated optionally,
+// control block. In other words, command arguments are evaluated optionally.
 //
 
 //
@@ -396,6 +396,7 @@ u08 doAlarmSet(cmdLine_t *cmdLine)
     }
     else
     {
+      // Clear alarm switch status forcing clock to paint alarm 'off' info
       mcAlarmSwitch = ALARM_SWITCH_NONE;
       animClockDraw(DRAW_CYCLE);
     }
@@ -486,7 +487,7 @@ u08 doClockFeed(cmdLine_t *cmdLine)
   rtcMchronTimeInit();
 
   // Init stub event handler used in main loop below and get first event
-  stubEventInit(startWait, stubHelpClockFeed);
+  stubEventInit(startWait, GLCD_TRUE, stubHelpClockFeed);
   ch = stubEventGet();
 
   // Run clock until 'q'
@@ -531,15 +532,14 @@ u08 doClockSelect(cmdLine_t *cmdLine)
 {
   uint8_t clock;
 
-  if (argDouble[0] >= emuMonochronCount - 1 + 0.49L)
+  clock = TO_UINT8_T(argDouble[0]);
+  if (clock > emuMonochronCount - 1)
   {
     // Requested clock is beyond max value
-    printf("%s? invalid: %.0f\n", cmdLine->cmdCommand->cmdArg[0].argName,
-      argDouble[0] + 0.01);
+    printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[0].argName, clock);
     return CMD_RET_ERROR;
   }
 
-  clock = TO_UINT8_T(argDouble[0]);
   if (clock == CHRON_NONE)
   {
     // Release clock
@@ -565,9 +565,9 @@ u08 doClockSelect(cmdLine_t *cmdLine)
 //
 u08 doComments(cmdLine_t *cmdLine)
 {
-  // Dump comments in the log only when we run at root command level
+  // Dump comments command in the log only when we run at root command level
   if (listExecDepth == 0)
-    DEBUGP(argString);
+    DEBUGP(cmdLine->input);
 
   return CMD_RET_OK;
 }
@@ -619,6 +619,49 @@ u08 doDateSet(cmdLine_t *cmdLine)
   // Report (new) time+date+alarm
   if (echoCmd == CMD_ECHO_YES)
     emuTimePrint(ALM_EMUCHRON);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doEepromPrint
+//
+// Print eeprom contents
+//
+u08 doEepromPrint(cmdLine_t *cmdLine)
+{
+  emuEepromPrint();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doEepromReset
+//
+// Reset eeprom contents and init with Monochron defaults
+//
+u08 doEepromReset(cmdLine_t *cmdLine)
+{
+  stubEepReset();
+  eepInit();
+
+  if (echoCmd == CMD_ECHO_YES)
+    printf("eeprom reset\n");
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doEepromWrite
+//
+// Write data to eeprom
+//
+u08 doEepromWrite(cmdLine_t *cmdLine)
+{
+  size_t address;
+
+  address = (size_t)(TO_UINT16_T(argDouble[0]));
+  eeprom_write_byte((uint8_t *)address, TO_UINT8_T(argDouble[1]));
 
   return CMD_RET_OK;
 }
@@ -973,9 +1016,9 @@ u08 doLcdDisplaySet(cmdLine_t *cmdLine)
 
   // Send display on/off to controller 0 and 1
   payload = TO_U08(argDouble[0]);
-  ctrlExecute(CTRL_METHOD_COMMAND, 0, GLCD_ON_CTRL | payload);
+  glcdControlWrite(0, GLCD_ON_CTRL | payload);
   payload = TO_U08(argDouble[1]);
-  ctrlExecute(CTRL_METHOD_COMMAND, 1, GLCD_ON_CTRL | payload);
+  glcdControlWrite(1, GLCD_ON_CTRL | payload);
   ctrlLcdFlush();
 
   return CMD_RET_OK;
@@ -1144,9 +1187,9 @@ u08 doLcdStartLineSet(cmdLine_t *cmdLine)
 
   // Send display startline to controller 0 and 1
   payload = TO_U08(argDouble[0]);
-  ctrlExecute(CTRL_METHOD_COMMAND, 0, GLCD_START_LINE | payload);
+  glcdControlWrite(0, GLCD_START_LINE | payload);
   payload = TO_U08(argDouble[1]);
-  ctrlExecute(CTRL_METHOD_COMMAND, 1, GLCD_START_LINE | payload);
+  glcdControlWrite(1, GLCD_START_LINE | payload);
   ctrlLcdFlush();
 
   return CMD_RET_OK;
@@ -1197,7 +1240,6 @@ u08 doMonochron(cmdLine_t *cmdLine)
   mcMchronClock = 0;
   mcClockTimeEvent = GLCD_FALSE;
   mcClockDateEvent = GLCD_FALSE;
-  animDisplayMode = SHOW_TIME;
   almSwitchOn = GLCD_FALSE;
   almAlarming = GLCD_FALSE;
   almTickerAlarm = 0;
@@ -1207,29 +1249,100 @@ u08 doMonochron(cmdLine_t *cmdLine)
   // backlight later on
   glcdClearScreen(GLCD_OFF);
 
-  // Upon request force the eeprom to init
-  if (argChar[1] == 'r')
-    stubEepReset();
-
   // Set the backlight as stored in the eeprom
-  myBacklight = eeprom_read_byte((uint8_t *)EE_BRIGHT) >> OCR2B_BITSHIFT;
+  myBacklight = (eeprom_read_byte((uint8_t *)EE_BRIGHT) % 17) >>
+    OCR2B_BITSHIFT;
   ctrlLcdBacklightSet(myBacklight);
 
   // Init stub event handler used in Monochron
-  stubEventInit(startWait, stubHelpMonochron);
+  stubEventInit(startWait, GLCD_TRUE, stubHelpMonochron);
 
   // Start Monochron and witness the magic :-)
   monoMain();
 
   // We're done.
   // Restore the clock pool that mchron supports (as it was overridden by the
-  // Monochron clock pool). By clearing the active clock from that pool also
+  // Monochron clock pool). By clearing any active clock from that pool also
   // any audible alarm will be stopped and reset.
   mcClockPool = emuMonochron;
   emuClockRelease(CMD_ECHO_NO);
 
   // Restore alarm, foreground/background color and backlight as they were
   // prior to starting Monochron
+  mcAlarmH = emuAlarmH;
+  mcAlarmM = emuAlarmM;
+  mcBgColor = emuBgColor;
+  mcFgColor = emuFgColor;
+  ctrlLcdBacklightSet(emuBacklight);
+  ctrlLcdFlush();
+
+  // Return to line mode if needed
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_LINE);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doMonoConfig
+//
+// Start the stubbed Monochron configuration pages
+//
+u08 doMonoConfig(cmdLine_t *cmdLine)
+{
+  u08 myBacklight = 16;
+  u08 startWait = GLCD_FALSE;
+  u08 restart = GLCD_FALSE;
+  u08 myKbMode = KB_MODE_LINE;
+
+  // Get the start mode and the option to restart upon exiting the menu
+  startWait = emuStartModeGet(argChar[0]);
+  restart = TO_U08(argDouble[1]);
+
+  // Switch to keyboard scan mode if needed
+  myKbMode = kbModeGet();
+  if (myKbMode == KB_MODE_LINE)
+    kbModeSet(KB_MODE_SCAN);
+
+  // Set essential Monochron startup data
+  mcClockTimeEvent = GLCD_FALSE;
+  mcClockDateEvent = GLCD_FALSE;
+  almSwitchOn = GLCD_FALSE;
+  almAlarming = GLCD_FALSE;
+  almTickerAlarm = 0;
+  almTickerSnooze = 0;
+
+  // Clear the screen so we won't see any flickering upon changing the
+  // backlight later on
+  glcdClearScreen(GLCD_OFF);
+
+  // Misc eeprom-based initialization
+  eepInit();
+  myBacklight = (eeprom_read_byte((uint8_t *)EE_BRIGHT) % 17) >>
+    OCR2B_BITSHIFT;
+  ctrlLcdBacklightSet(myBacklight);
+  mcBgColor = eeprom_read_byte((uint8_t *)EE_BGCOLOR) % 2;
+  mcFgColor = (mcBgColor == GLCD_OFF ? GLCD_ON : GLCD_OFF);
+  almAlarmSelect = eeprom_read_byte((uint8_t *)EE_ALARM_SELECT) % 4;
+  almTimeGet(almAlarmSelect, &mcAlarmH, &mcAlarmM);
+
+  // Init stub event handler used in Monochron
+  stubEventInit(startWait, TO_U08(argDouble[0]), stubHelpMonochron);
+
+  // (Re)start Monochron configuration menu pages until a quit keypress
+  // occurred or regular menu exit is considered as final
+  do
+    cfgMenuMain();
+  while (stubEventQuitGet() == GLCD_FALSE && restart == GLCD_TRUE);
+
+  // We're done.
+  // Restore the clock pool that mchron supports. By clearing any active clock
+  // from that pool also any audible alarm will be stopped and reset.
+  mcClockPool = emuMonochron;
+  emuClockRelease(CMD_ECHO_NO);
+
+  // Restore alarm, foreground/background color and backlight as they were
+  // prior to starting Monochron config.
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
   mcBgColor = emuBgColor;

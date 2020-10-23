@@ -263,8 +263,8 @@ static void pieLineUpdate(u08 x, u08 oldVal, u08 newVal)
     arcLineOld = PIE_LINE_RADIAL_START;
   }
 
-  // Repaint the 0-value line since removing the old needle and pie value
-  // may cause it to (partly) disappear.
+  // Repaint the 0-value line since removing the old needle and pie value may
+  // cause it to (partly) disappear.
   glcdLine(x, PIE_Y_START,
     x + (s08)(sin(PIE_LINE_RADIAL_START) * (PIE_RADIUS + 0.5L)),
     PIE_Y_START + (s08)(-cos(PIE_LINE_RADIAL_START) * (PIE_RADIUS + 0.5L)),

@@ -1,8 +1,7 @@
 #
 # Test command script for the Monochron emulator
 #
-# Purpose: Skip through all days in a year and see how a clock
-#          redraws itself
+# Purpose: Skip through all days in a year and see how a clock redrws itself
 #
 # Prerequisites:
 # - Select a clock (if not selected there's no visual feedback)
@@ -79,4 +78,3 @@ e i ../script/month.txt
 vs m=12
 vs d=31
 e i ../script/month.txt
-

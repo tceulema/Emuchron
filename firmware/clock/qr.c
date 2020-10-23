@@ -169,8 +169,8 @@ void qrCycle(void)
       u08 offset = 0;
       u08 i = 0;
 
-      // Set the text to encode
-      // On first line add "HH:MM" or "HH:MM:SS"
+      // Set the text to encode.
+      // On first line add "HH:MM" or "HH:MM:SS".
       animValToStr(mcClockNewTH, (char *)strinbuf);
       strinbuf[2] = ':';
       animValToStr(mcClockNewTM, (char *)&strinbuf[3]);
@@ -191,8 +191,8 @@ void qrCycle(void)
       }
       else
       {
-        // Add date "DDD MMM dd, 20YY"
-        // Put the three chars of day of the week and month in QR string
+        // Add date "DDD MMM dd, 20YY".
+        // Put the three chars of day of the week and month in QR string.
         dow = (char *)animDays[rtcDotw(mcClockNewDM, mcClockNewDD,
           mcClockNewDY)];
         mon = (char *)animMonths[mcClockNewDM - 1];
@@ -243,8 +243,8 @@ void qrCycle(void)
   }
   else if (mcU8Util1 == 2 || mcU8Util1 == 3)
   {
-    // Try two out of 4 QR masks
-    // Mask combination for a state: 2+5, 3+6
+    // Try two out of 4 QR masks.
+    // Mask combination for a state: 2+5, 3+6.
     qrMaskTry(mcU8Util1);
     qrMaskTry(mcU8Util1 + 3);
     // Set state for next QR generation cycle
