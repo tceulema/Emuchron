@@ -21,24 +21,23 @@
 #define PC_IF_ELSE		5
 #define PC_IF_END		6
 
-// The command argument profile types
-#define ARG_CHAR		0
-#define ARG_WORD		1
-#define ARG_UNUM		2
-#define ARG_NUM			3
-#define ARG_STRING		4
-#define ARG_STR_OPT		5
-#define ARG_ASSIGN		6
+// The command argument publishing types
+#define ARG_CHAR		0  // A char in argChar[]
+#define ARG_STRING		1  // A string in argString[]
+#define ARG_NUM			2  // A double in argDouble[]
 
-// The argument value domain validation types
-#define DOM_NULL_INFO		0
-#define DOM_CHAR		1
-#define DOM_WORD		2
-#define DOM_NUM_RANGE		3
-#define DOM_NUM_MAX		4
-#define DOM_NUM_MIN		5
-#define DOM_VAR_NAME		6
-#define DOM_VAR_NAME_ALL	7
+// The argument domain value validation types
+// 1) Use in combination with ARG_CHAR command argument
+#define DOM_CHAR_VAL		0  // Validated single character
+// 2) Use in combination with ARG_STRING command argument
+#define DOM_WORD_VAL		10 // Validated string delimited by whitespace
+#define DOM_WORD_REGEX		11 // Regex validated string delim by whitespace
+#define DOM_STRING		12 // Non-empty string with whitespace chars
+#define DOM_STRING_OPT		13 // Optional string with whitespace chars
+// 3) Use in combination with ARG_NUM command argument
+#define DOM_NUM			20 // Expression for double
+#define DOM_NUM_RANGE		21 // Expression for double in min/max range
+#define DOM_NUM_ASSIGN		22 // Assignment expression for double
 
 // The command input read methods
 #define CMD_INPUT_READLINELIB	0
@@ -105,21 +104,22 @@ typedef struct _cmdInput_t
 } cmdInput_t;
 
 // Definition of a structure holding domain info for a command argument
-typedef struct _cmdArgDomain_t
+typedef struct _cmdDomain_t
 {
-  u08 argDomainType;			// Argument domain type
-  char *argTextList;			// Char/word argument value list
-  double argNumMin;			// Numeric argument min value
-  double argNumMax;			// Numeric argument max value
-  char *argDomainInfo;			// Additional domain info
-} cmdArgDomain_t;
+  char *domName;			// Domain structure name
+  u08 domType;				// Domain type
+  char *domTextList;			// Char/word/regex value list
+  double domNumMin;			// Numeric domain min value
+  double domNumMax;			// Numeric domain max value
+  char *domInfo;			// Additional domain info
+} cmdDomain_t;
 
 // Definition of a structure holding a command line argument
 typedef struct _cmdArg_t
 {
   u08 argType;				// Argument type
   char *argName;			// Argument name
-  cmdArgDomain_t *cmdArgDomain;		// Argument domain
+  cmdDomain_t *cmdDomain;		// Argument domain
 } cmdArg_t;
 
 // Definition of a structure holding a single mchron command with argument
@@ -128,11 +128,12 @@ typedef struct _cmdCommand_t
 {
   char *cmdName;			// The mchron command name
   u08 cmdPcCtrlType;			// Program counter control block type
+  char *cmdArgName;			// Argument structure name
   cmdArg_t *cmdArg;			// Array of command argument profiles
   int argCount;				// Profile argument count
+  char *cmdHandlerName;			// Execution handler name
   u08 (*cmdHandler)(cmdLine_t *);	// Handler for regular commands
   u08 (*cbHandler)(cmdLine_t **);	// Handler for control block commands
-  char *cmdHandlerName;			// Execution handler name
   char *cmdNameDescr;			// Command name description
 } cmdCommand_t;
 

@@ -7,7 +7,6 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -29,6 +28,7 @@
 #include "../clock/digital.h"
 #include "../clock/example.h"
 #include "../clock/linechart.h"
+#include "../clock/marioworld.h"
 #include "../clock/mosquito.h"
 #include "../clock/nerd.h"
 #include "../clock/perftest.h"
@@ -41,6 +41,7 @@
 #include "../clock/spiderplot.h"
 #include "../clock/thermometer.h"
 #include "../clock/trafficlight.h"
+#include "../clock/wave.h"
 
 // Emuchron stubs and utilities
 #include "stub.h"
@@ -56,7 +57,9 @@
 // Use these macros to convert a scanned numeric command argument (that is
 // of type double) into a type fit for post-processing in a command handler.
 #define TO_INT(d)	((int)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
+#define TO_S08(d)	((s08)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_U08(d)	((u08)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
+#define TO_U16(d)	((u16)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_UINT8_T(d)	((uint8_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_UINT16_T(d)	((uint16_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 
@@ -82,8 +85,7 @@ extern uint16_t almTickerSnooze;
 // The variables that store the published command line arguments
 extern char argChar[];
 extern double argDouble[];
-extern char *argWord[];
-extern char *argString;
+extern char *argString[];
 
 // The expression evaluator expression result value
 extern double exprValue;
@@ -113,6 +115,9 @@ int fileExecDepth = 0;
 
 // The timer used for the 'wte' and 'wts' commands
 static struct timeval tvTimer;
+
+// Graphics data buffers for use with graphics data and paint commands
+emuGrBuf_t emuGrBufs[GRAPHICS_BUFFERS];
 
 // The emulator background/foreground color of the lcd display and backlight
 // GLCD_OFF = 0 = black color (=0x0 bit value in lcd memory)
@@ -151,6 +156,8 @@ static clockDriver_t emuMonochron[] =
   {CHRON_BIGDIG_TWO,  DRAW_INIT_FULL, bigDigInit,         bigDigCycle,         bigDigButton},
   {CHRON_QR_HMS,      DRAW_INIT_FULL, qrInit,             qrCycle,             0},
   {CHRON_QR_HM,       DRAW_INIT_FULL, qrInit,             qrCycle,             0},
+  {CHRON_MARIOWORLD,  DRAW_INIT_FULL, marioInit,          marioCycle,          0},
+  {CHRON_WAVE,        DRAW_INIT_FULL, waveInit,           waveCycle,           0},
   {CHRON_PERFTEST,    DRAW_INIT_FULL, perfInit,           perfCycle,           0}
 };
 static int emuMonochronCount = sizeof(emuMonochron) / sizeof(clockDriver_t);
@@ -165,7 +172,13 @@ int main(int argc, char *argv[])
   cmdLine_t *cmdLine;
   char *prompt;
   emuArgcArgv_t emuArgcArgv;
+  int i;
   u08 retVal = CMD_RET_OK;
+
+  // Verify integrity of the command dictionary
+  retVal = dictVerify();
+  if (retVal != CMD_RET_OK)
+    return CMD_RET_ERROR;
 
   // Setup signal handlers to either recover from signal or to attempt graceful
   // non-standard exit
@@ -183,6 +196,10 @@ int main(int argc, char *argv[])
   // Init initial alarm
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
+
+  // Init graphics data buffers
+  for (i = 0; i < GRAPHICS_BUFFERS; i++)
+    grBufInit(&emuGrBufs[i], GLCD_FALSE);
 
   // Open debug logfile when requested
   if (emuArgcArgv.argDebug != 0)
@@ -308,8 +325,8 @@ int main(int argc, char *argv[])
 // Upon entering a command handler function for a 'regular' command, all its
 // arguments have been successfully scanned and evaluated. All it takes for
 // the handler is to pick up and process the evaluated arguments in the
-// argChar[], argDouble[], argWord[] and argString variables, based on the
-// sequence of command arguments in the command dictionary.
+// argChar[], argDouble[] and argString[] arrays, based on the sequence of
+// command arguments in the command dictionary.
 //
 // A control block handler (for if-logic and repeat commands) however must
 // decide which command arguments are evaluated, depending on the state of its
@@ -373,7 +390,8 @@ u08 doAlarmSet(cmdLine_t *cmdLine)
     if (mcAlarmSwitch == ALARM_SWITCH_ON &&
         (mcClockPool[mcMchronClock].clockId == CHRON_ANALOG_HM ||
          mcClockPool[mcMchronClock].clockId == CHRON_ANALOG_HMS ||
-         mcClockPool[mcMchronClock].clockId == CHRON_SLIDER))
+         mcClockPool[mcMchronClock].clockId == CHRON_SLIDER ||
+         mcClockPool[mcMchronClock].clockId == CHRON_MARIOWORLD))
     {
       // Normally the alarm can only be set via the config menu, so the new
       // alarm time will be displayed when the clock is initialized after
@@ -394,9 +412,9 @@ u08 doAlarmSet(cmdLine_t *cmdLine)
       almStateSet();
       animClockDraw(DRAW_CYCLE);
     }
-    else
+    else if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {
-      // Clear alarm switch status forcing clock to paint alarm 'off' info
+      // Clear alarm switch status forcing clock to paint alarm info
       mcAlarmSwitch = ALARM_SWITCH_NONE;
       animClockDraw(DRAW_CYCLE);
     }
@@ -473,7 +491,7 @@ u08 doClockFeed(cmdLine_t *cmdLine)
   // Check clock
   if (mcClockPool[mcMchronClock].clockId == CHRON_NONE)
   {
-    printf("no clock is selected\n");
+    printf("%s: no clock is selected\n", cmdLine->cmdCommand->cmdName);
     return CMD_RET_ERROR;
   }
 
@@ -488,7 +506,7 @@ u08 doClockFeed(cmdLine_t *cmdLine)
 
   // Init stub event handler used in main loop below and get first event
   stubEventInit(startWait, GLCD_TRUE, stubHelpClockFeed);
-  ch = stubEventGet();
+  ch = stubEventGet(GLCD_TRUE);
 
   // Run clock until 'q'
   while (ch != 'q')
@@ -499,14 +517,10 @@ u08 doClockFeed(cmdLine_t *cmdLine)
     if (ch == '+')
       animClockButton(BTN_PLUS);
 
-    // Execute a clock cycle for the clock
+    // Execute a clock cycle for the clock and get next timer event
     animClockDraw(DRAW_CYCLE);
-
-    // Just processed another cycle
     mcCycleCounter++;
-
-    // Get next timer event
-    ch = stubEventGet();
+    ch = stubEventGet(GLCD_TRUE);
   }
 
   // Flush any pending updates in the lcd device
@@ -580,7 +594,7 @@ u08 doComments(cmdLine_t *cmdLine)
 u08 doDateReset(cmdLine_t *cmdLine)
 {
   // Reset date to system date
-  stubTimeSet(70, 0, 0, 0, 80, 0, 0);
+  stubTimeSet(DT_TIME_KEEP, 0, 0, DT_DATE_RESET, 0, 0);
 
   // Sync mchron time with new date
   emuTimeSync();
@@ -605,7 +619,7 @@ u08 doDateSet(cmdLine_t *cmdLine)
   u08 dateOk = GLCD_TRUE;
 
   // Set new date
-  dateOk = stubTimeSet(70, 0, 0, 0, TO_UINT8_T(argDouble[0]),
+  dateOk = stubTimeSet(DT_TIME_KEEP, 0, 0, TO_UINT8_T(argDouble[0]),
     TO_UINT8_T(argDouble[1]), TO_UINT8_T(argDouble[2]));
   if (dateOk == GLCD_FALSE)
     return CMD_RET_ERROR;
@@ -682,7 +696,7 @@ u08 doExecute(cmdLine_t *cmdLine)
   // Verify too deep nested 'e' commands (prevent potential recursive call)
   if (fileExecDepth >= CMD_FILE_DEPTH_MAX)
   {
-    printf("stack level exceeded by last '%s' command (max=%d)\n",
+    printf("%s: max stack level exceeded (max=%d)\n",
       cmdLine->cmdCommand->cmdName, CMD_FILE_DEPTH_MAX);
     return CMD_RET_ERROR;
   }
@@ -700,13 +714,14 @@ u08 doExecute(cmdLine_t *cmdLine)
   fileExecDepth++;
 
   // Load the lines from the command file in a linked list.
-  // Warning: this will reset the cmd scan global variables.
+  // Warning: this will overwrite the cmd scan global variables so we need to
+  // copy the filename first for future reference.
   // When ok execute the list. If an error occured prepare for completing a
   // stack trace.
-  fileName = malloc(strlen(argString) + 1);
-  sprintf(fileName, "%s", argString);
-  retVal = cmdListFileLoad(&cmdLineRoot, &cmdPcCtrlRoot, fileName,
-    fileExecDepth);
+  fileName = malloc(strlen(argString[1]) + 1);
+  sprintf(fileName, "%s", argString[1]);
+  retVal = cmdListFileLoad(&cmdLineRoot, &cmdPcCtrlRoot,
+    cmdLine->cmdCommand->cmdArg[1].argName, fileName, fileExecDepth);
   if (retVal == CMD_RET_OK)
   {
     // Start command list statistics when at root level and execute the command
@@ -753,7 +768,7 @@ u08 doExit(cmdLine_t *cmdLine)
 
   if (listExecDepth > 0)
   {
-    printf("use only at command prompt\n");
+    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
     retVal = CMD_RET_ERROR;
   }
   else
@@ -767,6 +782,262 @@ u08 doExit(cmdLine_t *cmdLine)
 }
 
 //
+// Function: doGrCopy
+//
+// Copy graphics buffer
+//
+u08 doGrCopy(cmdLine_t *cmdLine)
+{
+  u08 from = TO_U08(argDouble[0]);
+  u08 to = TO_U08(argDouble[1]);
+
+  // Copy graphics buffer
+  grBufCopy(&emuGrBufs[from], &emuGrBufs[to]);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doGrInfo
+//
+// Print graphics buffer info
+//
+u08 doGrInfo(cmdLine_t *cmdLine)
+{
+  u08 i;
+  s08 bufferId = TO_S08(argDouble[0]);
+
+  // Show graphics buffer info for a single or all buffers
+  if (bufferId >= 0)
+  {
+    grBufInfoPrint(&emuGrBufs[bufferId]);
+  }
+  else
+  {
+    for (i = 0; i < GRAPHICS_BUFFERS; i++)
+    {
+      printf("- buffer %d", i);
+      if (emuGrBufs[i].bufType == GRAPH_NULL)
+      {
+        printf(" (empty)\n");
+      }
+      else
+      {
+        printf("\n");
+        grBufInfoPrint(&emuGrBufs[i]);
+      }
+    }
+  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doGrLoadCtrImg
+//
+// Load image graphics data in buffer from lcd controllers
+//
+u08 doGrLoadCtrImg(cmdLine_t *cmdLine)
+{
+  u08 bufferId = TO_U08(argDouble[0]);
+  emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
+  u08 width = TO_U08(argDouble[3]);
+  u08 height = TO_U08(argDouble[4]);
+
+  // Load the image data from the lcd controllers
+  grBufLoadCtrl(TO_U08(argDouble[1]), TO_U08(argDouble[2]), width, height,
+    argChar[0], emuGrBuf);
+
+  // Change buffer type from raw to image
+  emuGrBuf->bufType = GRAPH_IMAGE;
+  emuGrBuf->bufImgWidth = width;
+  emuGrBuf->bufImgHeight = height;
+  emuGrBuf->bufImgFrames = emuGrBuf->bufElmCount / width;
+
+  // Show image buffer info
+  if (echoCmd == CMD_ECHO_YES)
+    grBufInfoPrint(emuGrBuf);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doGrLoadFile
+//
+// Load raw graphics data in buffer from file
+//
+u08 doGrLoadFile(cmdLine_t *cmdLine)
+{
+  u08 bufferId = TO_U08(argDouble[0]);
+  emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
+  u08 retVal;
+
+  // Load the raw data
+  retVal = grBufLoadFile(cmdLine->cmdCommand->cmdArg[2].argName, argChar[0], 0,
+    argString[1], emuGrBuf);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Show raw data buffer info
+  if (echoCmd == CMD_ECHO_YES)
+    grBufInfoPrint(emuGrBuf);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doGrLoadFileImg
+//
+// Load image graphics data in buffer from file
+//
+u08 doGrLoadFileImg(cmdLine_t *cmdLine)
+{
+  u08 bufferId = TO_U08(argDouble[0]);
+  emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
+  u08 width = TO_U08(argDouble[1]);
+  u08 height = TO_U08(argDouble[2]);
+  u08 formatBits;
+  u16 elmExpected;
+  u08 retVal;
+
+  // Get graphics data format and expected number of elements
+  emuFormatGet(argChar[0], NULL, &formatBits);
+  elmExpected = width * ((height - 1) / formatBits + 1);
+
+  // Load the image data
+  retVal = grBufLoadFile(cmdLine->cmdCommand->cmdArg[1].argName, argChar[0],
+    elmExpected, argString[1], emuGrBuf);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Validate data volume read from file
+  if (elmExpected != emuGrBuf->bufElmCount)
+  {
+    printf("file data incomplete: elements read = %d, elements expected = %d\n",
+      emuGrBuf->bufElmCount, elmExpected);
+    grBufInit(emuGrBuf, GLCD_TRUE);
+    return CMD_RET_ERROR;
+  }
+
+  // Change buffer type from raw to image
+  emuGrBuf->bufType = GRAPH_IMAGE;
+  emuGrBuf->bufImgWidth = width;
+  emuGrBuf->bufImgHeight = height;
+  emuGrBuf->bufImgFrames = emuGrBuf->bufElmCount / width;
+
+  // Show image buffer info
+  if (echoCmd == CMD_ECHO_YES)
+    grBufInfoPrint(emuGrBuf);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doGrLoadFileSpr
+//
+// Load sprite frame graphics data in buffer from file
+//
+u08 doGrLoadFileSpr(cmdLine_t *cmdLine)
+{
+  u08 bufferId = TO_U08(argDouble[0]);
+  emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
+  u08 width = TO_U08(argDouble[1]);
+  u08 height = TO_U08(argDouble[2]);
+  char formatName;
+  u16 frames;
+  u08 retVal;
+
+  // The graphics data format depends on the sprite height
+  if (height <= 8)
+    formatName = 'b';
+  else if (height <= 16)
+    formatName = 'w';
+  else
+    formatName = 'd';
+
+  // Load the sprite data
+  retVal = grBufLoadFile(cmdLine->cmdCommand->cmdArg[1].argName, formatName,
+    0, argString[1], emuGrBuf);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Validate data volume read from file
+  frames = emuGrBuf->bufElmCount / width;
+  if (emuGrBuf->bufElmCount % width != 0)
+  {
+    printf("file data incomplete: elements read = %d, elements expected = %d\n",
+      emuGrBuf->bufElmCount, width * ((int)frames + 1));
+    grBufInit(emuGrBuf, GLCD_TRUE);
+    return CMD_RET_ERROR;
+  }
+
+  // Change buffer type from raw to sprite
+  emuGrBuf->bufType = GRAPH_SPRITE;
+  emuGrBuf->bufSprWidth = width;
+  emuGrBuf->bufSprHeight = height;
+  emuGrBuf->bufSprFrames = frames;
+
+  // Show sprite buffer info
+  if (echoCmd == CMD_ECHO_YES)
+    grBufInfoPrint(emuGrBuf);
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doGrReset
+//
+// Reset graphics buffer or all buffers
+//
+u08 doGrReset(cmdLine_t *cmdLine)
+{
+  u08 i;
+  s08 bufferId = TO_S08(argDouble[0]);
+
+  if (bufferId >= 0)
+  {
+    grBufInit(&emuGrBufs[bufferId], GLCD_TRUE);
+  }
+  else
+  {
+    for (i = 0; i < GRAPHICS_BUFFERS; i++)
+      grBufInit(&emuGrBufs[i], GLCD_TRUE);
+    if (echoCmd == CMD_ECHO_YES)
+      printf("buffers reset\n");
+  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doGrSaveFile
+//
+// Save graphics data from buffer in file
+//
+u08 doGrSaveFile(cmdLine_t *cmdLine)
+{
+  u08 bufferId = TO_U08(argDouble[0]);
+  emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
+  u08 retVal;
+
+  // Check if data was loaded
+  if (emuGrBuf->bufType == GRAPH_NULL)
+  {
+    printf("%s? %d: buffer is empty\n", cmdLine->cmdCommand->cmdArg[0].argName,
+      (int)bufferId);
+    return CMD_RET_ERROR;
+  }
+
+  // Save the buffer data
+  retVal = grBufSaveFile(cmdLine->cmdCommand->cmdArg[1].argName,
+    TO_U08(argDouble[1]), argString[1], emuGrBuf);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  return CMD_RET_OK;
+}
+
+//
 // Function: doHelp
 //
 // Dump helppage
@@ -775,7 +1046,7 @@ u08 doHelp(cmdLine_t *cmdLine)
 {
   if (listExecDepth > 0)
   {
-    printf("use only at command prompt\n");
+    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
     return CMD_RET_ERROR;
   }
 
@@ -795,14 +1066,15 @@ u08 doHelpCmd(cmdLine_t *cmdLine)
 
   if (listExecDepth > 0)
   {
-    printf("use only at command prompt\n");
+    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
     return CMD_RET_ERROR;
   }
 
   // Print dictionary of command(s) where '.' is all
-  retVal = dictPrint(argWord[1]);
+  retVal = dictPrint(argString[1]);
   if (retVal != CMD_RET_OK)
-    printf("%s? invalid\n", cmdLine->cmdCommand->cmdArg[0].argName);
+    printf("%s? invalid: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
+      argString[1]);
 
   return retVal;
 }
@@ -814,8 +1086,8 @@ u08 doHelpCmd(cmdLine_t *cmdLine)
 //
 u08 doHelpExpr(cmdLine_t *cmdLine)
 {
-  cmdArgValuePrint(argDouble[0], GLCD_TRUE);
-  printf("\n");
+  // Print expression result in the command shell
+  cmdArgValuePrint(argDouble[0], GLCD_TRUE, GLCD_TRUE);
 
   return CMD_RET_OK;
 }
@@ -828,7 +1100,7 @@ u08 doHelpExpr(cmdLine_t *cmdLine)
 u08 doHelpMsg(cmdLine_t *cmdLine)
 {
   // Show message in the command shell
-  printf("%s\n", argString);
+  printf("%s\n", argString[1]);
 
   return CMD_RET_OK;
 }
@@ -1039,6 +1311,75 @@ u08 doLcdErase(cmdLine_t *cmdLine)
 }
 
 //
+// Function: doLcdGlutEdit
+//
+// Edit lcd contents in glut lcd display using a left mouse double-click to
+// toggle a pixel
+//
+u08 doLcdGlutEdit(cmdLine_t *cmdLine)
+{
+  static struct timeval tvTimer;
+  char ch = '\0';
+  u08 x;
+  u08 y;
+  u08 event;
+  u08 lcdByte;
+
+  if (listExecDepth > 0)
+  {
+    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
+    return CMD_RET_ERROR;
+  }
+
+  // Ignore if glut device is not used
+  if (ctrlDeviceActive(CTRL_DEVICE_GLUT) == GLCD_FALSE)
+    return CMD_RET_OK;
+
+  // Give instructions
+  printf("<glut double-click left button = toggle pixel, q = quit> ");
+  fflush(stdout);
+
+  // Prepare for keyboard scan and timer loop, and enable double-click events
+  kbModeSet(KB_MODE_SCAN);
+  waitTimerStart(&tvTimer);
+  ctrlGlcdPixEnable();
+
+  // Process events in a timer loop until a 'q' has been pressed
+  while (ch != 'q')
+  {
+    // Wait remaining time for cycle while detecting 'q' keypress
+    ch = waitTimerExpiry(&tvTimer, ANIM_TICK_CYCLE_MS, GLCD_TRUE, NULL);
+    if (ch == 'q')
+      break;
+
+    // Process double-click event
+    event = ctrlGlcdPixGet(&x, &y);
+    if (event == GLCD_TRUE)
+    {
+      // Toggle the glcd pixel
+      glcdSetAddress(x, y >> 3);
+      glcdDataRead();
+      lcdByte = glcdDataRead();
+      if (((lcdByte >> (y % 8)) & 0x1) == GLCD_ON)
+        glcdDot(x, y, GLCD_OFF);
+      else
+        glcdDot(x, y, GLCD_ON);
+      ctrlLcdFlush();
+
+      // Confirm double-click event so we can get new one
+      ctrlGlcdPixConfirm();
+    }
+  }
+
+  // Disable double-click events and return to keyboard line mode
+  ctrlGlcdPixDisable();
+  kbModeSet(KB_MODE_LINE);
+  printf("\n");
+
+  return CMD_RET_OK;
+}
+
+//
 // Function: doLcdGlutGrSet
 //
 // Set glut graphics options
@@ -1156,7 +1497,7 @@ u08 doLcdRead(cmdLine_t *cmdLine)
   lcdByte = ctrlExecute(CTRL_METHOD_READ, TO_U08(argDouble[0]), 0);
 
   // Assign the lcd byte value to the variable
-  varId = varIdGet(argWord[1], GLCD_TRUE);
+  varId = varIdGet(argString[1], GLCD_TRUE);
   if (varId < 0)
   {
     printf("%s? internal error\n", cmdLine->cmdCommand->cmdArg[1].argName);
@@ -1167,8 +1508,8 @@ u08 doLcdRead(cmdLine_t *cmdLine)
   // Print the variable holding the lcd byte
   if (echoCmd == CMD_ECHO_YES)
   {
-    varName = malloc(strlen(argWord[1]) + 3);
-    sprintf(varName, "^%s$", argWord[1]);
+    varName = malloc(strlen(argString[1]) + 3);
+    sprintf(varName, "^%s$", argString[1]);
     varPrint(varName, GLCD_FALSE);
     free(varName);
   }
@@ -1250,6 +1591,7 @@ u08 doMonochron(cmdLine_t *cmdLine)
   glcdClearScreen(GLCD_OFF);
 
   // Set the backlight as stored in the eeprom
+  eepInit();
   myBacklight = (eeprom_read_byte((uint8_t *)EE_BRIGHT) % 17) >>
     OCR2B_BITSHIFT;
   ctrlLcdBacklightSet(myBacklight);
@@ -1372,14 +1714,14 @@ u08 doPaintAscii(cmdLine_t *cmdLine)
   // Get color, orientation and font from command line text values
   color = emuColorGet(argChar[0]);
   orientation = emuOrientationGet(argChar[1]);
-  font = emuFontGet(argWord[1]);
+  font = emuFontGet(argString[1]);
 
   // Paint ascii based on text orientation
   if (orientation == ORI_HORIZONTAL)
   {
     // Horizontal text
     len = glcdPutStr3(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
-      argString, TO_U08(argDouble[2]), TO_U08(argDouble[3]), color);
+      argString[2], TO_U08(argDouble[2]), TO_U08(argDouble[3]), color);
     if (echoCmd == CMD_ECHO_YES)
       printf("hor px=%d\n", (int)len);
   }
@@ -1387,11 +1729,129 @@ u08 doPaintAscii(cmdLine_t *cmdLine)
   {
     // Vertical text
     len = glcdPutStr3v(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
-      orientation, argString, TO_U08(argDouble[2]), TO_U08(argDouble[3]),
+      orientation, argString[2], TO_U08(argDouble[2]), TO_U08(argDouble[3]),
       color);
     if (echoCmd == CMD_ECHO_YES)
       printf("vert px=%d\n", (int)len);
   }
+  ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doPaintBuffer
+//
+// Paint free format section of buffer
+//
+u08 doPaintBuffer(cmdLine_t *cmdLine)
+{
+  u08 bufferId = TO_U08(argDouble[0]);
+  emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
+  u08 color;
+
+  // Get color
+  color = emuColorGet(argChar[0]);
+
+  // Check if data was loaded
+  if (emuGrBuf->bufType == GRAPH_NULL)
+  {
+    printf("%s? %d: buffer is empty\n",
+      cmdLine->cmdCommand->cmdArg[1].argName, (int)bufferId);
+    return CMD_RET_ERROR;
+  }
+
+  // Draw section from buffer
+  glcdBitmap(TO_U08(argDouble[1]), TO_U08(argDouble[2]), TO_U16(argDouble[3]),
+    TO_U08(argDouble[4]), TO_U08(argDouble[5]), TO_U08(argDouble[6]),
+    emuGrBuf->bufElmFormat, DATA_RAM, (void *)(emuGrBuf->bufData), color);
+  ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doPaintBufferImg
+//
+// Paint image using buffer data
+//
+u08 doPaintBufferImg(cmdLine_t *cmdLine)
+{
+  u08 color;
+  u08 bufferId = TO_U08(argDouble[0]);
+  emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
+  u08 i;
+  u08 height;
+  u08 frame = 0;
+
+  // Get color
+  color = emuColorGet(argChar[0]);
+
+  // Do we refer to an image buffer
+  if (emuGrBuf->bufType != GRAPH_IMAGE)
+  {
+    printf("%s? %d: buffer does not contain image data\n",
+      cmdLine->cmdCommand->cmdArg[1].argName, (int)bufferId);
+    return CMD_RET_ERROR;
+  }
+
+  // Draw image frames from buffer
+  for (i = 0; i < emuGrBuf->bufImgHeight; i = i + height)
+  {
+    if (i + emuGrBuf->bufElmBitSize > emuGrBuf->bufImgHeight)
+      height = emuGrBuf->bufImgHeight - i;
+    else
+      height = emuGrBuf->bufElmBitSize;
+
+    // Draw image frame
+    glcdBitmap(TO_U08(argDouble[1]), TO_U08(argDouble[2]) + i,
+      frame * emuGrBuf->bufImgWidth, 0, emuGrBuf->bufImgWidth, height,
+      emuGrBuf->bufElmFormat, DATA_RAM, (void *)(emuGrBuf->bufData),
+      color);
+    frame++;
+  }
+  ctrlLcdFlush();
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doPaintBufferSpr
+//
+// Paint sprite frame data from buffer
+//
+u08 doPaintBufferSpr(cmdLine_t *cmdLine)
+{
+  u08 color;
+  u08 bufferId = TO_U08(argDouble[0]);
+  emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
+  u08 frame = TO_U08(argDouble[3]);
+
+  // Get color
+  color = emuColorGet(argChar[0]);
+
+  // Do we refer to a sprite buffer
+  if (emuGrBuf->bufType != GRAPH_SPRITE)
+  {
+    printf("%s? %d: buffer does not contain sprite data\n",
+      cmdLine->cmdCommand->cmdArg[1].argName, (int)bufferId);
+    return CMD_RET_ERROR;
+  }
+
+  // Do we exceed the max sprite in buffer
+  if (frame >= emuGrBuf->bufSprFrames)
+  {
+    printf("%s? %d: exceeds buffer data (max = %d)\n",
+      cmdLine->cmdCommand->cmdArg[4].argName, (int)frame,
+      emuGrBuf->bufSprFrames - 1);
+    return CMD_RET_ERROR;
+  }
+
+  // Draw sprite
+  glcdBitmap(TO_U08(argDouble[1]), TO_U08(argDouble[2]),
+    frame * emuGrBuf->bufSprWidth, 0, emuGrBuf->bufSprWidth,
+    emuGrBuf->bufSprHeight, emuGrBuf->bufElmFormat, DATA_RAM,
+    (void *)(emuGrBuf->bufData), color);
   ctrlLcdFlush();
 
   return CMD_RET_OK;
@@ -1492,10 +1952,10 @@ u08 doPaintNumber(cmdLine_t *cmdLine)
   // Get color, orientation and font from commandline text values
   color = emuColorGet(argChar[0]);
   orientation = emuOrientationGet(argChar[1]);
-  font = emuFontGet(argWord[1]);
+  font = emuFontGet(argString[1]);
 
   // Get output string
-  asprintf(&valString, argString, argDouble[4]);
+  asprintf(&valString, argString[2], argDouble[4]);
 
   // Paint ascii based on text orientation
   if (orientation == ORI_HORIZONTAL)
@@ -1722,7 +2182,7 @@ u08 doTimePrint(cmdLine_t *cmdLine)
 u08 doTimeReset(cmdLine_t *cmdLine)
 {
   // Reset time to system time
-  stubTimeSet(80, 0, 0, 0, 70, 0, 0);
+  stubTimeSet(DT_TIME_RESET, 0, 0, DT_DATE_KEEP, 0, 0);
 
   // Sync mchron time with (new) time
   emuTimeSync();
@@ -1748,7 +2208,7 @@ u08 doTimeSet(cmdLine_t *cmdLine)
 
   // Overide time
   timeOk = stubTimeSet(TO_UINT8_T(argDouble[2]), TO_UINT8_T(argDouble[1]),
-    TO_UINT8_T(argDouble[0]), 0, 70, 0, 0);
+    TO_UINT8_T(argDouble[0]), DT_DATE_KEEP, 0, 0);
   if (timeOk == GLCD_FALSE)
     return CMD_RET_ERROR;
 
@@ -1774,10 +2234,11 @@ u08 doVarPrint(cmdLine_t *cmdLine)
 {
   u08 retVal;
 
-  // Print all variables matching a regexp pattern where '.' is all
-  retVal = varPrint(argWord[1], GLCD_TRUE);
+  // Print all variables matching a regex pattern where '.' is all
+  retVal = varPrint(argString[1], GLCD_TRUE);
   if (retVal != CMD_RET_OK)
-    printf("%s? invalid\n", cmdLine->cmdCommand->cmdArg[0].argName);
+    printf("%s? invalid: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
+      argString[1]);
 
   return retVal;
 }
@@ -1794,7 +2255,7 @@ u08 doVarReset(cmdLine_t *cmdLine)
   u08 retVal;
 
   // Clear all variables
-  if (strcmp(argWord[1], ".") == 0)
+  if (strcmp(argString[1], ".") == 0)
   {
     varInUse = varReset();
     if (echoCmd == CMD_ECHO_YES)
@@ -1803,15 +2264,17 @@ u08 doVarReset(cmdLine_t *cmdLine)
   }
 
   // Clear the single variable
-  varId = varIdGet(argWord[1], GLCD_FALSE);
+  varId = varIdGet(argString[1], GLCD_FALSE);
   if (varId < 0)
   {
-    printf("%s? not in use\n", cmdLine->cmdCommand->cmdArg[0].argName);
+    printf("%s? not in use: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
+      argString[1]);
     return CMD_RET_ERROR;
   }
   retVal = varClear(varId);
   if (retVal != CMD_RET_OK)
-    printf("%s? not in use\n", cmdLine->cmdCommand->cmdArg[0].argName);
+    printf("%s? not in use: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
+      argString[1]);
 
   return retVal;
 }
@@ -1874,12 +2337,11 @@ u08 doWait(cmdLine_t *cmdLine)
 u08 doWaitTimerExpiry(cmdLine_t *cmdLine)
 {
   int delay = 0;
-  suseconds_t remaining;
   char ch = '\0';
 
   // Wait for timer expiry (if not already expired)
   delay = TO_INT(argDouble[0]);
-  ch = waitTimerExpiry(&tvTimer, delay, GLCD_TRUE, &remaining);
+  ch = waitTimerExpiry(&tvTimer, delay, GLCD_TRUE, NULL);
 
   // A 'q' will interrupt any command execution
   if (ch == 'q' && listExecDepth > 0)
@@ -1899,5 +2361,6 @@ u08 doWaitTimerExpiry(cmdLine_t *cmdLine)
 u08 doWaitTimerStart(cmdLine_t *cmdLine)
 {
   waitTimerStart(&tvTimer);
+
   return CMD_RET_OK;
 }

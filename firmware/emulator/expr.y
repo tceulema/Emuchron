@@ -123,7 +123,7 @@ static int yyerror(char *s)
 %}
 
 // The supported tokens from flex
-%token NUMBER VARIABLE IS
+%token NUMBER IDENTIFIER IS
 %token QMARK COLON
 %token PLUS MINUS TIMES DIVIDE MODULO POWER
 %token SIN COS ABS FRAC INTEGER RAND
@@ -171,7 +171,7 @@ Line:
 
 Assignment:
     // Assignment expression to set value of variable
-    VARIABLE IS Expression { $$ = varValSet((int)$1, $3);
+    IDENTIFIER IS Expression { $$ = varValSet((int)$1, $3);
         exprAssign = GLCD_TRUE; }
 ;
 
@@ -179,7 +179,7 @@ Expression:
     // Fixed input number or constant (pi/true/false/null)
     NUMBER { $$ = $1; }
     // Get variable value
-    | VARIABLE { $$ = varValGet((int)$1, &varStatus);
+    | IDENTIFIER { $$ = varValGet((int)$1, &varStatus);
         if (varStatus == VAR_NOTINUSE) { YYERROR; } }
     // Mathematical operator expressions
     | Expression PLUS Expression { $$ = $1 + $3; }

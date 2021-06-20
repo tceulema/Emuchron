@@ -52,7 +52,7 @@
 // Note: Each byte in MarioTones[] must have a corresponding byte in
 //       MarioBeats[].
 //
-const unsigned char __attribute__ ((progmem)) MarioTones[] =
+static const uint8_t __attribute__ ((progmem)) MarioTones[] =
 {
 // Metadata: playLine + byteIdx + byteLen + byteLenTotal
 /*  1   0 14  14 */ 146, 146, 0, 146, 0, 116, 146, 0, 174, 0, 0, 87, 0, 0,
@@ -84,7 +84,7 @@ const unsigned char __attribute__ ((progmem)) MarioTones[] =
 // Since the quality of the piezo speaker in Monochron is worse than miserable
 // this 3 msec delta sounds (pun intended) acceptable to me.
 //
-const unsigned char __attribute__ ((progmem)) MarioBeats[] =
+static const uint8_t __attribute__ ((progmem)) MarioBeats[] =
 {
 // Metadata: playLine + byteIdx + byteLen + byteLenTotal
 /*  1   0 14  14 */ 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 3, 3, 6,
@@ -114,7 +114,7 @@ const unsigned char __attribute__ ((progmem)) MarioBeats[] =
 // - The second byte is the number of tones to play for the line (after which
 //   to move on to play the next line or restart at the beginning).
 //
-const unsigned char __attribute__ ((progmem)) MarioMaster[] =
+static const uint8_t __attribute__ ((progmem)) MarioMaster[] =
 {
 // Metadata: line + playLine + byteIdx + byteLen + byteLenTotal
 /*  1  1   0 14  14 */   0, 14,

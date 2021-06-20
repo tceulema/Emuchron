@@ -48,7 +48,7 @@ typedef struct _varBucket_t
 #define VAR_BUCKET_SIZE_COUNT	(~((~(int)0) << VAR_BUCKET_SIZE_BITS) + 1)
 
 // Create the variable buckets and also administer the total number of
-// bucket members (=variables) in use.
+// bucket members (=variables) in use
 static varBucket_t varBucket[VAR_BUCKETS];
 static int varCount = 0;
 
@@ -111,7 +111,7 @@ u08 varClear(int varId)
 // Return values:
 // >=0 : variable id (combination of bucket id and index in bucket)
 //  -1 : variable bucket overflow occurred while attempting to create new id
-//  -2 : variable not found and no new id is to be created
+//  -2 : variable not found and no new id is created
 //
 int varIdGet(char *varName, u08 create)
 {
@@ -123,8 +123,8 @@ int varIdGet(char *varName, u08 create)
   varVariable_t *checkVar;
   varVariable_t *myVar;
 
-  // Create a simple hash of first and optionally second character of
-  // var name to obtain a variable bucket number
+  // Create a simple hash of first and optionally second character of var name
+  // to obtain a variable bucket number
   if (varName[0] < 'a')
     bucketId = varName[0] - 'A';
   else
@@ -179,8 +179,8 @@ int varIdGet(char *varName, u08 create)
   }
   else
   {
-    // Var name not found in the bucket so let's add it.
-    // However, first check for bucket overflow.
+    // Var name not found in the bucket so let's add it. However, first check
+    // for bucket overflow.
     if (varBucket[bucketId].count == VAR_BUCKET_SIZE_COUNT)
     {
       printf("cannot register variable: %s\n", varName);
@@ -244,7 +244,7 @@ void varInit(void)
 //
 // Function: varPrint
 //
-// Print the value of named variables using a regexp pattern (where '.' matches
+// Print the value of named variables using a regex pattern (where '.' matches
 // every named variable)
 //
 u08 varPrint(char *pattern, u08 summary)
@@ -258,9 +258,12 @@ u08 varPrint(char *pattern, u08 summary)
   int varIdx = 0;
   u08 allSorted = GLCD_FALSE;
 
-  // Validate regexp pattern
+  // Validate regex pattern
   if (regcomp(&regex, pattern, REG_EXTENDED | REG_NOSUB) != 0)
+  {
+    regfree(&regex);
     return CMD_RET_ERROR;
+  }
 
   if (varCount != 0)
   {
@@ -302,13 +305,13 @@ u08 varPrint(char *pattern, u08 summary)
     {
       if (varSort[i]->active == GLCD_TRUE)
       {
-        // See if variable name matches regexp pattern
+        // See if variable name matches regex pattern
         status = regexec(&regex, varSort[i]->varName, (size_t)0, NULL, 0);
         if (status == 0)
         {
           varInUse++;
           spaceCount = spaceCount + printf("%s=", varSort[i]->varName) +
-            cmdArgValuePrint(varSort[i]->varValue, GLCD_FALSE);
+            cmdArgValuePrint(varSort[i]->varValue, GLCD_FALSE, GLCD_FALSE);
           if (spaceCount % 10 != 0)
           {
             printf("%*s", 10 - spaceCount % 10, "");
@@ -330,7 +333,7 @@ u08 varPrint(char *pattern, u08 summary)
   if (summary == GLCD_TRUE && varInUse != 1)
     printf("registered variables: %d\n", varInUse);
 
-  // Cleanup regexp
+  // Cleanup regex
   regfree(&regex);
 
   return CMD_RET_OK;

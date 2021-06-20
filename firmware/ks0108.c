@@ -6,6 +6,7 @@
 #ifndef EMULIN
 #include "util.h"
 #else
+#include "emulator/stub.h"
 #include "emulator/stubrefs.h"
 #include "emulator/mchronutil.h"
 #include "emulator/controller.h"

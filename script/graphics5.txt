@@ -1,0 +1,40 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test glcdBitmap()
+#
+# Note: This script was used to create the logic for the wave clock in wave.c
+# [firmware/clock]. However, upon testing this logic on the actual Monochron
+# it turned out the algorithm was too slow as it required too much interaction
+# with the lcd controllers. Thererfore, the actual wave clock does not rely on
+# glcdBitmap(), but instead implements its own dedicated and optimized logic to
+# minimize interaction with the lcd controllers.
+#
+
+vs width=116
+vs height=32
+vs xs=6
+vs ys=16
+vs ydelta=14
+
+# First load the bitmap file we're going to use
+gf 0 d ../script/bitmap/abcdefghij.txt
+# As we know that the bitmap file contains an image we can also use the
+# following command instead:
+# gfi 0 d width height ../script/bitmap/abcdefghij.txt
+
+# Show buffer info and help message
+gbi 0
+hm
+hm --- press 'q' to quit ---
+
+le
+wts
+rf null true null
+  rf rad=0 rad<2*pi rad=rad+pi/23
+    rf i=0 i<width i=i+1
+     pb f 0 xs+i ys+ydelta*sin(-rad+2*pi*i/width) i 0 1 height
+    rn
+    wte 75
+  rn
+rn

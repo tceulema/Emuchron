@@ -1,0 +1,39 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test glcdBitmap() using Mario sprite data
+#
+
+hm
+hm --- press 'q' to quit ---
+
+le
+gfs 0 9 12 ../script/bitmap/mario.txt
+vs x=1
+vs ya=1
+vs yb=51
+vs w=9
+vs h=12
+vs draws=0
+
+wts
+rf start=0 true start=(start+1)%w
+  vs end=w-start-1
+  vs draws=(draws+1)%6
+  vs feet=int(draws/3)
+  # Non-moving Mario
+  pbs f 0 2 26 2+feet
+  # Paint top/bottom marching Mario's
+  rf mario=0 mario<14 mario=mario+1
+    # Mario right to left
+    pb f 0 x+mario*w ya start+feet*w 0 w-start h
+    pb f 0 x+mario*w+w-start ya feet*w 0 start h
+    # Mario left to right
+    pb f 0 x+mario*w yb end+(feet+2)*w 0 w-end h
+    pb f 0 x+mario*w+w-end yb (feet+2)*w 0 end h
+  rn
+  pn f 15 23 5x5p h 1 1 start start = %1.0f
+  pn f 15 29 5x5p h 1 1 end end = %1.0f
+  pn f 15 35 5x5p h 1 1 feet feet = %1.0f
+  wte 100
+rn

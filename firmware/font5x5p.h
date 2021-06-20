@@ -53,7 +53,7 @@
 //
 
 // Define the 5x5 proportional character bitmaps
-const unsigned char __attribute__ ((progmem)) Font5x5p[] =
+static const uint8_t __attribute__ ((progmem)) Font5x5p[] =
 {
   (0x01 << 5) |	0x00,				// (space)
   (0x01 << 5) | 0x17,				// !
@@ -130,7 +130,7 @@ const unsigned char __attribute__ ((progmem)) Font5x5p[] =
 
 // Define for each character its entry point index in the 5x5 proportional
 // character bitmap array
-const unsigned char __attribute__ ((progmem)) Font5x5pIdx[] =
+static const uint8_t __attribute__ ((progmem)) Font5x5pIdx[] =
 {
     0,   1,   2,   5,  10,  15,  18,  22,  23,  25,  27,  30,  33,  35,  38,
    39,  42,  45,  48,  51,  54,  57,  60,  63,  66,  69,  72,  73,  75,  77,

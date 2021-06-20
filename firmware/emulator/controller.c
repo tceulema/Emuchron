@@ -10,11 +10,15 @@
 // Monochron and emuchron defines
 #include "../monomain.h"
 #include "../ks0108.h"
+#include "interpreter.h"
 #include "mchronutil.h"
 #include "controller.h"
 
 // The lcd backlight register
 extern uint16_t OCR2B;
+
+// The glut glcd pixel double-click event data
+extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
 
 //
 // Our implementation of the 128x64 pixel lcd display image:
@@ -593,6 +597,62 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
 }
 
 //
+// Function: ctrlGlcdPixConfirm
+//
+// Confirm a glut double-click event to allow next one
+//
+void ctrlGlcdPixConfirm(void)
+{
+  if (lcdGlutGlcdPix.active == GLCD_TRUE &&
+      lcdGlutGlcdPix.pixelLock == GLCD_TRUE)
+    lcdGlutGlcdPix.pixelLock = GLCD_FALSE;
+}
+
+//
+// Function: ctrlGlcdPixDisable
+//
+// Disable functionality to double-click a glut pixel
+//
+void ctrlGlcdPixDisable(void)
+{
+  lcdGlutGlcdPix.active = GLCD_FALSE;
+  lcdGlutGlcdPix.pixelLock = GLCD_FALSE;
+  lcdGlutGlcdPix.glcdX = 0;
+  lcdGlutGlcdPix.glcdY = 0;
+}
+
+//
+// Function: ctrlGlcdPixEnable
+//
+// Enable functionality to double-click a glut pixel
+//
+void ctrlGlcdPixEnable(void)
+{
+  lcdGlutGlcdPix.glcdX = 0;
+  lcdGlutGlcdPix.glcdY = 0;
+  lcdGlutGlcdPix.pixelLock = GLCD_FALSE;
+  lcdGlutGlcdPix.active = GLCD_TRUE;
+}
+
+//
+// Function: ctrlGlcdPixGet
+//
+// Check for and return glut double-click event data
+//
+u08 ctrlGlcdPixGet(u08 *x, u08 *y)
+{
+  if (lcdGlutGlcdPix.active == GLCD_TRUE &&
+      lcdGlutGlcdPix.pixelLock == GLCD_TRUE)
+  {
+    *x = lcdGlutGlcdPix.glcdX;
+    *y = lcdGlutGlcdPix.glcdY;
+    return GLCD_TRUE;
+  }
+
+  return GLCD_FALSE;
+}
+
+//
 // Function: ctrlInit
 //
 // Initialize the data, registers and state of all controllers and the lcd stub
@@ -619,6 +679,9 @@ u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
     memset(&ctrlControllers[i], 0, sizeof(ctrlController_t));
     ctrlControllers[i].state = CTRL_STATE_CURSOR;
   }
+
+  // Init the glut pixel double-click event data structure
+  ctrlGlcdPixDisable();
 
   // Init the ncurses device when requested
   if (useNcurses == GLCD_TRUE)
@@ -674,7 +737,7 @@ u08 ctrlDeviceActive(u08 device)
 //
 void ctrlLcdBacklightSet(u08 brightness)
 {
-  OCR2B = (uint16_t)(brightness << OCR2B_BITSHIFT);
+  OCR2B = (uint16_t)brightness << OCR2B_BITSHIFT;
   if (useGlut == GLCD_TRUE)
     lcdGlutBacklightSet((unsigned char)brightness);
   if (useNcurses == GLCD_TRUE)

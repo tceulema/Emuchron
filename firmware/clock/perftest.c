@@ -41,6 +41,7 @@
 // functionality is used by a test in the glcdLine suite.
 //
 // The following high level glcd graphics functions are tested:
+// - glcdBitmap
 // - glcdCircle2
 // - glcdDot
 // - glcdLine
@@ -123,6 +124,8 @@
 #define PERF_PUTSTR3V_3		1115
 #define PERF_PUTSTR3V_4		2692
 #define PERF_PUTSTR_1		6010
+#define PERF_BITMAP_1		16200
+#define PERF_BITMAP_2		1801
 
 // Defines on button press action flavors
 #define PERF_WAIT_CONTINUE	0
@@ -144,6 +147,14 @@ typedef struct
   u16 loopsDone;
   long elementsDrawn;
 } testStats_t;
+
+static const uint32_t __attribute__ ((progmem)) image[] = // 32x32 bitmap image
+{
+  0x7075f7df,0xbfeeffbf,0xdfdf7f7f,0xe73f9cff,0xf8ffe3ff,0xffffffff,0x1fffffff,0x03ffffff,
+  0x007fffff,0x000fffff,0xc001ffff,0xf8003fff,0xfe0007ff,0xfe0000ff,0xfe1c003f,0xfe1f801f,
+  0xfe1ff01f,0xfe1f801f,0xfe1c003f,0xfe0000ff,0xfe0007ff,0xf8003fff,0xc001ffff,0x000fffff,
+  0x007fffff,0x03ffffff,0x1fffffff,0xfe7e7fff,0xfdbdbfff,0xfbdbdfff,0x03dbc01f,0xdbdbdfff
+};
 
 // Functional date/time/init variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
@@ -179,6 +190,7 @@ static void perfTextInit(u08 length);
 static void perfTextToggle(void);
 
 // The actual performance test function prototypes
+static u08 perfTestBitmap(void);
 static u08 perfTestCircle2(void);
 static u08 perfTestDot(void);
 static u08 perfTestFillCircle2(void);
@@ -237,6 +249,8 @@ void perfCycle(void)
       break;
     if (perfTestPutStr() == GLCD_TRUE)
       break;
+    if (perfTestBitmap() == GLCD_TRUE)
+      break;
   }
 
 #ifdef EMULIN
@@ -267,6 +281,137 @@ void perfInit(u08 mode)
 
   // Wait for button press
   perfButtonWait(PERF_WAIT_CONTINUE);
+}
+
+//
+// Function: perfTestBitmap
+//
+// Performance test of glcdBitmap()
+//
+static u08 perfTestBitmap(void)
+{
+  u08 button;
+  u08 interruptTest;
+  int i,j;
+  u08 x;
+  u08 y;
+  u08 color;
+
+  // Give test suite welcome screen
+  button = perfSuiteWelcome("glcdBitmap");
+  if (button == 'q')
+    return GLCD_TRUE;
+  else if (button != BTN_PLUS)
+    return GLCD_FALSE;
+
+  // Test 1: Move around a 32x32 bitmap around the display, triggering both
+  // glcdBuffer y-line reads and full lcd byte y-line writes, by mapping image
+  // data onto lcd bytes. By varying the y position in every draw, the bitmap
+  // data mapping onto lcd byte y-lines will vary with every bitmap draw. Also,
+  // the foreground and background draw color is constantly swapped.
+  button = perfTestInit("glcdBitmap", 1);
+  while (button == BTN_PLUS)
+  {
+    // Prepare display for test
+    glcdClearScreen(mcBgColor);
+
+    // Paint bitmaps with varying x and y location, and color
+    x = 2;
+    y = 0;
+    interruptTest = GLCD_FALSE;
+    perfTestBegin();
+    for (i = 0; i < PERF_BITMAP_1; i++)
+    {
+      // Do the actual bitmap paint starting on (x,y)
+      if ((y & 0x1) == 0)
+        color = mcFgColor;
+      else
+        color = mcBgColor;
+      glcdBitmap(x, y, 0, 0, 32, 32, ELM_DWORD, DATA_PMEM, (void *)image,
+        color);
+#ifdef EMULIN
+      ctrlLcdFlush();
+#endif
+
+      // Determine next (x,y)
+      y++;
+      if (y > 32)
+      {
+        y = 0;
+        x++;
+        if (x == 93)
+          x = 2;
+      }
+
+      // Do statistics
+      testStats.loopsDone++;
+      testStats.elementsDrawn++;
+
+      // Check for keypress interrupt
+      button = perfButtonGet();
+      if (button != 0)
+      {
+        interruptTest = GLCD_TRUE;
+        break;
+      }
+    }
+
+    // End test and report statistics
+    button = perfTestEnd(interruptTest);
+  }
+
+  // Test 2: Draw the same bitmap, but now line by line. This tests the bit y
+  // offset in dword data. By varying the y position in every draw, the bitmap
+  // data mapping onto an lcd byte y-line will vary with every bitmap line
+  // draw. Also, the foreground and background draw color is constantly
+  // swapped.
+  button = perfTestInit("glcdBitmap", 2);
+  while (button == BTN_PLUS)
+  {
+    // Prepare display for test
+    glcdClearScreen(mcBgColor);
+
+    // Paint bitmaps with varying x and y location, and color
+    y = 0;
+    interruptTest = GLCD_FALSE;
+    perfTestBegin();
+    for (i = 0; i < PERF_BITMAP_2; i++)
+    {
+      // Do the actual bitmap paint starting on (x,y)
+      if ((y & 0x1) == 0)
+        color = mcFgColor;
+      else
+        color = mcBgColor;
+      for (j = 0; j < 32; j++)
+        glcdBitmap(15, y + j, 0, j, 32, 1, ELM_DWORD, DATA_PMEM, (void *)image,
+          color);
+#ifdef EMULIN
+        ctrlLcdFlush();
+#endif
+
+      // Determine next y
+      y++;
+      if (y > 32)
+        y = 0;
+
+      // Do statistics
+      testStats.loopsDone++;
+      testStats.elementsDrawn = testStats.elementsDrawn + 32;
+
+      // Check for keypress interrupt
+      button = perfButtonGet();
+      if (button != 0)
+      {
+        interruptTest = GLCD_TRUE;
+        break;
+      }
+    }
+
+    // End test and report statistics
+    button = perfTestEnd(interruptTest);
+  }
+
+  return GLCD_FALSE;
 }
 
 //

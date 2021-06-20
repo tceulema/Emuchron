@@ -32,8 +32,8 @@
 //   Emuchron project coding taste.
 // Apart from this, the QR logic in this module has remained untouched apart
 // from an occasional optimization. It just works. And this includes the use of
-// __AVR__, PROGMEM, memcpy_P and __LPM that is not seen anywhere else in
-// Emuchron. If it ain't broken, don't fix it.
+// PROGMEM, memcpy_P and __LPM that is not seen anywhere else in Emuchron. If
+// it ain't broken, don't fix it.
 //
 // Please note that the code below is not intended to run on anything else than
 // Monochron for a L,l2 QR. So, if you want to use QR encoding functionality in
@@ -42,17 +42,14 @@
 //
 
 #include <string.h>
-#include "qrencode.h"
-
-#ifndef __AVR__
-#define PROGMEM
-#define memcpy_P		memcpy
-#define __LPM(x)		*(x)
-#define pgm_read_word(x) 	*(x)
+#ifdef EMULIN
+#include "../emulator/stub.h"
 #else
 #include <avr/pgmspace.h>
 #endif
+#include "qrencode.h"
 
+// Access the log and exp progmem tables
 #define glog(x) __LPM(&g0log[x])
 #define gexp(x) __LPM(&g0exp[x])
 

@@ -57,6 +57,7 @@ extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcBgColor, mcFgColor;
+extern clockDriver_t *mcClockPool;
 
 // The following variable drives the configuration menu timeout ticker
 extern volatile uint8_t cfgTickerActivity;
@@ -109,7 +110,7 @@ static void rtcFailure(uint8_t code, uint8_t id);
 
 // The eeprom init default values upon eeprom reset/relocate.
 // For eeprom definitions refer to monomain.h [firmware].
-const uint8_t __attribute__ ((progmem)) eepDefault[] =
+static const uint8_t __attribute__ ((progmem)) eepDefault[] =
 {
   EE_INITIALIZED,	// EE_OFFSET+0  - EE_INIT
   OCR2A_VALUE,		// EE_OFFSET+1  - EE_BRIGHT
@@ -222,7 +223,7 @@ int main(void)
   DEBUGP("*** Init clock completed");
 
   // This is the main loop event handler that will run forever
-  while (1)
+  while (GLCD_TRUE)
   {
     // Set the duration of a single animation loop cycle
     animTickerCycle = ANIM_TICK_CYCLE_MS;
@@ -282,9 +283,16 @@ int main(void)
     btnPressed = BTN_NONE;
     animClockDraw(DRAW_CYCLE);
 
+    // Show the remaining cycle time. This should be >0 or else your clock code
+    // eats too much cpu. Modify the CHRON_x clockId below to your clock.
+    //if (mcClockPool[mcMchronClock].clockId == CHRON_x)
+    //{
+    //  DEBUG(putstring("CYCL="); uart_put_dec(animTickerCycle); putstring_nl(""));
+    //}
+
     // Get event(s) while waiting the remaining time of the loop cycle
 #ifdef EMULIN
-    if (stubEventGet() == 'q')
+    if (stubEventGet(GLCD_TRUE) == 'q')
       return 0;
 #else
     while (animTickerCycle);
@@ -428,8 +436,8 @@ SIGNAL(TIMER0_COMPA_vect)
 //
 // Read and sync the RTC with internal system time. It can result in a
 // Monochron time event, alarm trip event or alarm-end event when appropriate.
-// Runs at about every 2 msec, but will sync time considerably less due to
-// time dividers.
+// Runs at about every 2 msec, but will sync time considerably less due to time
+// dividers.
 //
 #ifdef EMULIN
 void monoTimer(void)
@@ -439,7 +447,7 @@ SIGNAL(TIMER2_OVF_vect)
 {
   wdt_reset();
 #ifdef EMULIN
-  if (t2divider1 == 0)
+  if (GLCD_TRUE)
 #else
 #ifdef BACKLIGHT_ADJUST
   if (t2divider1 == TIMER2_RETURN_1)
@@ -485,8 +493,8 @@ SIGNAL(TIMER2_OVF_vect)
     {
       if (almTickerSnooze == 1)
       {
-        // Init alarm data at starting positions right before we
-        // return from snooze
+        // Init alarm data at starting positions right before we return from
+        // snooze
         DEBUGP("Alarm -> Snooze timeout");
         almSoundReset();
       }
@@ -497,10 +505,10 @@ SIGNAL(TIMER2_OVF_vect)
     }
 
     // Log new time
-    DEBUG(putstring("**** "));
-    DEBUG(uart_putw_dec(rtcDateTime.timeHour); uart_putchar(':'));
-    DEBUG(uart_putw_dec(rtcDateTime.timeMin); uart_putchar(':'));
-    DEBUG(uart_putw_dec(rtcDateTime.timeSec); putstring_nl(""));
+    DEBUGT(putstring("**** "));
+    DEBUGT(uart_putw_dec(rtcDateTime.timeHour); uart_putchar(':'));
+    DEBUGT(uart_putw_dec(rtcDateTime.timeMin); uart_putchar(':'));
+    DEBUGT(uart_putw_dec(rtcDateTime.timeSec); putstring_nl(""));
   }
 
   // Signal a clock time event only when the previous has not been processed
@@ -528,8 +536,8 @@ SIGNAL(TIMER2_OVF_vect)
     }
     else if (almAlarming == GLCD_TRUE && almTickerAlarm == 0)
     {
-      // Audible alarm has timed out (some may not wake up by an alarm)
-      // or someone pressed the Menu button while alarming/snoozing
+      // Audible alarm has timed out (some may not wake up by an alarm) or
+      // someone pressed the Menu button while alarming/snoozing
       DEBUGP("Alarm -> Timeout");
       almAlarming = GLCD_FALSE;
       almTickerSnooze = 0;
@@ -537,12 +545,12 @@ SIGNAL(TIMER2_OVF_vect)
     }
   }
 
-  // Control timeout counters. Note this is tricky stuff since entering
-  // this code section is also influenced by the t2divider1 counter at
-  // the top of this function. With the current settings this code section
-  // is entered about once per second.
-  // To use this, uncomment the t2divider2 declaration at the top of this
-  // file, the code section below and then add timeout counter logic.
+  // Control timeout counters. Note this is tricky stuff since entering this
+  // code section is also influenced by the t2divider1 counter at the top of
+  // this function. With the current settings this code section is entered
+  // about once per second.
+  // To use this, uncomment the t2divider2 declaration at the top of this file,
+  // the code section below and then add timeout counter logic.
   /*if (t2divider2 == TIMER2_RETURN_2)
   {
     t2divider2 = 0;
@@ -593,8 +601,8 @@ static void almSnoozeSet(void)
 static void almSoundReset(void)
 {
 #ifdef MARIO
-  // Set the mario play location to the end. On the next audible alarm the
-  // play logic will continue at the beginning of Mario tune.
+  // Set the mario play location to the end. On the next audible alarm the play
+  // logic will continue at the beginning of Mario tune.
   sndMarioMasterIdx = (uint8_t)(sizeof(MarioMaster) - 2);
   sndMarioIdx = sndMarioIdxEnd;
   sndMarioPauze = GLCD_TRUE;
@@ -766,8 +774,8 @@ uint8_t rtcDotw(uint8_t mon, uint8_t day, uint8_t year)
   myYear = 2000 + year;
   if (mon < 3)
   {
-    myMon += 12;
-    myYear -= 1;
+    myMon = myMon + 12;
+    myYear = myYear - 1;
   }
   return (day + (2 * myMon) + (6 * (myMon + 1) / 10) + myYear +
     (myYear / 4) - (myYear / 100) + (myYear / 400) + 1) % 7;

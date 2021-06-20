@@ -31,6 +31,9 @@
 // Avoid typos in eeprom item name when printing the eeprom contents
 #define EEPNAME(a)	a, #a
 
+// The graphics data buffer lcd controller origin (as opposed to filename)
+#define GRAPH_ORIGIN_CTRL	"lcd controllers"
+
 // Monochron defined data
 extern volatile rtcDateTime_t rtcDateTime;
 extern volatile rtcDateTime_t rtcDateTimeNext;
@@ -172,7 +175,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     }
     else
     {
-      printf("%s: -l: unknown lcd stub device type: %s\n", __progname,
+      printf("%s: -l: invalid lcd stub device type %s\n", __progname,
         argv[emuArgcArgv->argLcdType]);
       return CMD_RET_ERROR;
     }
@@ -186,13 +189,13 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     char *input = argv[emuArgcArgv->argGlutGeometry];
     char *separator;
 
-    // Scan the geometry argument using a regexp pattern
+    // Scan the geometry argument using a regex pattern
     regcomp(&regex, "^[0-9]+x[0-9]+$", REG_EXTENDED | REG_NOSUB);
     status = regexec(&regex, input, (size_t)0, NULL, 0);
     regfree(&regex);
     if (status != 0)
     {
-      printf("%s: -g: invalid format glut geometry\n", __progname);
+      printf("%s: -g: invalid glut geometry\n", __progname);
       return CMD_RET_ERROR;
     }
 
@@ -211,13 +214,13 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     char *input = argv[emuArgcArgv->argGlutPosition];
     char *separator;
 
-    // Scan the position argument using a regexp pattern
+    // Scan the position argument using a regex pattern
     regcomp(&regex, "^[0-9]+,[0-9]+$", REG_EXTENDED | REG_NOSUB);
     status = regexec(&regex, input, (size_t)0, NULL, 0);
     regfree(&regex);
     if (status != 0)
     {
-      printf("%s: -p: invalid format glut position\n", __progname);
+      printf("%s: -p: invalid glut position\n", __progname);
       return CMD_RET_ERROR;
     }
 
@@ -277,12 +280,15 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 
     // Kill all \r or \n in the tty string as ncurses doesn't like this.
     // Assume that \r and \n are trailing characters in the string.
-    for (ttyLen = strlen(tty); ttyLen > 0; ttyLen--)
+    if (strlen(tty) > 0)
     {
-      if (tty[ttyLen - 1] == '\n' || tty[ttyLen - 1] == '\r')
-        tty[ttyLen - 1] = '\0';
-      else
-        break;
+      for (ttyLen = strlen(tty) - 1; ttyLen >= 0; ttyLen--)
+      {
+        if (tty[ttyLen] == '\n' || tty[ttyLen] == '\r')
+          tty[ttyLen] = '\0';
+        else
+          break;
+      }
     }
 
     // Clean up our stuff
@@ -522,6 +528,40 @@ u08 emuFontGet(char *fontName)
 }
 
 //
+// Function: emuFormatGet
+//
+// Get the requested graphics element data format and its metadata
+//
+u08 emuFormatGet(char formatId, u08 *formatBytes, u08 *formatBits)
+{
+  // Get data format
+  if (formatId == 'b')
+  {
+    if (formatBytes != NULL)
+      *formatBytes = sizeof(uint8_t);
+    if (formatBits != NULL)
+      *formatBits = 8 * sizeof(uint8_t);
+    return ELM_BYTE;
+  }
+  else if (formatId == 'w')
+  {
+    if (formatBytes != NULL)
+      *formatBytes = sizeof(uint16_t);
+    if (formatBits != NULL)
+      *formatBits = 8 * sizeof(uint16_t);
+    return ELM_WORD;
+  }
+  else // formatId == 'd'
+  {
+    if (formatBytes != NULL)
+      *formatBytes = sizeof(uint32_t);
+    if (formatBits != NULL)
+      *formatBits = 8 * sizeof(uint32_t);
+    return ELM_DWORD;
+  }
+}
+
+//
 // Function: emuOrientationGet
 //
 // Get the requested text orientation
@@ -749,6 +789,407 @@ void emuTimeSync(void)
 }
 
 //
+// Function: grBufCopy
+//
+// Copy non-empty graphics buffer
+//
+u08 grBufCopy(emuGrBuf_t *emuGrBufFrom, emuGrBuf_t *emuGrBufTo)
+{
+  // Reset target buffer
+  grBufInit(emuGrBufTo, GLCD_TRUE);
+
+  // Copy buffer but make fresh copy of origin string and buffer data
+  *emuGrBufTo = *emuGrBufFrom;
+  if (emuGrBufFrom->bufOrigin != NULL)
+  {
+     emuGrBufTo->bufOrigin = malloc(strlen(emuGrBufFrom->bufOrigin) + 1);
+     strcpy(emuGrBufTo->bufOrigin, emuGrBufFrom->bufOrigin);
+  }
+  if (emuGrBufFrom->bufData != NULL)
+  {
+     emuGrBufTo->bufData =
+       malloc(emuGrBufFrom->bufElmCount * emuGrBufFrom->bufElmByteSize);
+     memcpy(emuGrBufTo->bufData, emuGrBufFrom->bufData,
+       emuGrBufFrom->bufElmCount * emuGrBufFrom->bufElmByteSize);
+  }
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: grBufInfoPrint
+//
+// Print metadata info on sprite
+//
+void grBufInfoPrint(emuGrBuf_t *emuGrBuf)
+{
+  if (emuGrBuf->bufElmFormat == ELM_NULL)
+  {
+    printf("buffer is empty\n");
+    return;
+  }
+
+  // Buffer origin, data type and byte size per element
+  printf("data origin     : %s\n", emuGrBuf->bufOrigin);
+  printf("data format     : ");
+  if (emuGrBuf->bufElmFormat == ELM_BYTE)
+    printf("byte ");
+  else if (emuGrBuf->bufElmFormat == ELM_WORD)
+    printf("word ");
+  else
+    printf("double word ");
+  if (emuGrBuf->bufElmByteSize == 1)
+    printf("(%d byte per element)\n", emuGrBuf->bufElmByteSize);
+  else
+    printf("(%d bytes per element)\n", emuGrBuf->bufElmByteSize);
+
+  // Data elements and size in bytes
+  printf("data elements   : %d (%d bytes)\n", emuGrBuf->bufElmCount,
+    emuGrBuf->bufElmCount * emuGrBuf->bufElmByteSize);
+
+  // We either have raw data, image data or sprite data
+  printf("data contents   : ");
+  if (emuGrBuf->bufType == GRAPH_RAW)
+    printf("raw (free format data)\n");
+  else if (emuGrBuf->bufType == GRAPH_IMAGE)
+    printf("image (single fixed size image)\n");
+  else // GRAPH_SPRITE
+    printf("sprite (multiple fixed size image frames)\n");
+
+  // Provide content details
+  printf("content details : ");
+  if (emuGrBuf->bufType == GRAPH_RAW)
+    printf("none\n");
+  else if (emuGrBuf->bufType == GRAPH_IMAGE)
+    printf("image size %dx%d pixels requiring %d frame(s)\n",
+      emuGrBuf->bufImgWidth, emuGrBuf->bufImgHeight, emuGrBuf->bufImgFrames);
+  else // GRAPH_SPRITE
+    printf("sprite size %dx%d pixels, %d frame(s)\n",
+      emuGrBuf->bufSprWidth, emuGrBuf->bufSprHeight, emuGrBuf->bufSprFrames);
+}
+
+//
+// Function: grBufInit
+//
+// Initialize a graphics buffer
+//
+void grBufInit(emuGrBuf_t *emuGrBuf, u08 reset)
+{
+  // Clear malloc-ed buffer origin info, when requested
+  if (reset == GLCD_TRUE)
+  {
+    if (emuGrBuf->bufOrigin != NULL)
+      free(emuGrBuf->bufOrigin);
+    if (emuGrBuf->bufData != NULL)
+      free(emuGrBuf->bufData);
+  }
+
+  // Clear and init buffer contents
+  memset(emuGrBuf, 0, sizeof(emuGrBuf_t));
+  emuGrBuf->bufType = GRAPH_NULL;
+  emuGrBuf->bufOrigin = NULL;
+  emuGrBuf->bufElmFormat = ELM_NULL;
+  emuGrBuf->bufData = NULL;
+}
+
+//
+// Function: grBufLoadCtrl
+//
+// Load graphics buffer with data from the lcd controllers
+//
+void grBufLoadCtrl(u08 x, u08 y, u08 width, u08 height, char formatName,
+  emuGrBuf_t *emuGrBuf)
+{
+  u08 frame;
+  u08 i;
+  u08 j;
+  u16 count = 0;
+  uint32_t bufVal;
+  uint32_t lcdByte;
+  u08 yOffset = y % 8;
+  u08 yStart = y / 8;
+  u08 yFrameBytes;
+  u08 yFrameStart;
+  u08 bitsToDo;
+  u08 frames;
+  u08 format;
+  u08 formatBytes;
+  u08 formatBits;
+
+  // Setup for loading graphics data
+  grBufInit(emuGrBuf, GLCD_TRUE);
+  format = emuFormatGet(formatName, &formatBytes, &formatBits);
+
+  // Split up requested image in frames and reserve buffer space
+  frames = ((height - 1) / 8) / formatBytes + 1;
+  emuGrBuf->bufData = malloc(width * formatBytes * frames);
+
+  // Retrieve the data from the lcd controllers and store it in the buffer
+  for (frame = 0; frame < frames; frame++)
+  {
+    // Get lcd y cursor position to start reading from
+    yFrameStart = frame * formatBytes + yStart;
+
+    // For this frame move x from left to right
+    for (i = x; i < x + width; i++)
+    {
+      bufVal = 0;
+
+      // Read as many y bytes to fill a target format element but be aware that
+      // the last frame may require less y bytes
+      yFrameBytes = formatBytes;
+      if (yOffset > 0)
+         yFrameBytes++;
+
+      if (frame < frames - 1)
+        bitsToDo = formatBits;
+      else
+        bitsToDo = (height - 1) % formatBits + 1;
+
+      // Get a vertical frame byte of the proper height
+      for (j = 0; j < yFrameBytes; j++)
+      {
+        // Set cursor and read twice to read the lcd byte
+        glcdSetAddress(i, yFrameStart + j);
+        glcdDataRead();
+        lcdByte = (uint32_t)glcdDataRead();
+
+        // Clip data from first and last y byte if needed and keep track of
+        // remaining bits
+        if (j == 0)
+        {
+          if (bitsToDo <= 8 - yOffset)
+          {
+            lcdByte = (lcdByte & (0xff >> (8 - bitsToDo - yOffset)));
+            bitsToDo = 0;
+          }
+          else
+          {
+            bitsToDo = bitsToDo - 8 + yOffset;
+          }
+        }
+        else if (bitsToDo < 8)
+        {
+          lcdByte = (lcdByte & (0xff >> (8 - bitsToDo)));
+          bitsToDo = 0;
+        }
+        else
+        {
+          bitsToDo = bitsToDo - 8;
+        }
+
+        // Merge this lcd byte into buffer element value
+        lcdByte = (lcdByte << j * 8) >> yOffset;
+        bufVal = (bufVal | lcdByte);
+      }
+
+      // Put buffer value in right format and save it in graphics buffer
+      if (format == ELM_BYTE)
+        ((uint8_t *)(emuGrBuf->bufData))[count] = (uint8_t)bufVal;
+      else if (format == ELM_WORD)
+        ((uint16_t *)(emuGrBuf->bufData))[count] = (uint16_t)bufVal;
+      else
+        ((uint32_t *)(emuGrBuf->bufData))[count] = (uint32_t)bufVal;
+      count++;
+    }
+  }
+
+  // Administer metadata for raw data
+  emuGrBuf->bufType = GRAPH_RAW;
+  emuGrBuf->bufOrigin = malloc(strlen(GRAPH_ORIGIN_CTRL) + 1);
+  strcpy(emuGrBuf->bufOrigin, GRAPH_ORIGIN_CTRL);
+  emuGrBuf->bufElmFormat = format;
+  emuGrBuf->bufElmByteSize = formatBytes;
+  emuGrBuf->bufElmBitSize = formatBits;
+  emuGrBuf->bufElmCount = count;
+}
+
+//
+// Function: grBufLoadFile
+//
+// Load graphics buffer with data from a file
+//
+u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
+  char *fileName, emuGrBuf_t *emuGrBuf)
+{
+  FILE *fp;
+  u16 count = 0;
+  u16 readCount = 0;
+  unsigned int bufVal;
+  int scanRetVal;
+  u08 format;
+  u08 formatBytes;
+  u08 formatBits;
+
+  // Setup for loading graphics data
+  grBufInit(emuGrBuf, GLCD_TRUE);
+  format = emuFormatGet(formatName, &formatBytes, &formatBits);
+
+  // Open graphics data file
+  fp = fopen(fileName, "r");
+  if (fp == NULL)
+  {
+    printf("%s? cannot open data file \"%s\"\n", argName, fileName);
+    return CMD_RET_ERROR;
+  }
+
+  // Do preliminary scan of file contents element by element
+  scanRetVal = fscanf(fp, "%i,", &bufVal);
+  while (scanRetVal == 1)
+  {
+    // Check on buffer overflow
+    if (count * formatBytes >= GRAPH_BUF_BYTES)
+    {
+      printf("buffer overflow at element %d\n", count);
+      grBufInit(emuGrBuf, GLCD_TRUE);
+      fclose(fp);
+      return CMD_RET_ERROR;
+    }
+
+    // Check on value overflow based on data format
+    if ((format == ELM_BYTE && bufVal > 0xff) ||
+        (format == ELM_WORD && bufVal > 0xffff) ||
+        (format == ELM_DWORD && bufVal > 0xffffffff))
+    {
+      printf("%s? data value overflow at element %d\n", argName, count + 1);
+      grBufInit(emuGrBuf, GLCD_TRUE);
+      fclose(fp);
+      return CMD_RET_ERROR;
+    }
+
+    // Stop when enough elements are loaded
+    count++;
+    if (maxElements > 0 && count >= maxElements)
+      break;
+
+    // Scan next element in file
+    scanRetVal = fscanf(fp, "%i,", &bufVal);
+  }
+
+  // See if we encountered a scan error
+  if (scanRetVal == 0)
+  {
+    printf("%s? data scan error at element %i\n", argName, count + 1);
+    grBufInit(emuGrBuf, GLCD_TRUE);
+    fclose(fp);
+    return CMD_RET_ERROR;
+  }
+
+  // Reserve a buffer and re-scan file contents element by element
+  emuGrBuf->bufData = malloc(count * formatBytes);
+  rewind(fp);
+  readCount = count;
+  for (count = 0; count < readCount; count++)
+  {
+    // Scan and store scanned element in buffer based on data format
+    fscanf(fp, "%i,", &bufVal);
+    if (format == ELM_BYTE)
+      ((uint8_t *)(emuGrBuf->bufData))[count] = (uint8_t)bufVal;
+    else if (format == ELM_WORD)
+      ((uint16_t *)(emuGrBuf->bufData))[count] = (uint16_t)bufVal;
+    else
+      ((uint32_t *)(emuGrBuf->bufData))[count] = (uint32_t)bufVal;
+  }
+  fclose(fp);
+
+  // Administer (initial) metadata
+  emuGrBuf->bufType = GRAPH_RAW;
+  emuGrBuf->bufOrigin = malloc(strlen(fileName) + 1);
+  strcpy(emuGrBuf->bufOrigin, fileName);
+  emuGrBuf->bufElmFormat = format;
+  emuGrBuf->bufElmByteSize = formatBytes;
+  emuGrBuf->bufElmBitSize = formatBits;
+  emuGrBuf->bufElmCount = readCount;
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: grBufSaveFile
+//
+// Save graphics buffer data in file
+//
+u08 grBufSaveFile(char *argName, u08 lineElements, char *fileName,
+  emuGrBuf_t *emuGrBuf)
+{
+  FILE *fp;
+  int i;
+  int element;
+  int elements;
+  char *printFmt;
+  int success;
+
+  // Setup for loading sprite and printed elements per line
+  if (emuGrBuf->bufElmFormat == ELM_BYTE)
+  {
+    printFmt = "0x%02x";
+    if (lineElements == 0)
+      lineElements = 78 / 5;
+  }
+  else if (emuGrBuf->bufElmFormat == ELM_WORD)
+  {
+    printFmt = "0x%04x";
+    if (lineElements == 0)
+      lineElements = 78 / 7;
+  }
+  else // ELM_DWORD
+  {
+    printFmt = "0x%08x";
+    if (lineElements == 0)
+      lineElements = 78 / 11;
+  }
+
+  // Rewrite graphics data file
+  fp = fopen(fileName, "w");
+  if (fp == NULL)
+  {
+    printf("%s? cannot open data file \"%s\"\n", argName, fileName);
+    return CMD_RET_ERROR;
+  }
+
+  // Print all buffer elements, split over multiple output lines
+  elements = 0;
+  for (i = 0; i < emuGrBuf->bufElmCount; i++)
+  {
+    // Indent in case of new line
+    if (elements == 0)
+      fprintf(fp, "  ");
+
+    // Get buffer element value
+    if (emuGrBuf->bufElmFormat == ELM_BYTE)
+      element = (int)((uint8_t *)(emuGrBuf->bufData))[i];
+    else if (emuGrBuf->bufElmFormat == ELM_WORD)
+      element = (int)((uint16_t *)(emuGrBuf->bufData))[i];
+    else
+      element = (int)((uint32_t *)(emuGrBuf->bufData))[i];
+
+    // Write element and trailing ','
+    success = fprintf(fp, printFmt, element);
+    if (success < 0)
+    {
+      printf("%s? write error at buffer element %d\n", argName, i);
+      fclose(fp);
+      return CMD_RET_ERROR;
+    }
+    if (i != emuGrBuf->bufElmCount - 1)
+      fprintf(fp, "%c", ',');
+
+    // Enter new line when needed
+    elements++;
+    if (elements == lineElements)
+    {
+      fprintf(fp, "\n");
+      elements = 0;
+    }
+  }
+
+  // Close file
+  fclose(fp);
+
+  return CMD_RET_OK;
+}
+
+//
 // Function: waitDelay
 //
 // Wait amount of time (in msec) while allowing a 'q' keypress interrupt
@@ -766,12 +1207,9 @@ char waitDelay(int delay)
   gettimeofday(&tvNow, NULL);
   gettimeofday(&tvEnd, NULL);
 
-  // Set end timestamp based current time plus delay
+  // Set end timestamp based current time plus delay and get diff in time
   tvEnd.tv_usec = tvEnd.tv_usec + delay * 1000;
-
-  // Get the total time to wait
-  timeDiff = (tvEnd.tv_sec - tvNow.tv_sec) * 1E6 +
-    tvEnd.tv_usec - tvNow.tv_usec;
+  timeDiff = TIMEDIFF_USEC(tvEnd, tvNow);
 
   // Switch to keyboard scan mode if needed
   myKbMode = kbModeGet();
@@ -782,7 +1220,7 @@ char waitDelay(int delay)
   // that is less than 0.5 msec
   while (ch != 'q' && timeDiff > 500)
   {
-    // Split time to delay up in parts of max 250msec
+    // Split time to delay up in parts of max 250 msec
     tvWait.tv_sec = 0;
     if (timeDiff >= 250000)
       tvWait.tv_usec = 250000;
@@ -797,8 +1235,7 @@ char waitDelay(int delay)
 
     // Based on last wait and keypress delays get time left to wait
     gettimeofday(&tvNow, NULL);
-    timeDiff = (tvEnd.tv_sec - tvNow.tv_sec) * 1E6 +
-      tvEnd.tv_usec - tvNow.tv_usec;
+    timeDiff = TIMEDIFF_USEC(tvEnd, tvNow);
   }
 
   // Return to line mode if needed
@@ -874,8 +1311,9 @@ void waitSleep(int sleep)
 // allowing a 'q' keypress interrupt. Restart the timer when timer has already
 // expired upon entering this function or has expired after the remaining timer
 // period. When pressing the 'q' key the timer will not be restarted.
-// Return parameter remaining will indicate the remaining timer time in usec
-// upon entering this function, or -1 in case the timer had already expired.
+// (Optional) return parameter remaining will indicate the remaining timer time
+// in usec upon entering this function, or -1 in case the timer had already
+// expired.
 //
 char waitTimerExpiry(struct timeval *tvTimer, int expiry, u08 allowQuit,
   suseconds_t *remaining)
@@ -887,24 +1325,25 @@ char waitTimerExpiry(struct timeval *tvTimer, int expiry, u08 allowQuit,
 
   // Get the total time to wait based on timer expiry
   gettimeofday(&tvNow, NULL);
-  timeDiff = (tvTimer->tv_sec - tvNow.tv_sec) * 1E6 +
-    tvTimer->tv_usec - tvNow.tv_usec + expiry * 1000;
+  timeDiff = TIMEDIFF_USEC(*tvTimer, tvNow) + expiry * 1000;
 
   // See if timer has already expired
   if (timeDiff < 0)
   {
     // Get next timer offset using current time as reference, so do not even
     // attempt to compensate
-    *remaining = -1;
+    if (remaining != NULL)
+      *remaining = -1;
     *tvTimer = tvNow;
   }
   else
   {
     // Wait the remaining time of the timer, defaulting to at least 1 msec
-    *remaining = timeDiff;
+    if (remaining != NULL)
+      *remaining = timeDiff;
     if (allowQuit == GLCD_TRUE)
     {
-      if ((int)(*remaining / 1000) == 0)
+      if ((int)(timeDiff / 1000) == 0)
         ch = waitDelay(1);
       else
         ch = waitDelay((int)(timeDiff / 1000 + (float)0.5));

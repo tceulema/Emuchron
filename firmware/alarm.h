@@ -22,10 +22,10 @@
 
 #ifdef MARIO
 // Configure Mario melody alarm
-// The tune tempo
+// The tune tempo. Increasing the value will slow down the tune.
 #define MAR_TEMPO		99
-// The factors used to fit tone and beat values in an unsigned char data
-// type. The densed values are expanded using these very same factors.
+// The factors used to fit tone and beat values in an unsigned char data type.
+// The densed values are expanded using these very same factors.
 // DO NOT CHANGE THESE as they require a rebuild of respectively MarioTones[]
 // and MarioBeats[] contents.
 #define MAR_TONE_FACTOR		9

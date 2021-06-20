@@ -13,6 +13,7 @@
 
 // Overide (ignore) AVR progmem directive
 #define progmem
+#define PROGMEM
 
 // Misc stubs for hardware related stuff
 #define RXEN0			0
@@ -39,7 +40,9 @@
 #define putstring(x)		stubPutString((x),"%s")
 #define uart_put_dec(x)		stubUartPutDec((int)(x),"%d")
 #define uart_putdw_dec(x)	stubUartPutDec((int)(x),"%d")
+#define uart_putdw_hex(x)	stubUartPutDec((int)(x),"%x")
 #define uart_putw_dec(x)	stubUartPutDec((int)(x),"%d")
+#define uart_putw_hex(x)	stubUartPutDec((int)(x),"%x")
 #define uart_putc_hex(x)	stubUartPutDec((int)(x),"%x")
 #define uart_putchar(x)		stubUartPutChar((x))
 
@@ -54,14 +57,24 @@
 // Delay stub
 #define _delay_ms(x)		stubDelay((x))
 
+// Misc stub stuff
+#define asm			__asm__
+#define _BV(x) 			(0x01 << (x))
+#define __LPM(x)		(*(x))
+#define memcpy_P		memcpy
+#define pgm_read_byte(x) 	((uint8_t)(*(x)))
+#define pgm_read_word(x) 	((uint16_t)(*(x)))
+#define pgm_read_dword(x) 	((uint32_t)(*(x)))
+
 // Keyboard input mode
 #define KB_MODE_LINE		0
 #define KB_MODE_SCAN		1
 
-// Misc stub stuff
-#define _BV(x) 			(0x01 << (x))
-#define pgm_read_byte(x) 	((uint8_t)(*(x)))
-#define asm			__asm__
+// Instructions for setting mchron date/time
+#define DT_DATE_KEEP		70	// Keep current date
+#define DT_DATE_RESET		80	// Reset to system date
+#define DT_TIME_KEEP		70	// Keep current time
+#define DT_TIME_RESET		80	// Reset to system time
 
 // Eeprom stubs
 uint8_t stubEepRead(uint8_t *eprombyte);
@@ -75,8 +88,8 @@ void stubBeep(uint16_t hz, uint8_t msec);
 void stubDelay(int x);
 
 // RTC interface stubs
-u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
-  uint8_t date, uint8_t mon, uint8_t yr);
+u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
+  uint8_t mon, uint8_t yr);
 u08 stubI2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data);
 u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data);
 
@@ -94,8 +107,9 @@ void wdt_enable(uint16_t x);
 void wdt_reset();
 
 // Below is emulator oriented stub functionality
+
 // Monochron emulator stubs
-char stubEventGet(void);
+char stubEventGet(u08 stats);
 void stubEventInit(u08 startWait, u08 cfgTimeout,
   void (*stubHelpHandler)(void));
 u08 stubEventQuitGet(void);

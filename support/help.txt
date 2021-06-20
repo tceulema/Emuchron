@@ -49,7 +49,8 @@ Commands:
                      8 = pong, 9 = puzzle, 10 = slider, 11 = cascade,
                      12 = speed, 13 = spider, 14 = thermometer, 15 = traffic,
                      16 = bar, 17 = cross, 18 = line, 19 = pie, 20 = bigdigOne,
-                     21 = bigdigTwo, 22 = qrHMS, 23 = qrHM, 24 = perftest
+                     21 = bigdigTwo, 22 = qrHMS, 23 = qrHM, 24 = marioworld,
+                     25 = wave, 26 = perftest
   'dr'  - Reset clock date to system date
   'ds'  - Set date
           Arguments: <day> <month> <year>
@@ -60,10 +61,51 @@ Commands:
           Arguments: <echo> <filename>
               echo: 'e' = echo commands, 'i' = inherit, 's' = silent
               filename: full filepath or relative to startup folder mchron
+  'gbc' - Copy graphics buffer
+          Arguments: <from> <to>
+              from: 0..9
+              to: 0..9
+  'gbi' - Show graphics buffer info
+          Argument: <buffer>
+              buffer: -1..9 (-1 = all, other = buffer)
+  'gbr' - Reset graphics buffer
+          Argument: <buffer>
+              buffer: -1..9 (-1 = all, other = buffer)
+  'gbs' - Save graphics buffer to file
+          Arguments: <buffer> <width> <filename>
+              buffer: 0..9
+              width: 0..128 (0 = max 80 chars/line, other = elements/line)
+              filename: full path or relative to startup directory mchron
+  'gci' - Load lcd controller image data
+          Arguments: <buffer> <format> <x> <y> <xsize> <ysize>
+              buffer: 0..9
+              format: 'b','w','d' (b = 8-bit, w = 16-bit, d = 32-bit)
+              x: 0..127
+              y: 0..63
+              xsize: 1..128
+              ysize: 1..64
+  'gf'  - Load file graphics data
+          Arguments: <buffer> <format> <filename>
+              buffer: 0..9
+              format: 'b','w','d' (b = 8-bit, w = 16-bit, d = 32-bit)
+              filename: full path or relative to startup directory mchron
+  'gfi' - Load file image data
+          Arguments: <buffer> <format> <xsize> <ysize> <filename>
+              buffer: 0..9
+              format: 'b','w','d' (b = 8-bit, w = 16-bit, d = 32-bit)
+              xsize: 1..128 (image width)
+              ysize: 1..64 (image height)
+              filename: full path or relative to startup directory mchron
+  'gfs' - Load file sprite data
+          Arguments: <buffer> <xsize> <ysize> <filename>
+              buffer: 0..9
+              xsize: 1..128 (sprite width)
+              ysize: 1..32 (sprite height)
+              filename: full path or relative to startup directory mchron
   'h'   - Help
   'hc'  - Show command details
           Argument: <pattern>
-              pattern: mchron command name regexp pattern, '.' = all
+              pattern: mchron command name regex pattern, '.' = all
   'he'  - Show expression result
           Argument: <number>
               number: expression
@@ -92,6 +134,7 @@ Commands:
               controller-0: 0 = off, 1 = on
               controller-1: 0 = off, 1 = on
   'le'  - Erase lcd display
+  'lge' - Edit glut lcd display
   'lgg' - Set glut graphics options
           Arguments: <pixelbezel> <gridlines>
               pixelbezel: 0 = off, 1 = on
@@ -144,6 +187,29 @@ Commands:
               xscale: 1..64
               yscale: 1..32
               text: ascii text
+  'pb'  - Paint buffer
+          Arguments: <color> <buffer> <x> <y> <xo> <yo> <xsize> <ysize>
+              color: 'b','f' (b = background, f = foreground)
+              buffer: 0..9
+              x: 0..127
+              y: 0..63
+              xo: 0..1023 (data element x offset)
+              yo: 0..31 (data element y offset)
+              xsize: 0..128
+              ysize: 0..32
+  'pbi' - Paint buffer image
+          Arguments: <color> <buffer> <x> <y>
+              color: 'b','f' (b = background, f = foreground)
+              buffer: 0..9
+              x: 0..127
+              y: 0..63
+  'pbs' - Paint buffer sprite
+          Arguments <color> <buffer> <x> <y> <frame>
+              color: 'b','f' (b = background, f = foreground)
+              buffer: 0..9
+              x: 0..127
+              y: 0..63
+              frame: 0..127
   'pc'  - Paint circle
           Arguments: <color> <x> <y> <radius> <pattern>
               color: 'f' = foreground, 'b' = background
@@ -159,7 +225,7 @@ Commands:
               y: 0..63
               radius: 0..32
               pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
-                       4 = inverse, 5 = clear
+                       4 = inverse, 5 = blank
   'pd'  - Paint dot
           Arguments: <color> <x> <y>
               color: 'f' = foreground, 'b' = background
@@ -201,7 +267,7 @@ Commands:
               ysize: 1..64
               align (for pattern 1-3): 0 = top, 1 = bottom, 2 = auto
               pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
-                       4 = inverse, 5 = clear
+                       4 = inverse, 5 = blank
   'rf'  - Repeat for
           Arguments: <init> <condition> <post>
               init: expression executed once at initialization
@@ -220,7 +286,7 @@ Commands:
               sec: 0..59
   'vp'  - Print value of variable(s)
           Argument: <pattern>
-              pattern: variable name regexp pattern, '.' = all
+              pattern: variable name regex pattern, '.' = all
   'vr'  - Reset variable(s)
           Argument: <variable>
               variable: word of [a-zA-Z_] characters, '.' = all

@@ -25,6 +25,9 @@ extern int fileExecDepth;
 // The current command echo state
 extern u08 echoCmd;
 
+// Functional name of mchron command
+extern char *mchronCmdName;
+
 // This is me
 extern const char *__progname;
 
@@ -167,7 +170,8 @@ u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
     // All other control block types are invalid on the command line as they
     // need to link to either a repeat-for or if-then command. As such, they
     // can only be entered via multi line keyboard input or a command file.
-    printf("command? cannot match this command: %s\n", cmdCommand->cmdName);
+    printf("%s? cannot match this command \"%s\"\n", mchronCmdName,
+      cmdCommand->cmdName);
     retVal = CMD_RET_ERROR;
   }
 
@@ -434,7 +438,7 @@ u08 cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
 // Load command file contents in a linked list structure
 //
 u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
-  char *fileName, int fileExecDepth)
+  char *argName, char *fileName, int fileExecDepth)
 {
   FILE *fp;				// Input file pointer
   cmdLine_t *cmdLineLast = NULL;	// The last cmdline in linked list
@@ -452,7 +456,7 @@ u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   fp = fopen(fileName, "r");
   if (fp == NULL)
   {
-    printf("cannot open command file \"%s\"\n", fileName);
+    printf("%s? cannot open command file \"%s\"\n", argName, fileName);
     printf(CMD_STACK_TRACE);
     return CMD_RET_ERROR;
   }
@@ -677,8 +681,7 @@ void cmdListStatsPrint(void)
   if (cmdLineCount > 0)
   {
     gettimeofday(&cmdTvEnd, NULL);
-    secElapsed = ((cmdTvEnd.tv_sec - cmdTvStart.tv_sec) * 1E6 +
-      cmdTvEnd.tv_usec - cmdTvStart.tv_usec) / (double)1E6;
+    secElapsed = TIMEDIFF_USEC(cmdTvEnd, cmdTvStart) / (double)1E6;
     printf("time=%.3f sec, cmd=%d, line=%d", secElapsed, cmdCmdCount,
       cmdLineCount);
     if (secElapsed > 0.1)

@@ -3,10 +3,6 @@
 // Title    : UART I/O utility functions for MONOCHRON
 //*****************************************************************************
 
-#include <avr/io.h>
-#include <avr/interrupt.h>
-#include <util/delay.h>
-#include <avr/pgmspace.h>
 #include "monomain.h"
 #include "util.h"
 
@@ -62,9 +58,9 @@ char uart_getch(void)
   return (UCSR0A & _BV(RXC0));
 }
 
-// The following functions are used only in debugging mode. Not building
-// the function block of these functions when it is not needed anyway will
-// save us quite a few bytes.
+// The following functions are used only in debugging mode. Not building the
+// function block of these functions when it is not needed anyway will save us
+// quite a few bytes.
 // The compiler is smart enough to omit the generation of the function block
 // code based on the master debugging flag. I do admit this looks ugly.
 

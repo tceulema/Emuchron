@@ -1,0 +1,24 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test glcdBitmap() on bitmap data containing two full screen bitmap
+# images
+#
+
+# Load the bitmap file containing the two full-screen images
+gf 5 d ../script/bitmap/image-multi-dword.txt
+gbi 5
+le
+hm
+hm Swap two full-screen images from buffer 5.
+hm
+hm --- press 'q' to quit ---
+
+# Alternate between the two images (each containing two 32-bit frames) every
+# second
+wts
+rf image=0 true image=(image+1)%2
+  pb f 5 0 0 image*256 0 128 32
+  pb f 5 0 32 image*256+128 0 128 32
+  wte 1000
+rn

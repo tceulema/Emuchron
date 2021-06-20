@@ -16,6 +16,16 @@ typedef struct _lcdGlutInitArgs_t
   void (*winClose)(void);	// mchron callback upon glut window close
 } lcdGlutInitArgs_t;
 
+// Definition of a structure to communicate about a double-clicked pixel
+typedef struct _lcdGlutGlcdPix_t
+{
+  unsigned char active;		// Is toggle pixel functionality active
+  unsigned char pixelLock;	// Double-click event occured
+  unsigned char glcdX;		// The glcd x pixel coordinate
+  unsigned char glcdY;		// The glcd y pixel coordinate
+  unsigned char glcdPix;	// The glcd pixel value
+} lcdGlutGlcdPix_t;
+
 // Lcd device control methods
 void lcdGlutCleanup(void);
 void lcdGlutFlush(void);

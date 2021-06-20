@@ -8,6 +8,7 @@
 
 #include <time.h>
 #include <sys/time.h>
+#include "../avrlibtypes.h"
 #include "controller.h"
 
 // The coredump origin types
@@ -20,6 +21,22 @@
 #define ALM_MONOCHRON	0
 #define ALM_EMUCHRON	1
 
+// The max size of a malloc-ed graphics data buffer.
+// Technically the firmware supports a progmem buffer size up to 64KB. The
+// Monochron m328 cpu has 32 KB flash available, but 2 KB is reserved for the
+// bootloader, leaving 30 KB free for software and progmem data.
+#define GRAPH_BUF_BYTES	30720
+
+// The graphics data buffer usage type
+#define GRAPH_NULL	0	// Not initialized
+#define GRAPH_RAW	1	// Free format use of graphics data
+#define GRAPH_IMAGE	2	// Single image with size (x,y) over z frames
+#define GRAPH_SPRITE	3	// Sprite image with size (x,y) with z frames
+
+// Get time diff between two timestamps in usec
+#define TIMEDIFF_USEC(a,b)	\
+  (((a).tv_sec - (b).tv_sec) * 1E6 + (a).tv_usec - (b).tv_usec)
+
 // Definition of a structure to hold the main() arguments
 typedef struct _emuArgcArgv_t
 {
@@ -31,9 +48,28 @@ typedef struct _emuArgcArgv_t
   ctrlDeviceArgs_t ctrlDeviceArgs;	// Processed args for lcd stub interface
 } emuArgcArgv_t;
 
+// Definition of a structure holding a graphics buffer and its metadata
+typedef struct _emuGrBuf_t
+{
+  u08 bufType;			// Graphics data type: null, raw, image, sprite
+  char *bufOrigin;		// Origin of buffer data (malloc-ed)
+  void *bufData;		// Graphics data elements buffer (malloc-ed)
+  u16 bufElmCount;		// Number of elements in data buffer
+  u08 bufElmFormat;		// Data element format
+  u08 bufElmByteSize;		// Data element size in bytes (1/2/4)
+  u08 bufElmBitSize;		// Data element size in bits (8/16/32-bit)
+  u08 bufImgWidth;		// Image: full image width
+  u08 bufImgHeight;		// Image: full image height
+  u08 bufImgFrames;		// Image: image frames
+  u08 bufSprWidth;		// Sprite: sprite width
+  u08 bufSprHeight;		// Sprite: sprite height
+  u08 bufSprFrames;		// Sprite: sprite frames
+} emuGrBuf_t;
+
 // mchron command argument translation functions
 u08 emuColorGet(char colorId);
 u08 emuFontGet(char *fontName);
+u08 emuFormatGet(char formatId, u08 *formatBytes, u08 *formatBits);
 u08 emuOrientationGet(char orientationId);
 u08 emuStartModeGet(char startId);
 
@@ -62,4 +98,15 @@ void waitSleep(int sleep);
 char waitTimerExpiry(struct timeval *tvTimer, int expiry, u08 allowQuit,
   suseconds_t *remaining);
 void waitTimerStart(struct timeval *tvTimer);
+
+// mchron graphics buffer data functions
+u08 grBufCopy(emuGrBuf_t *emuGrBufFrom, emuGrBuf_t *emuGrBufTo);
+void grBufInfoPrint(emuGrBuf_t *emuGrBuf);
+void grBufInit(emuGrBuf_t *emuGrBuf, u08 reset);
+void grBufLoadCtrl(u08 x, u08 y, u08 width, u08 height, char formatName,
+  emuGrBuf_t *emuGrBuf);
+u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
+  char *fileName, emuGrBuf_t *emuGrBuf);
+u08 grBufSaveFile(char *argName, u08 lineElements, char *fileName,
+  emuGrBuf_t *emuGrBuf);
 #endif

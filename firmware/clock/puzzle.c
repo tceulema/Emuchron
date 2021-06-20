@@ -189,7 +189,7 @@ void puzzleInit(u08 mode)
 
   DEBUGP("Init Puzzle");
 
-  // Draw the top row numbers.
+  // Draw the top row numbers
   val[0] = '0';
   val[1] = '\0';
   for (x = 0; x <= 9 * 12; x = x + 12)

@@ -6,10 +6,10 @@
 #ifndef MONOMAIN_H
 #define MONOMAIN_H
 
-#include "global.h"
+#include "avrlibtypes.h"
 
 // Version of our emuchron code base
-#define EMUCHRON_VERSION	"v6.0"
+#define EMUCHRON_VERSION	"v6.1"
 
 // Debugging macros.
 // Note that DEBUGGING is the master switch for generating debug output.
@@ -22,14 +22,14 @@
 #define DEBUGT(x)	if (DEBUGGING && DEBUGTIME) { x; }
 #define DEBUGTP(x)	DEBUGT(putstring_nl(x))
 
-// Software options. Uncomment to enable.
-// BACKLIGHT_ADJUST - Allows software control of backlight, assuming you
+// Display backlight. Allows software control of backlight, assuming you
 // mounted your 100ohm resistor in R2.
-#define BACKLIGHT_ADJUST 1
+// 0 = Off, 1 = On
+#define BACKLIGHT_ADJUST	1
 
 // Define application clock cycle msec timer value for animation and keypress
-// handling. Note that redrawing takes some time too so you don't want this
-// too small or your clock will 'hiccup' and appear jittery.
+// handling. Note that redrawing takes some time too so you don't want this too
+// small or your clock will 'hiccup' and appear jittery.
 #define ANIM_TICK_CYCLE_MS	75
 
 // Lcd backlight brightness related constants
@@ -37,8 +37,8 @@
 #define OCR2B_PLUS	1
 #define OCR2A_VALUE	16
 
-// Pin definitions for alarm switch and piezo speaker
-// Note: there's more in ks0108.h [firmware] for the display
+// Pin definitions for alarm switch and piezo speaker.
+// Note: There's more in ks0108.h [firmware] for the display.
 #define ALARM_PORT	PORTB
 #define ALARM_PIN	PINB
 #define ALARM_DDR	DDRB
@@ -49,8 +49,8 @@
 #define PIEZO_DDR	DDRC
 #define PIEZO		3
 
-// Constants for how to display time & date.
-// Those commented out are no longer supported.
+// Constants for how to display time & date. Those commented out are no longer
+// supported, and related code has been removed from the code base.
 //#define REGION_US	0
 //#define REGION_EU	1
 //#define DOW_REGION_US	2

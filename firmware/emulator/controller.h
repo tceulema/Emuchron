@@ -6,9 +6,9 @@
 #ifndef CONTROLLER_H
 #define CONTROLLER_H
 
+#include "../avrlibtypes.h"
 #include "lcdglut.h"
 #include "lcdncurses.h"
-#include "interpreter.h"
 
 // The controller interface source methods
 #define CTRL_METHOD_COMMAND	0	// A glcdControlWrite() method
@@ -53,6 +53,12 @@ void ctrlStatsReset(u08 type);
 
 // Controller device emulator method
 u08 ctrlExecute(u08 method, u08 controller, u08 data);
+
+// Glut glcd pixel double-click methods
+void ctrlGlcdPixConfirm(void);
+void ctrlGlcdPixDisable(void);
+void ctrlGlcdPixEnable(void);
+u08 ctrlGlcdPixGet(u08 *x, u08 *y);
 
 // Lcd device methods
 void ctrlLcdBacklightSet(u08 brightness);

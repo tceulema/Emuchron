@@ -27,3 +27,6 @@ prf f 0 0 20 20 2 3
 pa f 47 4 5x5p h 1 1 horizontal
 prf f 75 13 15 12 0 1
 prf f 32 21 10 10 0 5
+pl b 115 5 98 13
+gfs 0 9 12 ../script/bitmap/mario.txt
+pb f 0 90 1 0 0 4*9 12

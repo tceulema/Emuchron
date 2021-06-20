@@ -6,7 +6,7 @@
 #ifndef VARUTIL_H
 #define VARUTIL_H
 
-#include "interpreter.h"
+#include "../avrlibtypes.h"
 
 // The variable status types
 #define VAR_OK		0

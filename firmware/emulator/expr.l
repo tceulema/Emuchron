@@ -11,7 +11,7 @@
 white [ \t]+
 digit [0-9]
 integer {digit}+
-exponent [e][+-]?{integer}
+exponent e[+-]?{integer}
 double {integer}("."{integer})?{exponent}?
 hex 0x[a-fA-F0-9]+
 var [a-zA-Z_]+
@@ -67,7 +67,7 @@ var [a-zA-Z_]+
 
 {var}	{ yylval = (double)varIdGet(yytext, GLCD_TRUE);
           if (yylval >= 0)
-            return VARIABLE;
+            return IDENTIFIER;
           varStatus = VAR_OVERFLOW;
           return UNKNOWN; }
 

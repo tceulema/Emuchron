@@ -24,6 +24,7 @@
 #include "clock/digital.h"
 #include "clock/example.h"
 #include "clock/linechart.h"
+#include "clock/marioworld.h"
 #include "clock/mosquito.h"
 #include "clock/nerd.h"
 #include "clock/perftest.h"
@@ -36,6 +37,7 @@
 #include "clock/spiderplot.h"
 #include "clock/thermometer.h"
 #include "clock/trafficlight.h"
+#include "clock/wave.h"
 
 // The following monomain.c global variables are used to transfer the hardware
 // state to a stable functional Monochron clock state.
@@ -126,29 +128,31 @@ const char *animDays[7] =
 clockDriver_t monochron[] =
 {
    //{CHRON_PERFTEST,    DRAW_INIT_FULL,    perfInit,           perfCycle,           0}
-   {CHRON_CASCADE,     DRAW_INIT_FULL,    spotCascadeInit,    spotCascadeCycle,    0}
+  {CHRON_CASCADE,     DRAW_INIT_FULL,    spotCascadeInit,    spotCascadeCycle,    0}
+  //,{CHRON_BARCHART,    DRAW_INIT_PARTIAL, spotBarChartInit,   spotBarChartCycle,   0}
+  //,{CHRON_CROSSTABLE,  DRAW_INIT_PARTIAL, spotCrossTableInit, spotCrossTableCycle, 0}
+  //,{CHRON_LINECHART,   DRAW_INIT_PARTIAL, spotLineChartInit,  spotLineChartCycle,  0}
+  //,{CHRON_PIECHART,    DRAW_INIT_PARTIAL, spotPieChartInit,   spotPieChartCycle,   0}
   ,{CHRON_SPEEDDIAL,   DRAW_INIT_PARTIAL, spotSpeedDialInit,  spotSpeedDialCycle,  0}
   ,{CHRON_SPIDERPLOT,  DRAW_INIT_PARTIAL, spotSpiderPlotInit, spotSpiderPlotCycle, 0}
   //,{CHRON_THERMOMETER, DRAW_INIT_PARTIAL, spotThermInit,      spotThermCycle,      0}
   ,{CHRON_TRAFLIGHT,   DRAW_INIT_PARTIAL, spotTrafLightInit,  spotTrafLightCycle,  0}
-  //,{CHRON_BARCHART,    DRAW_INIT_PARTIAL, spotBarChartInit,   spotBarChartCycle,   0}
-  //,{CHRON_CROSSTABLE,  DRAW_INIT_PARTIAL, spotCrossTableInit, spotCrossTableCycle, 0}
-  //,{CHRON_PIECHART,    DRAW_INIT_PARTIAL, spotPieChartInit,   spotPieChartCycle,   0}
-  //,{CHRON_LINECHART,   DRAW_INIT_PARTIAL, spotLineChartInit,  spotLineChartCycle,  0}
   ,{CHRON_ANALOG_HMS,  DRAW_INIT_FULL,    analogHmsInit,      analogCycle,         0}
   ,{CHRON_ANALOG_HM,   DRAW_INIT_PARTIAL, analogHmInit,       analogCycle,         0}
+  //,{CHRON_BIGDIG_TWO,  DRAW_INIT_FULL,    bigDigInit,         bigDigCycle,         bigDigButton}
+  //,{CHRON_BIGDIG_ONE,  DRAW_INIT_PARTIAL, bigDigInit,         bigDigCycle,         bigDigButton}
   ,{CHRON_DIGITAL_HMS, DRAW_INIT_FULL,    digitalHmsInit,     digitalCycle,        0}
   ,{CHRON_DIGITAL_HM,  DRAW_INIT_PARTIAL, digitalHmInit,      digitalCycle,        0}
+  //,{CHRON_EXAMPLE,     DRAW_INIT_FULL,    exampleInit,        exampleCycle,        0}
+  //,{CHRON_MARIOWORLD,  DRAW_INIT_FULL,    marioInit,          marioCycle,          0}
   //,{CHRON_MOSQUITO,    DRAW_INIT_FULL,    mosquitoInit,       mosquitoCycle,       0}
   //,{CHRON_NERD,        DRAW_INIT_FULL,    nerdInit,           nerdCycle,           0}
   //,{CHRON_PONG,        DRAW_INIT_FULL,    pongInit,           pongCycle,           pongButton}
   ,{CHRON_PUZZLE,      DRAW_INIT_FULL,    puzzleInit,         puzzleCycle,         puzzleButton}
-  //,{CHRON_SLIDER,      DRAW_INIT_FULL,    sliderInit,         sliderCycle,         0}
-  //,{CHRON_BIGDIG_TWO,  DRAW_INIT_FULL,    bigDigInit,         bigDigCycle,         bigDigButton}
-  //,{CHRON_BIGDIG_ONE,  DRAW_INIT_PARTIAL, bigDigInit,         bigDigCycle,         bigDigButton}
   //,{CHRON_QR_HMS,      DRAW_INIT_FULL,    qrInit,             qrCycle,             0}
   //,{CHRON_QR_HM,       DRAW_INIT_PARTIAL, qrInit,             qrCycle,             0}
-  //,{CHRON_EXAMPLE,     DRAW_INIT_FULL,    exampleInit,        exampleCycle,        0}
+  //,{CHRON_SLIDER,      DRAW_INIT_FULL,    sliderInit,         sliderCycle,         0}
+  //,{CHRON_WAVE,        DRAW_INIT_FULL,    waveInit,           waveCycle,           0}
 };
 
 // Runtime pointer to active clockdriver array and the index in the array
@@ -263,7 +267,7 @@ static void animAlarmSwitchCheck(void)
     // Show the current date
     if (mcAlarmSwitch != ALARM_SWITCH_OFF)
     {
-      // Init alarm switch value, or he alarm switch has been switched off
+      // Init alarm switch value, or the alarm switch has been switched off
       DEBUGP("Alarm info -> Other");
       mcAlarmSwitch = ALARM_SWITCH_OFF;
       mcUpdAlarmSwitch = GLCD_TRUE;

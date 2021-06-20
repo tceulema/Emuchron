@@ -1,0 +1,37 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test glcdBitmap() using text sprite data
+#
+
+hm
+hm --- press 'q' to quit ---
+
+le
+gfs 0 40 8 ../script/bitmap/alarm-world.txt
+vs xa=1
+vs xb=88
+vs w=40
+vs h=8
+
+prf f xa-1 0 1 64 2 0
+prf f xb-1 0 1 64 2 0
+pbs f 0 45 20 0
+pbs f 0 45 28 1
+
+rf start=0 true start=(start+1)%h
+  vs end=h-start
+  wte 100
+  rf line=0 line<8 line=line+1
+    # ALARM moving up
+    pb b 0 xa line*h 0 start w h-start
+    iif start!=0
+      pb b 0 xa line*h+h-start 0 0 w start
+    ien
+    # WORLD moving down
+    pb b 0 xb line*h w end w h-end
+    pb b 0 xb line*h+h-end w 0 w end
+  rn
+  pn f 45 39 5x5p h 1 1 start start = %1.0f
+  pn f 45 45 5x5p h 1 1 end end = %1.0f
+rn

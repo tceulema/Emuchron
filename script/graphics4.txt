@@ -1,0 +1,35 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test glcdBitmap() using Mario coin sprite data
+#
+
+hm
+hm --- press 'q' to quit ---
+
+le
+gfs 0 8 8 ../script/bitmap/coin.txt
+vs distance=22
+vs startx=5
+vs starty=6
+vs frames=19
+
+# Static coin frame
+pbs f 0 startx starty+distance/2 4
+
+wts
+rf frame=0 true frame=(frame+1)%frames
+  # Paint same coin frame 18 times 
+  pn f 16 starty+1+distance/2 5x5p h 1 1 frame frame = %02.0f
+  rf x=startx x<128-8 x=x+distance
+    rf y=starty y<64-8 y=y+distance
+      pbs f 0 x y frame
+    rn
+  rn
+  # Wait some time but longer after last frame
+  iif frame==frames-1
+    wte 1000
+  iel
+    wte 75
+  ien
+rn

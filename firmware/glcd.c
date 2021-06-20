@@ -30,15 +30,15 @@ extern volatile uint8_t mcBgColor, mcFgColor;
 // another downside. Since multiple glcd functions use this buffer, the
 // Monochron application using these functions may not implement concurrent or
 // threaded calls to these functions. This is however not an issue since
-// Monochron behaves like a monolithic application except for glcdPutStr() that
-// never requires a buffer anyway.
+// glcd functionality is not used in interrupt functions and thus behaves like
+// a monolithic application.
 // Note: Use glcdBufferRead() to read lcd data into the buffer.
 static u08 glcdBuffer[GLCD_XPIXELS];
 
 // The following arrays contain bitmap templates for fill options third up/down
-static const unsigned char __attribute__ ((progmem)) pattern3Up[] =
+static const uint8_t __attribute__ ((progmem)) pattern3Up[] =
   { 0x49, 0x24, 0x92 };
-static const unsigned char __attribute__ ((progmem)) pattern3Down[] =
+static const uint8_t __attribute__ ((progmem)) pattern3Down[] =
   { 0x49, 0x92, 0x24 };
 
 // The following variables are used for obtaining font information and font
@@ -58,11 +58,168 @@ static u08 fontWidth;
 static u16 fontCharIdx;
 
 // Local function prototypes
-static void glcdBufferBitUpdate(u08 x, u08 y);
+static void glcdBufferBitSet(u08 x, u08 y);
 static void glcdBufferRead(u08 x, u08 yByte, u08 len);
 static u08 glcdFontByteGet(u08 color);
 static u16 glcdFontIdxGet(unsigned char c);
 static u08 glcdFontInfoGet(char c);
+
+//
+// Function: glcdBitmap
+//
+// Draw a bitmap of up to 128 pixels wide and up to 8/16/32 pixels high at any
+// (x,y) pixel position using a bitmap data array.
+// Argument elmType defines the max pixel height of the bitmap data being
+// drawn.
+// Argument origin defines whether the bitmap data points to progmem or ram
+// (stack/heap) data.
+// Arguments xo and yo allow to set an (x,y) offset in the bitmap data. When
+// combining these with w and h we can access any 'rectangular' section of
+// bitmap element data, thus providing support for many image/sprite use cases.
+//
+void glcdBitmap(u08 x, u08 y, u16 xo, u08 yo, u08 w, u08 h, u08 elmType,
+  u08 origin, void *bitmap, u08 color)
+{
+  u08 i, j;
+  u08 yByte = y / 8;
+  u08 startBit = y % 8;
+  u08 doBits = 0;
+  u08 lcdByte = 0;
+  u08 mask;
+  u08 merge;
+  uint32_t template = 0;
+
+  // Loop through each affected y-pixel byte
+  for (i = 0; i < h; i = i + doBits)
+  {
+    // Determine bits to process for a byte and create a mask for it
+    if (h - i < 8 - startBit)
+      doBits = h - i;
+    else
+      doBits = 8 - startBit;
+    mask = (0xff >> (8 - doBits)) << startBit;
+
+    // In case we partly update an lcd byte get current lcd data
+    if (doBits < 8)
+      glcdBufferRead(x, yByte, w);
+
+    // As of now on we're going to write consecutive lcd bytes
+    glcdSetAddress(x, yByte);
+
+    // Loop for each x for current y-pixel byte
+    for (j = 0; j < w; j++)
+    {
+      // Set template from bitmap data that we have to apply to the lcd byte
+      if (elmType == ELM_BYTE)
+      {
+        if (origin == DATA_PMEM)
+          template = pgm_read_byte((const uint8_t *)bitmap + xo + j) >> i;
+        else
+          template = (uint32_t)(((uint8_t *)bitmap)[xo + j] >> i);
+      }
+      else if (elmType == ELM_WORD)
+      {
+        if (origin == DATA_PMEM)
+          template = pgm_read_word((const uint16_t *)bitmap + xo + j) >> i;
+        else
+          template = (uint32_t)(((uint16_t *)bitmap)[xo + j] >> i);
+      }
+      else // ELM_DWORD
+      {
+        if (origin == DATA_PMEM)
+          template = pgm_read_dword((const uint32_t *)bitmap + xo + j) >> i;
+        else
+          template = ((uint32_t *)bitmap)[xo + j] >> i;
+      }
+      merge = (u08)((template >> yo) << startBit);
+      if (color == GLCD_OFF)
+        merge = ~merge;
+
+      // Merge the lcd byte with merge template and write it to lcd
+      if (doBits == 8)
+        lcdByte = merge;
+      else
+        lcdByte = (glcdBuffer[j] & ~mask) | (merge & mask);
+      glcdDataWrite(lcdByte);
+    }
+
+    // Move on to next y-pixel byte where we'll start at the first bit
+    yByte++;
+    startBit = 0;
+  }
+}
+
+//
+// Function: glcdBitmap8PmFg
+//
+// Draw a bitmap up to 8 pixels high using a bitmap data array in foreground
+// color. The bitmap data resides in program space.
+//
+void glcdBitmap8PmFg(u08 x, u08 y, u08 w, u08 h, const uint8_t *bitmap)
+{
+  glcdBitmap(x, y, 0, 0, w, h, ELM_BYTE, DATA_PMEM, (void *)bitmap,
+    mcFgColor);
+}
+
+//
+// Function: glcdBitmap8RaFg
+//
+// Draw a bitmap up to 8 pixels high using a bitmap data array in foreground
+// color. The bitmap data resides in ram.
+//
+void glcdBitmap8RaFg(u08 x, u08 y, u08 w, u08 h, uint8_t *bitmap)
+{
+  glcdBitmap(x, y, 0, 0, w, h, ELM_BYTE, DATA_RAM, (void *)bitmap,
+    mcFgColor);
+}
+
+//
+// Function: glcdBitmap16PmFg
+//
+// Draw a bitmap up to 16 pixels high using a bitmap data array in foreground
+// color. The bitmap data resides in program space.
+//
+void glcdBitmap16PmFg(u08 x, u08 y, u08 w, u08 h, const uint16_t *bitmap)
+{
+  glcdBitmap(x, y, 0, 0, w, h, ELM_WORD, DATA_PMEM, (void *)bitmap,
+    mcFgColor);
+}
+
+//
+// Function: glcdBitmap16RaFg
+//
+// Draw a bitmap up to 16 pixels high using a bitmap data array in foreground
+// color. The bitmap data resides in ram.
+//
+void glcdBitmap16RaFg(u08 x, u08 y, u08 w, u08 h, uint16_t *bitmap)
+{
+  glcdBitmap(x, y, 0, 0, w, h, ELM_WORD, DATA_RAM, (void *)bitmap,
+    mcFgColor);
+}
+
+//
+// Function: glcdBitmap32PmFg
+//
+// Draw a bitmap up to 32 pixels high using a bitmap data array in foreground
+// color. The bitmap data resides in program space.
+//
+void glcdBitmap32PmFg(u08 x, u08 y, u08 w, u08 h, const uint32_t *bitmap)
+{
+  glcdBitmap(x, y, 0, 0, w, h, ELM_DWORD, DATA_PMEM, (void *)bitmap,
+    mcFgColor);
+}
+
+//
+// Function: glcdBitmap32RaFg
+//
+// Draw a bitmap to 32 pixels high using a bitmap data array in foreground
+// color. The bitmap data resides in ram.
+//
+void glcdBitmap32RaFg(u08 x, u08 y, u08 w, u08 h, uint32_t *bitmap)
+{
+  glcdBitmap(x, y, 0, 0, w, h, ELM_DWORD, DATA_RAM, (void *)bitmap,
+    mcFgColor);
+}
 
 //
 // Function: glcdCircle2
@@ -114,14 +271,14 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
         {
           // Mark bottom-right pixel in template
           j = GLCD_TRUE;
-          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + x, i);
+          glcdBufferBitSet(GLCD_CONTROLLER_XPIXELS + x, i);
         }
         i = yCenter - y;
         if ((i >> 3) == yLine)
         {
           // Mark top-right pixel in template
           j = GLCD_TRUE;
-          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + x, i);
+          glcdBufferBitSet(GLCD_CONTROLLER_XPIXELS + x, i);
         }
         if (j == GLCD_TRUE)
         {
@@ -138,14 +295,14 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
         {
           // Mark bottom-right pixel in template
           j = GLCD_TRUE;
-          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + y, i);
+          glcdBufferBitSet(GLCD_CONTROLLER_XPIXELS + y, i);
         }
         i = yCenter - x;
         if ((i >> 3) == yLine)
         {
           // Mark top-right pixel in template
           j = GLCD_TRUE;
-          glcdBufferBitUpdate(GLCD_CONTROLLER_XPIXELS + y, i);
+          glcdBufferBitSet(GLCD_CONTROLLER_XPIXELS + y, i);
         }
         if (j == GLCD_TRUE)
         {
@@ -240,8 +397,8 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
 //
 void glcdDot(u08 x, u08 y, u08 color)
 {
-  unsigned char oldByte;
-  unsigned char newByte;
+  u08 oldByte;
+  u08 newByte;
   u08 mask = (1 << (y & 0x7));
 
   // Get lcd byte containing the dot
@@ -335,15 +492,15 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
 //
 // Fill a rectangle
 //
-void glcdFillRectangle(u08 x, u08 y, u08 a, u08 b, u08 color)
+void glcdFillRectangle(u08 x, u08 y, u08 w, u08 h, u08 color)
 {
-  glcdFillRectangle2(x, y, a, b, ALIGN_AUTO, FILL_FULL, color);
+  glcdFillRectangle2(x, y, w, h, ALIGN_AUTO, FILL_FULL, color);
 }
 
 //
 // Function: glcdFillRectangle2
 //
-// Draw filled rectangle at px[x,y] with size px[a,b].
+// Draw filled rectangle at px[x,y] with size px[w,h].
 //
 // align (note: used for filltypes HALF & THIRDUP/DOWN only):
 // ALIGN_TOP      - Paint top left pixel of box
@@ -363,10 +520,10 @@ void glcdFillRectangle(u08 x, u08 y, u08 a, u08 b, u08 color)
 // display width up to 128 pixels. Our Monochron display happens to be 128
 // pixels wide.
 //
-void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
+void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType,
   u08 color)
 {
-  u08 h, i;
+  u08 i, j;
   s08 virX = 0;
   s08 virY = 0;
   u08 yByte = y / 8;
@@ -395,11 +552,11 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
   {
     //virX = 0;
     if (fillType == FILL_THIRDUP)
-      virY = -(b + startBit) % 3 + 1;
+      virY = -(h + startBit) % 3 + 1;
     else if (fillType == FILL_THIRDDOWN)
-      virY = (b + startBit - 1) % 3;
+      virY = (h + startBit - 1) % 3;
     else if (fillType == FILL_HALF)
-      virY = (b + startBit + 1) & 0x1;
+      virY = (h + startBit + 1) & 0x1;
   }
   else //if (align == ALIGN_AUTO)
   {
@@ -417,15 +574,15 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
     virY = virY + 3;
 
   // Loop through each affected y-pixel byte
-  for (h = 0; h < b; h = h + doBits)
+  for (i = 0; i < h; i = i + doBits)
   {
     // In some cases we partly update an lcd byte or invert it
-    if (startBit != 0 || b - h < 8 || fillType == FILL_INVERSE)
+    if (startBit != 0 || h - i < 8 || fillType == FILL_INVERSE)
     {
       // Read all the required lcd bytes for this y-byte in the line buffer and
       // update them byte by byte
       useBuffer = GLCD_TRUE;
-      glcdBufferRead(x, yByte, a);
+      glcdBufferRead(x, yByte, w);
     }
     else
     {
@@ -437,8 +594,8 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
     glcdSetAddress(x, yByte);
 
     // Process max 8 y-pixel bits for the current y byte
-    if (b - h < 8 - startBit)
-      doBits = b - h;
+    if (h - i < 8 - startBit)
+      doBits = h - i;
     else
       doBits = 8 - startBit;
 
@@ -458,11 +615,11 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
     }
 
     // Loop for each x for current y-pixel byte
-    for (i = 0; i < a; i++)
+    for (j = 0; j < w; j++)
     {
       // Get lcd source byte when needed
       if (useBuffer == GLCD_TRUE)
-        lcdByte = glcdBuffer[i];
+        lcdByte = glcdBuffer[j];
 
       // Set template that we have to apply to the lcd byte
       if (fillType == FILL_FULL)
@@ -471,7 +628,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 a, u08 b, u08 align, u08 fillType,
         template = 0x00;
       else if (fillType == FILL_HALF)
       {
-        if (color == GLCD_ON || i == 0)
+        if (color == GLCD_ON || j == 0)
           template = ~template;
       }
       else if (fillType == FILL_THIRDUP)
@@ -618,7 +775,7 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
     firstWrite = -1;
 
     // Apply the first line section pixel in the line buffer
-    glcdBufferBitUpdate(drawX, drawY);
+    glcdBufferBitSet(drawX, drawY);
 
     // Add points until we find the end of a line or line section
     while (n < endValue)
@@ -656,7 +813,7 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
         endX = drawX;
 
       // Update the line section pixel in the line buffer
-      glcdBufferBitUpdate(drawX, drawY);
+      glcdBufferBitSet(drawX, drawY);
       n++;
     }
 
@@ -1166,6 +1323,16 @@ void glcdWriteCharFg(unsigned char c)
 }
 
 //
+// Function: glcdBufferBitSet
+//
+// Set a bit in a line buffer byte
+//
+static void glcdBufferBitSet(u08 x, u08 y)
+{
+  glcdBuffer[x] = (glcdBuffer[x] | (1 << (y & 0x7)));
+}
+
+//
 // Function: glcdBufferRead
 //
 // Read lcd data from a y byte into buffer glcdBuffer[]
@@ -1195,16 +1362,6 @@ static void glcdBufferRead(u08 x, u08 yByte, u08 len)
     glcdBuffer[i] = glcdDataRead();
     glcdNextAddress();
   }
-}
-
-//
-// Function: glcdBufferBitUpdate
-//
-// Update a bit in a line buffer byte
-//
-static void glcdBufferBitUpdate(u08 x, u08 y)
-{
-  glcdBuffer[x] = (glcdBuffer[x] | (1 << (y & 0x7)));
 }
 
 //

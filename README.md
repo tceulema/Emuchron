@@ -46,7 +46,8 @@ scripts.
 
 ### Where can I find more information on Emuchron
 For detailed information refer to the 100+ page installation, configuration and
-end-user manual "Emuchron_Manual.pdf" in project folder [support].
+end-user manual "Emuchron_Manual.pdf" in project folder
+[support](https://github.com/tceulema/Emuchron/tree/master/support).
 
 ### Acknowledgements
 - CaitSith2 and ladyada\
@@ -58,6 +59,9 @@ an [Arduino project](http://www.youtube.com/watch?v=VqeYvJpibLY).
 - Tz / HarleyHacking\
 The core functionality to encode a QR in the Emuchron QR clocks uses code from
 [qrduino](https://github.com/tz1/qrduino).
+- Techninja (James T) and Super-Awesome Sylvia\
+The Emuchron MarioWorld clock is based on code from
+[MarioChron](https://github.com/techninja/MarioChron).
 
 ### Using and distributing Emuchron
 The Emuchron project and its contents is provided as-is and is distributed

@@ -6,6 +6,7 @@
 #ifndef SCANUTIL_H
 #define SCANUTIL_H
 
+#include "../avrlibtypes.h"
 #include "interpreter.h"
 
 // mchron input stream reader functions
@@ -18,5 +19,5 @@ void cmdArgCleanup(cmdLine_t *cmdLine);
 u08 cmdArgInit(char **input, cmdLine_t *cmdLine);
 u08 cmdArgPublish(cmdLine_t *cmdLine);
 u08 cmdArgRead(char *input, cmdLine_t *cmdLine);
-u08 cmdArgValuePrint(double value, u08 detail);
+u08 cmdArgValuePrint(double value, u08 detail, u08 forceNewline);
 #endif

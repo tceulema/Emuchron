@@ -143,7 +143,7 @@ void btnInit(void)
 //
 SIGNAL(ADC_vect)
 {
-  uint16_t reading, reading2;
+  uint16_t reading;
   sei();
 
   // We get called when ADC is ready so no need to request a conversion
@@ -170,8 +170,8 @@ SIGNAL(ADC_vect)
     {
       // Was not pressed before, debounce by taking another reading
       _delay_ms(10);
-      reading2 = btnADCRead();
-      if (reading2 > 735 || reading2 < 610)
+      reading = btnADCRead();
+      if (reading > 735 || reading < 610)
       {
         // Was a bounce, ignore it
         btnTickerConv = BTN_TICK_CONV_FAST_MS;
@@ -183,8 +183,8 @@ SIGNAL(ADC_vect)
       btnTickerHold = 250;
       while (btnTickerHold)
       {
-        reading2 = btnADCRead();
-        if (reading2 > 735 || reading2 < 610)
+        reading = btnADCRead();
+        if (reading > 735 || reading < 610)
         {
           // Button press-hold was released; signal a single-press
           btnLastState = BTN_NONE;
@@ -207,8 +207,8 @@ SIGNAL(ADC_vect)
     {
       // Was not pressed before, debounce by taking another reading
       _delay_ms(10);
-      reading2 = btnADCRead();
-      if (reading2 > 610 || reading2 < 270)
+      reading = btnADCRead();
+      if (reading > 610 || reading < 270)
       {
         // Was a bounce, ignore it
         btnTickerConv = BTN_TICK_CONV_FAST_MS;
@@ -227,8 +227,8 @@ SIGNAL(ADC_vect)
     {
       // Was not pressed before, debounce by taking another reading
       _delay_ms(10);
-      reading2 = btnADCRead();
-      if (reading2 > 270)
+      reading = btnADCRead();
+      if (reading > 270)
       {
         // Was a bounce, ignore it
         btnTickerConv = BTN_TICK_CONV_FAST_MS;
@@ -246,7 +246,7 @@ SIGNAL(ADC_vect)
 }
 
 //
-// We use the pin change interrupts to detect when alarm switch changes.
+// We use the pin change interrupts to detect when alarm switch changes
 //
 SIGNAL(PCINT0_vect)
 {

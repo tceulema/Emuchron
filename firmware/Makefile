@@ -31,13 +31,13 @@ BASE = anim.c buttons.c config.c glcd.c i2c.c ks0108.c monomain.c util.c
 
 # Monochron clocks - 1
 SRC = $(BASE) \
-  clock/digital.c clock/analog.c clock/puzzle.c \
-  clock/spotfire.c clock/cascade.c clock/speeddial.c clock/spiderplot.c \
-  clock/trafficlight.c
+  clock/digital.c clock/analog.c clock/puzzle.c clock/spotfire.c \
+  clock/cascade.c clock/speeddial.c clock/spiderplot.c clock/trafficlight.c
 
 # Monochron clocks - 2
 #SRC = $(BASE) \
-#  clock/example.c clock/mosquito.c clock/nerd.c clock/pong.c clock/slider.c
+#  clock/example.c clock/marioworld.c clock/mosquito.c clock/nerd.c \
+#  clock/pong.c clock/slider.c clock/wave.c
 
 # Monochron clocks - 3
 #SRC = $(BASE) \
@@ -58,11 +58,11 @@ SRC = $(BASE) \
 # verify whether everything will build cleanly
 #SRC = $(BASE) \
 #  clock/analog.c clock/bigdigit.c clock/digital.c clock/example.c \
-#  clock/mosquito.c clock/nerd.c clock/perftest.c clock/pong.c clock/puzzle.c \
-#  clock/qr.c clock/qrencode.c clock/slider.c clock/spotfire.c \
-#  clock/barchart.c clock/cascade.c clock/crosstable.c \
-#  clock/linechart.c clock/piechart.c clock/speeddial.c clock/spiderplot.c \
-#  clock/thermometer.c clock/trafficlight.c
+#  clock/marioworld.c clock/mosquito.c clock/nerd.c clock/perftest.c \
+#  clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c clock/slider.c \
+#  clock/wave.c clock/spotfire.c clock/barchart.c clock/cascade.c \
+#  clock/crosstable.c clock/linechart.c clock/piechart.c clock/speeddial.c \
+#  clock/spiderplot.c clock/thermometer.c clock/trafficlight.c
 
 # List Assembler source files here.
 # Make them always end in a capital .S. Files ending in a lowercase .s will not

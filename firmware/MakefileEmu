@@ -30,11 +30,12 @@ CSRC = emulator/stub.c emulator/controller.c emulator/lcdglut.c \
   emulator/mchronutil.c emulator/scanutil.c emulator/varutil.c \
   emulator/mchron.c \
   monomain.c ks0108.c glcd.c config.c anim.c \
-  clock/analog.c clock/barchart.c clock/bigdigit.c clock/crosstable.c \
-  clock/digital.c clock/example.c clock/linechart.c clock/mosquito.c \
-  clock/nerd.c clock/piechart.c clock/perftest.c clock/pong.c clock/puzzle.c \
-  clock/qr.c clock/qrencode.c clock/slider.c clock/spotfire.c clock/cascade.c \
-  clock/speeddial.c clock/spiderplot.c clock/thermometer.c clock/trafficlight.c
+  clock/analog.c clock/barchart.c clock/bigdigit.c clock/cascade.c \
+  clock/crosstable.c clock/digital.c clock/example.c clock/linechart.c \
+  clock/marioworld.c clock/mosquito.c clock/nerd.c clock/piechart.c \
+  clock/perftest.c clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c \
+  clock/slider.c clock/spotfire.c clock/speeddial.c clock/spiderplot.c \
+  clock/thermometer.c clock/trafficlight.c clock/wave.c
 
 # Expression evaluator source files
 FSRC = emulator/expr.l
@@ -93,7 +94,7 @@ version:
 
 # Create scanner/parser object file from generated source files
 $(EVALOBJ):	$(BOBJ) $(FOBJ) $(EVALSRC)
-	$(CC) -c $(EVALFLAGS) -o $@ $(EVALSRC)
+	$(CC) -c $(EVALFLAGS) $(STUB) -o $@ $(EVALSRC)
 
 # Create c object file for c source file
 %.o:	%.c
@@ -105,7 +106,7 @@ $(TGT_MCHRON):	$(COBJ) $(EVALOBJ)
 
 # Create alarm audio file using genalarm tool
 $(TGT_ALARM):	$(ALMOBJ)
-	$(CC) -o $(GENALARM) $(ALMOBJ)
+	$(CC) $(STUB) -o $(GENALARM) $(ALMOBJ)
 	./$(GENALARM) $@
 
 # Pull in dependencies created by gcc flag -MMD

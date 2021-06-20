@@ -17,37 +17,22 @@
 #include "glcd.h"
 #include "config.h"
 
-// Config display mode.
-// Note that some items are no longer supported. They are retained for backward
-// compatibility.
-#define SHOW_NONE	99
-#define SHOW_TIME	0
-#define SHOW_DATE	1
-#define SHOW_ALARM	2
-#define SHOW_SNOOZE	3
-#define SET_TIME	4
-#define SET_ALARM	5
-#define SET_ALARMS	6
-#define SET_DATE	7
-#define SET_BRIGHTNESS	8
-#define SET_VOLUME	9
-#define SET_REGION	10
-#define SET_SNOOZE	11
-#define SET_MONTH	12
-#define SET_DAY		13
-#define SET_YEAR	14
-#define SET_DISPLAY	15
-#define SET_ALARM_1	16
-#define SET_ALARM_2	17
-#define SET_ALARM_3	18
-#define SET_ALARM_4	19
-#define SET_ALARM_ID	20
-#define SET_HOUR	101
-#define SET_MIN		102
-#define SET_SEC		103
-#define SET_REG		104
-#define SET_BRT		105
-#define SET_DSP		106
+// Config display modes to navigate the menu and modify values
+#define SET_NONE	255
+#define SET_ALARM	0
+#define SET_TIME	1
+#define SET_DATE	2
+#define SET_DISPLAY	3
+#define SET_BRIGHTNESS	4
+#define EDIT_ALARM_ID	51
+#define EDIT_HOUR	52
+#define EDIT_MIN	53
+#define EDIT_SEC	54
+#define EDIT_MONTH	55
+#define EDIT_DAY	56
+#define EDIT_YEAR	57
+#define EDIT_DISPLAY	58
+#define EDIT_BRIGHTNESS	59
 
 // How many hold increases to pass prior to increasing increase value
 #define CFG_BTN_HOLD_COUNT	10
@@ -149,7 +134,7 @@ static void cfgEventPost(void)
 static uint8_t cfgEventPre(void)
 {
 #ifdef EMULIN
-  if (stubEventGet() == 'q')
+  if (stubEventGet(GLCD_FALSE) == 'q')
     cfgTickerActivity = 0;
 #endif
   // Copy current button and clear for next background button press
@@ -197,12 +182,11 @@ static uint8_t cfgEventPre(void)
 //
 // Function: cfgMenuAlarm
 //
-// This is the state-event machine for the alarm configuration page
+// This is the menu driver for the alarm configuration page
 //
 static void cfgMenuAlarm(void)
 {
-  uint8_t mode = SET_ALARM;
-  uint8_t line;
+  uint8_t line = 255;
 
   // Set parameters for alarm time/selector.
   // Only when all menu items are passed or when a no-press timeout occurs
@@ -212,45 +196,24 @@ static void cfgMenuAlarm(void)
   {
     cfgTickerActivity = CFG_TICK_ACTIVITY_SEC;
     cfgCounterHold = 0;
-
-    switch (mode)
+    switch (line)
     {
-    case SET_ALARM:
-      // Alarm -> Set Alarm 1
-      DEBUGP("Set alarm 1");
-      mode = SET_ALARM_1;
+    case 255:
+      // Init -> Set Alarm 1
+      DEBUGP("Alarm line 0");
       glcdClearScreen(mcBgColor);
       line = 0;
       break;
-    case SET_ALARM_1:
-      // Alarm 1 -> Set Alarm 2
-      DEBUGP("Set alarm 2");
-      mode = SET_ALARM_2;
-      line = 1;
-      break;
-    case SET_ALARM_2:
-      // Alarm 2 -> Set Alarm 3
-      DEBUGP("Set alarm 3");
-      mode = SET_ALARM_3;
-      line = 2;
-      break;
-    case SET_ALARM_3:
-      // Alarm 3 -> Set Alarm 4
-      DEBUGP("Set alarm 4");
-      mode = SET_ALARM_4;
-      line = 3;
-      break;
-    case SET_ALARM_4:
-      // Alarm 4 -> Set Alarm Id
-      DEBUGP("Set alarm Id");
-      mode = SET_ALARM_ID;
-      line = 4;
-      break;
-    default:
+    case 4:
       // Switch back to main menu
       DEBUGP("Return to config menu");
       cfgScreenLock = GLCD_FALSE;
       return;
+    default:
+      // Set Alarm 2..4 and Alarm Id
+      line++;
+      DEBUG(putstring("Alarm line "); uart_putw_dec(line); putstring_nl(""));
+      break;
     }
 
     // Set the requested alarm/selector
@@ -300,11 +263,11 @@ static void cfgMenuAlarmShow(void)
 //
 // Function: cfgMenuMain
 //
-// This is the state-event machine for the main configuration page
+// This is the menu driver for the main configuration page
 //
 void cfgMenuMain(void)
 {
-  uint8_t mode = SHOW_TIME;
+  uint8_t mode = SET_NONE;
 
   glcdClearScreen(mcBgColor);
   cfgTimeSec = rtcDateTime.timeSec;
@@ -325,7 +288,7 @@ void cfgMenuMain(void)
 
     switch (mode)
     {
-    case SHOW_TIME:
+    case SET_NONE:
       // Clock -> Set Alarm
       DEBUGP("Set alarm");
       mode = SET_ALARM;
@@ -429,14 +392,14 @@ static void cfgNextDate(uint8_t *year, uint8_t *month, uint8_t *day,
   uint8_t newMonth = *month;
   uint8_t newDay = *day;
 
-  if (mode == SET_YEAR)
+  if (mode == EDIT_YEAR)
   {
     // Increment year
     newYear = cfgNextNumber(newYear, 100);
     if (!rtcLeapYear(newYear) && newMonth == 2 && newDay > 28)
       newDay = 28;
   }
-  else if (mode == SET_MONTH)
+  else if (mode == EDIT_MONTH)
   {
     // Increment month
     newMonth++;
@@ -457,7 +420,7 @@ static void cfgNextDate(uint8_t *year, uint8_t *month, uint8_t *day,
         newDay = 30;
     }
   }
-  else if (mode == SET_DAY)
+  else if (mode == EDIT_DAY)
   {
     // Increment day
     newDay++;
@@ -547,12 +510,12 @@ static void cfgPrintAlarm(uint8_t line, uint8_t hour, uint8_t min,
   uint8_t mode)
 {
   glcdSetAddress(CFG_MENU_INDENT + 15 * 6, 1 + line);
-  if (mode == SET_HOUR)
+  if (mode == EDIT_HOUR)
     glcdPrintNumberBg(hour);
   else
     glcdPrintNumberFg(hour);
   glcdWriteCharFg(':');
-  if (mode == SET_MIN)
+  if (mode == EDIT_MIN)
     glcdPrintNumberBg(min);
   else
     glcdPrintNumberFg(min);
@@ -582,14 +545,14 @@ static void cfgPrintDate(uint8_t year, uint8_t month, uint8_t day,
   glcdPutStrFg("Date:");
   glcdPutStrFg(animDays[rtcDotw(month, day, year)]);
   glcdPutStr(animMonths[month - 1],
-    (mode == SET_MONTH) ? mcBgColor : mcFgColor);
+    (mode == EDIT_MONTH) ? mcBgColor : mcFgColor);
   glcdWriteCharFg(' ');
-  if (mode == SET_DAY)
+  if (mode == EDIT_DAY)
     glcdPrintNumberBg(day);
   else
     glcdPrintNumberFg(day);
   glcdWriteCharFg(',');
-  if (mode == SET_YEAR)
+  if (mode == EDIT_YEAR)
   {
     glcdPrintNumberBg(20);
     glcdPrintNumberBg(year);
@@ -662,17 +625,17 @@ static void cfgPrintInstruct2(char *line1b, char *line2b)
 static void cfgPrintTime(uint8_t hour, uint8_t min, uint8_t sec, uint8_t mode)
 {
   glcdSetAddress(CFG_MENU_INDENT + 12 * 6, 2);
-  if (mode == SET_HOUR)
+  if (mode == EDIT_HOUR)
     glcdPrintNumberBg(hour);
   else
     glcdPrintNumberFg(hour);
   glcdWriteCharFg(':');
-  if (mode == SET_MIN)
+  if (mode == EDIT_MIN)
     glcdPrintNumberBg(min);
   else
     glcdPrintNumberFg(min);
   glcdWriteCharFg(':');
-  if (mode == SET_SEC)
+  if (mode == EDIT_SEC)
     glcdPrintNumberBg(sec);
   else
     glcdPrintNumberFg(sec);
@@ -714,7 +677,7 @@ static void cfgSetAlarm(uint8_t line)
         {
           // Select alarm number item
           DEBUGP("Set selected alarm");
-          mode = SET_ALARM_ID;
+          mode = EDIT_ALARM_ID;
           glcdSetAddress(CFG_MENU_INDENT + 18 * 6, 5);
           glcdPrintNumberBg(newAlarmSelect + 1);
           cfgPrintInstruct2("alm", "alm");
@@ -723,21 +686,21 @@ static void cfgSetAlarm(uint8_t line)
         {
           // Select hour item
           DEBUGP("Set alarm hour");
-          mode = SET_HOUR;
+          mode = EDIT_HOUR;
           cfgPrintInstruct2("hr.", "hour");
         }
       }
-      else if (mode == SET_HOUR)
+      else if (mode == EDIT_HOUR)
       {
         // Select minute item
         DEBUGP("Set alarm min");
-        mode = SET_MIN;
+        mode = EDIT_MIN;
         cfgPrintInstruct2("min", "min");
       }
       else
       {
         // Deselect item
-        if (mode == SET_ALARM_ID)
+        if (mode == EDIT_ALARM_ID)
         {
           // Save alarm number item
           glcdSetAddress(CFG_MENU_INDENT + 18 * 6, 5);
@@ -760,7 +723,7 @@ static void cfgSetAlarm(uint8_t line)
     }
     if (cfgButtonPressed & BTN_PLUS || btnHold)
     {
-      if (mode == SET_ALARM_ID)
+      if (mode == EDIT_ALARM_ID)
       {
         // Increment alarm number item
         newAlarmSelect++;
@@ -772,7 +735,7 @@ static void cfgSetAlarm(uint8_t line)
         DEBUG(uart_putw_dec(newAlarmSelect + 1));
         DEBUG(putstring_nl(""));
       }
-      else if (mode == SET_HOUR)
+      else if (mode == EDIT_HOUR)
       {
         // Increment hour item
         newHour++;
@@ -782,7 +745,7 @@ static void cfgSetAlarm(uint8_t line)
         DEBUG(uart_putw_dec(newHour));
         DEBUG(putstring_nl(""));
       }
-      else if (mode == SET_MIN)
+      else if (mode == EDIT_MIN)
       {
         // Increment minute item
         newMin = cfgNextNumber(newMin, 60);
@@ -791,12 +754,10 @@ static void cfgSetAlarm(uint8_t line)
         DEBUG(putstring_nl(""));
       }
     }
-    if (cfgButtonPressed || btnHold)
-    {
-      // Update display in case alarm time was changed
-      if (line != 4)
-        cfgPrintAlarm(line, newHour, newMin, mode);
-    }
+
+    // Update display in case alarm time is (de-)edited
+    if ((cfgButtonPressed || btnHold) && line != 4)
+      cfgPrintAlarm(line, newHour, newMin, mode);
 
     cfgEventPost();
   }
@@ -856,7 +817,7 @@ static void cfgSetBacklight(void)
       {
         // Select backlight item
         DEBUGP("Setting backlight");
-        mode = SET_BRT;
+        mode = EDIT_BRIGHTNESS;
         cfgPrintInstruct1(CFG_INSTR_CHANGE, CFG_INSTR_SAVE);
       }
       else
@@ -869,19 +830,19 @@ static void cfgSetBacklight(void)
     if (cfgButtonPressed & BTN_PLUS || btnHold)
     {
       // Increment brightness
-      if (mode == SET_BRT)
+      if (mode == EDIT_BRIGHTNESS)
       {
         if (OCR2B >= OCR2A_VALUE)
           OCR2B = 0;
         else
-          OCR2B += OCR2B_PLUS;
+          OCR2B = OCR2B + OCR2B_PLUS;
       }
     }
     if (cfgButtonPressed || btnHold)
     {
       // Update display
       glcdSetAddress(CFG_MENU_INDENT + 18 * 6, 5);
-      if (mode == SET_BRT)
+      if (mode == EDIT_BRIGHTNESS)
         glcdPrintNumberBg(OCR2B >> OCR2B_BITSHIFT);
       else
         glcdPrintNumberFg(OCR2B >> OCR2B_BITSHIFT);
@@ -919,21 +880,21 @@ static void cfgSetDate(void)
       {
         // Select month item
         DEBUGP("Set date month");
-        mode = SET_MONTH;
+        mode = EDIT_MONTH;
         cfgPrintInstruct2("mon", "mon");
       }
-      else if (mode == SET_MONTH)
+      else if (mode == EDIT_MONTH)
       {
         // Select month day
         DEBUGP("Set date day");
-        mode = SET_DAY;
+        mode = EDIT_DAY;
         cfgPrintInstruct2("day", "day");
       }
-      else if ((mode == SET_DAY))
+      else if ((mode == EDIT_DAY))
       {
         // Select year item
         DEBUGP("Set year");
-        mode = SET_YEAR;
+        mode = EDIT_YEAR;
         cfgPrintInstruct2("yr.", "year");
       }
       else
@@ -989,7 +950,7 @@ static void cfgSetDisplay(void)
       {
         // Select display item
         DEBUGP("Setting display");
-        mode = SET_DSP;
+        mode = EDIT_DISPLAY;
         cfgPrintDisplay(mcBgColor);
         cfgPrintInstruct1(CFG_INSTR_CHANGE, CFG_INSTR_SAVE);
       }
@@ -1007,7 +968,7 @@ static void cfgSetDisplay(void)
     }
     if (cfgButtonPressed & BTN_PLUS || btnHold)
     {
-      if (mode == SET_DSP)
+      if (mode == EDIT_DISPLAY)
       {
         // Toggle display mode
         uint8_t temp = mcBgColor;
@@ -1062,21 +1023,21 @@ static void cfgSetTime(void)
         newSec = rtcDateTime.timeSec;
         // Select hour item
         DEBUGP("Set time hour");
-        mode = SET_HOUR;
+        mode = EDIT_HOUR;
         cfgPrintInstruct2("hr.", "hour");
       }
-      else if (mode == SET_HOUR)
+      else if (mode == EDIT_HOUR)
       {
         // Select minute item
         DEBUGP("Set time min");
-        mode = SET_MIN;
+        mode = EDIT_MIN;
         cfgPrintInstruct2("min", "min");
       }
-      else if (mode == SET_MIN)
+      else if (mode == EDIT_MIN)
       {
         // Select second item
         DEBUGP("Set time sec");
-        mode = SET_SEC;
+        mode = EDIT_SEC;
         cfgPrintInstruct2("sec", "sec");
       }
       else
@@ -1095,17 +1056,17 @@ static void cfgSetTime(void)
     if (cfgButtonPressed & BTN_PLUS || btnHold)
     {
       // Increment the time element currently in edit mode
-      if (mode == SET_HOUR)
+      if (mode == EDIT_HOUR)
       {
         newHour++;
         if (newHour >= 24)
           newHour = 0;
       }
-      else if (mode == SET_MIN)
+      else if (mode == EDIT_MIN)
       {
         newMin = cfgNextNumber(newMin, 60);
       }
-      else if (mode == SET_SEC)
+      else if (mode == EDIT_SEC)
       {
         newSec = cfgNextNumber(newSec, 60);
       }
@@ -1114,10 +1075,6 @@ static void cfgSetTime(void)
     {
       // Update display
       cfgPrintTime(newHour, newMin, newSec, mode);
-
-      // When Menu is pressed resume updating time as we'll leave this menu
-      if (cfgButtonPressed & BTN_MENU)
-        cfgScreenLock = GLCD_FALSE;
    }
 
     cfgEventPost();

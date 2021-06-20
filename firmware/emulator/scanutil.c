@@ -30,19 +30,21 @@
 extern double exprValue;
 extern u08 exprAssign;
 
+// Functional name of mchron command
+extern char *mchronCmdName;
+
 // This is me
 extern const char *__progname;
 
 // The variables to store the published command line argument scan results
 char argChar[ARG_TYPE_COUNT_MAX];
 double argDouble[ARG_TYPE_COUNT_MAX];
-char *argWord[ARG_TYPE_COUNT_MAX];
-char *argString = NULL;
+char *argString[ARG_TYPE_COUNT_MAX];
 
 // Index in the several scan result arrays
 static u08 argCharIdx = 0;
 static u08 argDoubleIdx = 0;
-static u08 argWordIdx = 0;
+static u08 argStringIdx = 0;
 
 // The current readline history in-memory cache length and history file
 static int rlCacheLen = 0;
@@ -50,9 +52,9 @@ static char *rlHistoryFile = NULL;
 
 // Local function prototypes
 static char *cmdArgCreate(char *arg, int len, int isExpr);
-static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char argValue);
+static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char *argValue);
 static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue);
-static u08 cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue);
+static u08 cmdArgValidateRegex(cmdArg_t *cmdArg, char *argValue);
 static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue);
 
 //
@@ -168,7 +170,7 @@ u08 cmdArgInit(char **input, cmdLine_t *cmdLine)
 // Function: cmdArgPublish
 //
 // Publish the command line arguments of a command line to the defined command
-// argument variables: argChar[], argDouble[], argWord[] and argString.
+// argument variables: argChar[], argDouble[] and argString[].
 // In case of a non-numeric argument type its domain profile has already been
 // checked. In case of a numeric argument we need to run it through the
 // expression evaluator and then check its domain profile.
@@ -179,16 +181,15 @@ u08 cmdArgPublish(cmdLine_t *cmdLine)
   int argCount = cmdLine->cmdCommand->argCount;
   int i = 0;
   u08 argType;
-  u08 retVal = CMD_RET_OK;
 
   // Reset the argument array pointers and set number of args to publish
   argCharIdx = 0;
   argDoubleIdx = 0;
-  argWordIdx = 0;
+  argStringIdx = 0;
 
   // First publish the command name
-  argWord[argWordIdx] = cmdLine->cmdCommand->cmdName;
-  argWordIdx++;
+  argString[argStringIdx] = cmdLine->cmdCommand->cmdName;
+  argStringIdx++;
 
   // Publish all other arguments (if any remain)
   for (i = 0; i < argCount; i++)
@@ -196,79 +197,34 @@ u08 cmdArgPublish(cmdLine_t *cmdLine)
     argType = cmdArg[i].argType;
     if (argType == ARG_CHAR)
     {
-      // Verify argument count overflow and publish the char argument
-      if (argCharIdx == ARG_TYPE_COUNT_MAX)
-      {
-        printf("%s? internal: overflow char argument count\n",
-          cmdArg[i].argName);
-        return CMD_RET_ERROR;
-      }
       argChar[argCharIdx] = cmdLine->args[i][0];
       argCharIdx++;
     }
-    else if (argType == ARG_UNUM || argType == ARG_NUM ||
-      argType == ARG_ASSIGN)
+    else if (argType == ARG_NUM)
     {
-      // Verify argument count overflow
-      if (argDoubleIdx == ARG_TYPE_COUNT_MAX)
-      {
-        printf("%s? internal: overflow numeric argument count\n",
-          cmdArg[i].argName);
-        return CMD_RET_ERROR;
-      }
-
       // Evaluate expression and validate numeric type and expression value
-      retVal = exprEvaluate(cmdArg[i].argName, cmdLine->args[i]);
-      if (retVal != CMD_RET_OK)
+      if (exprEvaluate(cmdArg[i].argName, cmdLine->args[i]) != CMD_RET_OK)
         return CMD_RET_ERROR;
-      if (argType == ARG_UNUM && exprValue < 0)
-      {
-        printf("%s? invalid: ", cmdArg[i].argName);
-        cmdArgValuePrint(exprValue, GLCD_FALSE);
-        printf("\n");
+      if (cmdArgValidateNum(&cmdArg[i], exprValue) != CMD_RET_OK)
         return CMD_RET_ERROR;
-      }
-      if (argType == ARG_ASSIGN && exprAssign == GLCD_FALSE)
-      {
-        printf("%s? parse error\n", cmdArg[i].argName);
-        return CMD_RET_ERROR;
-      }
-      if (cmdArg[i].cmdArgDomain->argDomainType != DOM_NULL_INFO)
-      {
-        retVal = cmdArgValidateNum(&cmdArg[i], exprValue);
-        if (retVal != CMD_RET_OK)
-          return retVal;
-      }
 
       // Publish the resulting value of the expression
       argDouble[argDoubleIdx] = exprValue;
       argDoubleIdx++;
     }
-    else if (argType == ARG_WORD)
+    else if (argType == ARG_STRING)
     {
-      // Verify argument count overflow and publish the word argument
-      if (argWordIdx == ARG_TYPE_COUNT_MAX)
-      {
-        printf("%s? internal: overflow word argument count\n",
-          cmdArg[i].argName);
-        return CMD_RET_ERROR;
-      }
-      argWord[argWordIdx] = cmdLine->args[i];
-      argWordIdx++;
-    }
-    else if (argType == ARG_STRING || argType == ARG_STR_OPT)
-    {
-      // Publish the string argument
-      argString = cmdLine->args[i];
+      argString[argStringIdx] = cmdLine->args[i];
+      argStringIdx++;
     }
     else
     {
-      printf("internal: invalid element: %d %d\n", i, argType);
+      printf("internal: invalid element (%d,%d)\n", i, argType);
       return CMD_RET_ERROR;
     }
   }
 
-  return retVal;
+  return CMD_RET_OK;
 }
 
 //
@@ -285,11 +241,10 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
   char c;
   cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
   u08 argType;
-  u08 argDomainType;
+  u08 domType;
   int argCount = cmdLine->cmdCommand->argCount;
   int i = 0;
   int j = 0;
-  u08 retVal = CMD_RET_OK;
 
   // Allocate and init pointer array for split-up command line arguments
   if (argCount > 0)
@@ -304,10 +259,10 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
   {
     c = *workPtr;
     argType = cmdArg[i].argType;
-    argDomainType = cmdArg[i].cmdArgDomain->argDomainType;
+    domType = cmdArg[i].cmdDomain->domType;
 
     // Verify unexpected end-of-string
-    if (argType != ARG_STR_OPT && c == '\0')
+    if (domType != DOM_STRING_OPT && c == '\0')
     {
       printf("%s? missing value\n", cmdArg[i].argName);
       return CMD_RET_ERROR;
@@ -316,64 +271,53 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
     // Scan argument based on argument type
     if (argType == ARG_CHAR)
     {
-      // Scan and copy a single char argument
+      // Scan and validate a single char argument
       j = strcspn(workPtr, " \t");
-      if (j > 1)
-      {
-        printf("%s? invalid: not a single character\n", cmdArg[i].argName);
+      cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+      if (cmdArgValidateChar(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
         return CMD_RET_ERROR;
-      }
-      cmdLine->args[i] = cmdArgCreate(workPtr, 1, GLCD_FALSE);
-
-      // Validate the character (if a validation rule has been setup)
-      if (argDomainType != DOM_NULL_INFO)
-      {
-        retVal = cmdArgValidateChar(&cmdArg[i], *cmdLine->args[i]);
-        if (retVal != CMD_RET_OK)
-          return retVal;
-      }
     }
-    else if (argType == ARG_UNUM || argType == ARG_NUM ||
-             argType == ARG_ASSIGN)
+    else if (argType == ARG_NUM)
     {
       // Copy the flex/bison expression argument up to next delimeter.
       // Validation is done at runtime when the expression is evaluated.
       j = strcspn(workPtr, " \t");
       cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_TRUE);
     }
-    else if (argType == ARG_WORD)
+    else if (argType == ARG_STRING)
     {
-      // Copy the word argument up to next delimeter
-      j = strcspn(workPtr, " \t");
-      cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
-
-      // Validate the word (if a validation rule has been setup)
-      if (argType == ARG_WORD)
+      // Validate the string (if a validation rule has been setup)
+      if (domType == DOM_WORD_VAL)
       {
-        if (argDomainType == DOM_WORD)
-        {
-          retVal = cmdArgValidateWord(&cmdArg[i], cmdLine->args[i]);
-          if (retVal != CMD_RET_OK)
-            return retVal;
-        }
-        else if (argDomainType == DOM_VAR_NAME ||
-            argDomainType == DOM_VAR_NAME_ALL)
-        {
-          retVal = cmdArgValidateVar(&cmdArg[i], cmdLine->args[i]);
-          if (retVal != CMD_RET_OK)
-            return retVal;
-        }
+        // Copy the word argument up to next delimeter and validate value
+        j = strcspn(workPtr, " \t");
+        cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+        if (cmdArgValidateWord(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
+          return CMD_RET_ERROR;
       }
-    }
-    else if (argType == ARG_STRING || argType == ARG_STR_OPT)
-    {
-      // Copy the remainder of the input string (that may be empty)
-      j = strlen(workPtr);
-      cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+      else if (domType == DOM_WORD_REGEX)
+      {
+        // Copy the word argument up to next delimeter and validate value
+        j = strcspn(workPtr, " \t");
+        cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+        if (cmdArgValidateRegex(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
+          return CMD_RET_ERROR;
+      }
+      else if (domType == DOM_STRING || domType == DOM_STRING_OPT)
+      {
+        // Copy the remainder of the input string (that may be empty)
+        j = strlen(workPtr);
+        cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+      }
+      else
+      {
+        printf("internal: invalid element domain (%d,%d)\n", i, domType);
+        return CMD_RET_ERROR;
+      }
     }
     else
     {
-      printf("internal: invalid element: %d %d\n", i, argType);
+      printf("internal: invalid element (%d,%d)\n", i, argType);
       return CMD_RET_ERROR;
     }
 
@@ -385,8 +329,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
   // Verify end-of-line
   if (*workPtr != '\0')
   {
-    printf("command %s? too many arguments\n",
-      cmdLine->cmdCommand->cmdName);
+    printf("%s? too many arguments\n", mchronCmdName);
     return CMD_RET_ERROR;
   }
 
@@ -400,22 +343,29 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
 //
 // Validate a character argument with a validation profile
 //
-static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char argValue)
+static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char *argValue)
 {
   int i = 0;
   u08 charFound = GLCD_FALSE;
-  char *argCharList = cmdArg->cmdArgDomain->argTextList;
+  char *argCharList = cmdArg->cmdDomain->domTextList;
 
-  if (cmdArg->cmdArgDomain->argDomainType != DOM_CHAR)
+  if (cmdArg->cmdDomain->domType != DOM_CHAR_VAL)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
+    return CMD_RET_ERROR;
+  }
+
+  // We must find a single char only
+  if (argValue[1] != '\0')
+  {
+    printf("%s? invalid: %s\n", cmdArg->argName, argValue);
     return CMD_RET_ERROR;
   }
 
   // Try to find the character in the character validation list
   while (charFound == GLCD_FALSE && argCharList[i] != '\0')
   {
-    if (argCharList[i] == argValue)
+    if (argCharList[i] == argValue[0])
       charFound = GLCD_TRUE;
     i++;
   }
@@ -423,7 +373,7 @@ static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char argValue)
   // Return error if not found
   if (charFound == GLCD_FALSE)
   {
-    printf("%s? unknown: %c\n", cmdArg->argName, argValue);
+    printf("%s? invalid: %s\n", cmdArg->argName, argValue);
     return CMD_RET_ERROR;
   }
 
@@ -437,36 +387,39 @@ static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char argValue)
 //
 static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
 {
-  u08 argDomainType = cmdArg->cmdArgDomain->argDomainType;
+  u08 domType = cmdArg->cmdDomain->domType;
 
   // Validate internal integrity of validation structure
-  if (argDomainType != DOM_NUM_MIN && argDomainType != DOM_NUM_MAX &&
-      argDomainType != DOM_NUM_RANGE)
+  if (domType != DOM_NUM && domType != DOM_NUM_RANGE &&
+      domType != DOM_NUM_ASSIGN)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
     return CMD_RET_ERROR;
   }
 
-  // Validate minimum value
-  if (argDomainType == DOM_NUM_MIN || argDomainType == DOM_NUM_RANGE)
+  // Validate min/max value while allowing some math rounding errors
+  if (domType == DOM_NUM_RANGE)
   {
-    if (argValue < cmdArg->cmdArgDomain->argNumMin)
+    if (argValue <= cmdArg->cmdDomain->domNumMin - 0.1)
     {
       printf("%s? invalid: ", cmdArg->argName);
-      cmdArgValuePrint(argValue, GLCD_FALSE);
-      printf("\n");
+      cmdArgValuePrint(argValue, GLCD_FALSE, GLCD_TRUE);
+      return CMD_RET_ERROR;
+    }
+    if (argValue >= cmdArg->cmdDomain->domNumMax + 0.1)
+    {
+      printf("%s? invalid: ", cmdArg->argName);
+      cmdArgValuePrint(argValue, GLCD_FALSE, GLCD_TRUE);
       return CMD_RET_ERROR;
     }
   }
 
-  // Validate maximum value
-  if (argDomainType == DOM_NUM_MAX || argDomainType == DOM_NUM_RANGE)
+  // Validate assignment expression
+  if (domType == DOM_NUM_ASSIGN)
   {
-    if (argValue - cmdArg->cmdArgDomain->argNumMax >= 1)
+    if (exprAssign == GLCD_FALSE)
     {
-      printf("%s? invalid: ", cmdArg->argName);
-      cmdArgValuePrint(argValue, GLCD_FALSE);
-      printf("\n");
+      printf("%s? parse error\n", cmdArg->argName);
       return CMD_RET_ERROR;
     }
   }
@@ -475,40 +428,40 @@ static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
 }
 
 //
-// Function: cmdArgValidateVar
+// Function: cmdArgValidateRegex
 //
-// Validate a variable name. When used in an expression, variable names are
-// validated in the expression evaluator. For commands 'vr' and 'lr' however we
-// take the variable name as a word input and we must validate ourselves
-// whether it consists of [a-zA-Z_] characters, and for 'vr' where it may also
-// be a '.'.
+// Validate a string with a regex template. Currently used for scanning
+// variable names.
+// When used in an expression, variable names are validated in the expression
+// evaluator. For commands 'vr' and 'lr' however we take the variable name as a
+// word input and we must validate ourselves whether it consists of [a-zA-Z_]
+// characters, and for 'vr' where it may also be a '.'.
 //
 // NOTE: When the scan profile for a variable name, as defined in expr.l
-// [firmware/emulator], is modified, this function must be changed as well.
+// [firmware/emulator] is modified, the regex pattern in all associated command
+// dictionary domain entries in mchrondict.h [firmeware/emulator] using
+// domaintype DOM_WORD_REGEX must be modified as well.
 //
-static u08 cmdArgValidateVar(cmdArg_t *cmdArg, char *argValue)
+static u08 cmdArgValidateRegex(cmdArg_t *cmdArg, char *argValue)
 {
   regex_t regex;
   int status = 0;
-  u08 argDomainType = cmdArg->cmdArgDomain->argDomainType;
 
-  if (argDomainType != DOM_VAR_NAME && argDomainType != DOM_VAR_NAME_ALL)
+  if (cmdArg->cmdDomain->domType != DOM_WORD_REGEX)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
     return CMD_RET_ERROR;
   }
 
-  // Scan the variable name argument using a regexp pattern
-  if (argDomainType == DOM_VAR_NAME)
-    regcomp(&regex, "^[a-zA-Z_]+$", REG_EXTENDED | REG_NOSUB);
-  else
-    regcomp(&regex, "^(\\.|[a-zA-Z_]+)$", REG_EXTENDED | REG_NOSUB);
+  // Init and validate the regex pattern
+  status = regcomp(&regex, cmdArg->cmdDomain->domTextList,
+    REG_EXTENDED | REG_NOSUB);
   status = regexec(&regex, argValue, (size_t)0, NULL, 0);
   regfree(&regex);
   if (status != 0)
   {
-    // Invalid variable name character found
-    printf("%s? invalid\n", cmdArg->argName);
+    // Invalid input according pattern
+    printf("%s? invalid: %s\n", cmdArg->argName, argValue);
     return CMD_RET_ERROR;
   }
 
@@ -525,9 +478,9 @@ static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
   int i = 0;
   int j = 0;
   u08 wordFound = GLCD_FALSE;
-  char *argWordList = cmdArg->cmdArgDomain->argTextList;
+  char *argWordList = cmdArg->cmdDomain->domTextList;
 
-  if (cmdArg->cmdArgDomain->argDomainType != DOM_WORD)
+  if (cmdArg->cmdDomain->domType != DOM_WORD_VAL)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
     return CMD_RET_ERROR;
@@ -578,45 +531,52 @@ static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
   // Return error if not found
   if (wordFound == GLCD_FALSE)
   {
-    printf("%s? unknown: %s\n", cmdArg->argName, argValue);
+    printf("%s? invalid: %s\n", cmdArg->argName, argValue);
     return CMD_RET_ERROR;
   }
 
   return CMD_RET_OK;
 }
 
-
 //
 // Function: cmdArgValuePrint
 //
 // Print a number in the desired format and return print length in characters
+// including optional newline char
 //
-u08 cmdArgValuePrint(double value, u08 detail)
+u08 cmdArgValuePrint(double value, u08 detail, u08 forceNewline)
 {
+  u08 length = 0;
+
   if (fabs(value) >= 10000 || fabs(value) < 0.01L)
   {
     if (detail == GLCD_TRUE)
     {
       if ((double)((long long)value) == value &&
           fabs(value) < 10E9L)
-        return printf("%lld ", (long long)value);
+        length = printf("%lld ", (long long)value);
       else
-        return printf("%.6g ", value);
+        length = printf("%.6g ", value);
     }
     else
     {
-      return printf("%.3g ", value);
+      length = printf("%.3g ", value);
     }
   }
   else
   {
     if ((double)((long long)value) == value)
-      return printf("%lld ", (long long)value);
+      length = printf("%lld ", (long long)value);
     else if (detail == GLCD_TRUE)
-      return printf("%.6f ", value);
+      length = printf("%.6f ", value);
     else
-      return printf("%.2f ", value);
+      length = printf("%.2f ", value);
   }
+
+  if (forceNewline == GLCD_TRUE)
+    length = length + printf("\n");
+
+  return length;
 }
 
 //

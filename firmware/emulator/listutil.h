@@ -6,6 +6,7 @@
 #ifndef LISTUTIL_H
 #define LISTUTIL_H
 
+#include "../global.h"
 #include "interpreter.h"
 
 // mchron interpreter command line/list execution functions
@@ -20,5 +21,5 @@ void cmdListStatsPrint(void);
 cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot);
 void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot);
 u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
-  char *fileName, int fileExecDepth);
+  char *argName, char *fileName, int fileExecDepth);
 #endif

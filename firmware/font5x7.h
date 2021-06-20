@@ -8,7 +8,7 @@
 
 // Standard ascii 5x7 font.
 // Defines ascii characters 0x20-0x7f (32-127).
-const unsigned char __attribute__ ((progmem)) Font5x7[] =
+static const uint8_t __attribute__ ((progmem)) Font5x7[] =
 {
   0x00, 0x00, 0x00, 0x00, 0x00, // (space)
   0x00, 0x00, 0x5f, 0x00, 0x00, // !

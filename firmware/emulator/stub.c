@@ -246,23 +246,13 @@ void alarmSoundStop(void)
 //
 void alarmSwitchSet(u08 on, u08 show)
 {
-  uint16_t pinMask = 0;
-
   // Switch alarm on or off
   if (on == GLCD_TRUE)
-  {
-    if (show == GLCD_TRUE)
-      printf("alarm  : on\n");
-    pinMask = ~(0x1 << ALARM);
-    ALARM_PIN = ALARM_PIN & pinMask;
-  }
+    ALARM_PIN = ALARM_PIN & ~_BV(ALARM);
   else
-  {
-    if (show == GLCD_TRUE)
-      printf("alarm  : off\n");
-    pinMask = 0x1 << ALARM;
-    ALARM_PIN = ALARM_PIN | pinMask;
-  }
+    ALARM_PIN = ALARM_PIN | _BV(ALARM);
+  if (show == GLCD_TRUE)
+    alarmSwitchShow();
 }
 
 //
@@ -286,23 +276,13 @@ void alarmSwitchShow(void)
 //
 void alarmSwitchToggle(u08 show)
 {
-  uint16_t pinMask = 0;
-
   // Toggle alarm switch
   if (ALARM_PIN & _BV(ALARM))
-  {
-    pinMask = ~(0x1 << ALARM);
-    ALARM_PIN = ALARM_PIN & pinMask;
-    if (show == GLCD_TRUE)
-      alarmSwitchShow();
-  }
+    ALARM_PIN = ALARM_PIN & ~_BV(ALARM);
   else
-  {
-    pinMask = 0x1 << ALARM;
-    ALARM_PIN = ALARM_PIN | pinMask;
-    if (show == GLCD_TRUE)
-      alarmSwitchShow();
-  }
+    ALARM_PIN = ALARM_PIN | _BV(ALARM);
+  if (show == GLCD_TRUE)
+    alarmSwitchShow();
 }
 
 //
@@ -470,7 +450,7 @@ void stubDelay(int x)
 uint8_t stubEepRead(uint8_t *eprombyte)
 {
   if ((size_t)eprombyte >= EE_SIZE)
-    emuCoreDump(CD_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
+    emuCoreDump(CD_EEPROM, __func__, (int)(size_t)eprombyte, 0, 0, 0);
   return stubEeprom[(size_t)eprombyte];
 }
 
@@ -492,7 +472,7 @@ void stubEepReset(void)
 void stubEepWrite(uint8_t *eprombyte, uint8_t value)
 {
   if ((size_t)eprombyte >= EE_SIZE)
-    emuCoreDump(CD_EEPROM, __func__, (size_t)eprombyte, 0, 0, 0);
+    emuCoreDump(CD_EEPROM, __func__, (int)(size_t)eprombyte, 0, 0, 0);
   stubEeprom[(size_t)eprombyte] = value;
 }
 
@@ -503,7 +483,7 @@ void stubEepWrite(uint8_t *eprombyte, uint8_t value)
 // previous call, an optional keyboard event emulating the three buttons
 // (m,s,+) and alarm switch (a), and misc emulator commands.
 //
-char stubEventGet(void)
+char stubEventGet(u08 stats)
 {
   char ch = '\0';
   uint8_t keypress = GLCD_FALSE;
@@ -528,16 +508,19 @@ char stubEventGet(void)
   {
     // Wait remaining time for cycle while detecting timer expiry
     waitTimerExpiry(&tvCycleTimer, ANIM_TICK_CYCLE_MS, GLCD_FALSE, &remaining);
-    if (remaining >= 0)
+    if (stats == GLCD_TRUE)
     {
-      inTimeCount++;
-      waitTotal = waitTotal + remaining;
-      if (minSleep > (int)(remaining / 1000))
-        minSleep = (int)(remaining / 1000);
-    }
-    else if (eventCycleState == CYCLE_NOWAIT)
-    {
-      outTimeCount++;
+      if (remaining >= 0)
+      {
+        inTimeCount++;
+        waitTotal = waitTotal + remaining;
+        if (minSleep > (int)(remaining / 1000))
+          minSleep = (int)(remaining / 1000);
+      }
+      else if (eventCycleState == CYCLE_NOWAIT)
+      {
+        outTimeCount++;
+      }
     }
   }
 
@@ -553,7 +536,8 @@ char stubEventGet(void)
       eventCycleState == CYCLE_WAIT_STATS)
   {
     // Statistics
-    singleCycleCount++;
+    if (stats == GLCD_TRUE)
+      singleCycleCount++;
 
     // Reset any keypress hold
     hold = GLCD_FALSE;
@@ -887,16 +871,15 @@ u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
   else if (length == 8)
   {
     // Assume it is a request to set the RTC time
-    uint8_t sec, min, hr, day, date, mon, yr;
+    uint8_t sec, min, hr, date, mon, yr;
 
     sec = ((data[1] >> 4) & 0xf) * 10 + (data[1] & 0xf);
     min = ((data[2] >> 4) & 0xf) * 10 + (data[2] & 0xf);
     hr = ((data[3] >> 4) & 0xf) * 10 + (data[3] & 0xf);
-    day = ((data[4] >> 4) & 0xf) * 10 + (data[4] & 0xf);
     date = ((data[5] >> 4) & 0xf) * 10 + (data[5] & 0xf);
     mon = ((data[6] >> 4) & 0xf) * 10 + (data[6] & 0xf);
     yr = ((data[7] >> 4) & 0xf) * 10 + (data[7] & 0xf);
-    stubTimeSet(sec, min, hr, day, date, mon, yr);
+    stubTimeSet(sec, min, hr, date, mon, yr);
     retVal = 0;
   }
   else
@@ -1011,13 +994,13 @@ void stubStatsReset(void)
 //
 // Set mchron time
 //
-// Values for sec (for time) and date (for date):
-// 70 = keep time or date as-is
-// 80 = reset time or date to system value
+// Values for respectively sec (for time) / date (for date):
+// DT_TIME_KEEP / DT_DATE_KEEP = keep time or date as-is
+// DT_TIME_RESET / DT_DATE_RESET = reset time or date to <now>
 // other = use parameters for new time or date
 //
-u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
-  uint8_t date, uint8_t mon, uint8_t yr)
+u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
+  uint8_t mon, uint8_t yr)
 {
   double timeDeltaNew = 0L;
   struct timeval tvNow;
@@ -1042,14 +1025,14 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   tmNewCopy = *tmNow;
 
   // Verify what to do with time
-  if (sec == 70)
+  if (sec == DT_TIME_KEEP)
   {
     // Keep current time offset
     tmNewCopy.tm_sec = rtcDateTime.timeSec;
     tmNewCopy.tm_min = rtcDateTime.timeMin;
     tmNewCopy.tm_hour = rtcDateTime.timeHour;
   }
-  else if (sec != 80)
+  else if (sec != DT_TIME_RESET)
   {
     // Overide on hms
     tmNewCopy.tm_sec = sec;
@@ -1059,14 +1042,14 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   // else 80 -> default back to system time as currently populated
 
   // Verify what to do with date
-  if (date == 70)
+  if (date == DT_DATE_KEEP)
   {
     // Keep current date offset
     tmNewCopy.tm_mday = rtcDateTime.dateDay;
     tmNewCopy.tm_mon = rtcDateTime.dateMon - 1;
     tmNewCopy.tm_year = rtcDateTime.dateYear + 100;
   }
-  else if (date != 80)
+  else if (date != DT_DATE_RESET)
   {
     // Overide on dmy
     tmNewCopy.tm_mday = date;

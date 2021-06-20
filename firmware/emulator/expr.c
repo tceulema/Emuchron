@@ -11,6 +11,7 @@
 
 // Monochron and emuchron defines
 #include "../ks0108.h"
+#include "interpreter.h"
 #include "varutil.h"
 #include "expr.h"
 
@@ -59,7 +60,7 @@ u08 exprEvaluate(char *argName, char *exprString)
   if (varStatus == VAR_NOTINUSE)
   {
     // Inactive variable
-    printf("%s? parse error\n", argName);
+    printf("%s? parse error: %s", argName, exprString);
     return CMD_RET_ERROR;
   }
   else if (varStatus == VAR_OVERFLOW)
@@ -71,19 +72,19 @@ u08 exprEvaluate(char *argName, char *exprString)
   else if (parseResult == 1)
   {
     // Error occured in scanning/parsing the expression string
-    printf("%s? syntax error\n", argName);
+    printf("%s? syntax error: %s", argName, exprString);
     return CMD_RET_ERROR;
   }
   else if (isnan(exprValue) != 0)
   {
     // Result is not a number
-    printf("%s? invalid (NaN)\n", argName);
+    printf("%s? invalid (NaN): %s", argName, exprString);
     return CMD_RET_ERROR;
   }
   else if (isfinite(exprValue) == 0)
   {
     // Result is infinite
-    printf("%s? overflow (inf)\n", argName);
+    printf("%s? overflow (inf): %s", argName, exprString);
     return CMD_RET_ERROR;
   }
 
