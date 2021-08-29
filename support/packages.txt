@@ -51,7 +51,7 @@ apt-get install minicom
 # Main menu editor and program launcher utility
 apt-get install alacarte
 
-# Debian 10 requires specific glibc source files for a non-annoying debugging
+# Debian 10/11 require specific glibc source files for a non-annoying debugging
 # experience in some gdb front-end gui's. The files that are referenced are
 # usually syscall-template.S and pselect.c.
 # For more info refer to section 3.9.2 of the Emuchron pdf manual.
@@ -81,5 +81,21 @@ then
   done
 fi
 
-echo "done"
+# Obtaining glibc sources for Debian 11 (Bullseye)
+if [[ $myDebianVersion == *"bullseye"* ]];
+then
+  if [ -f /build/glibc/glibc-2.31/sysdeps/unix/syscall-template.S ];
+  then
+    echo "glibc sources already present"
+  else
+    echo "installing/replacing glibc sources in /build/glibc"
+    apt-get install dpkg-dev
+    mkdir -p /build/glibc
+    rm -rf /build/glibc/glibc-2.31
+    cd /build/glibc
+    apt-get source glibc
+    cd -
+  fi
+fi
 
+echo "done"

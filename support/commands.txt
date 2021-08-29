@@ -2,7 +2,7 @@
 # ncurses terminal and the Gede gdb debugger gui
 
 # 1 - Command to use in the Monochron terminal profile (copy/paste)
-bash -c "tty > ~/.config/mchron/tty; echo -ne '\033]0\073Monochron (ncurses)\007'; bash"
+bash -c "tty > ~/.config/mchron/tty; echo -ne '\033]0\073Monochron (ncurses)\007'; bash --noprofile --norc"
 
 # 2 - Command to use in the Monochron ncurses terminal main menu program
 #     launcher (copy/paste)

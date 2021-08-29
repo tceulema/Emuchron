@@ -9,7 +9,7 @@
 #include "avrlibtypes.h"
 
 // Version of our emuchron code base
-#define EMUCHRON_VERSION	"v6.1"
+#define EMUCHRON_VERSION	"v6.2"
 
 // Debugging macros.
 // Note that DEBUGGING is the master switch for generating debug output.
