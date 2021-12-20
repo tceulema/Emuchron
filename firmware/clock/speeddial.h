@@ -6,6 +6,8 @@
 #ifndef SPEEDDIAL_H
 #define SPEEDDIAL_H
 
+#include "../avrlibtypes.h"
+
 // Speeddial clock
 void spotSpeedDialCycle(void);
 void spotSpeedDialInit(u08 mode);

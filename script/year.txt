@@ -17,7 +17,7 @@
 vs y=12
 
 # Make sure we're seeing a date by switching off the alarm
-ap 0
+tap 0
 
 # Jan
 vs m=1

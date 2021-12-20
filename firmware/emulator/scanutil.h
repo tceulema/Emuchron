@@ -11,7 +11,7 @@
 
 // mchron input stream reader functions
 void cmdInputCleanup(cmdInput_t *cmdInput);
-void cmdInputInit(cmdInput_t *cmdInput);
+void cmdInputInit(cmdInput_t *cmdInput, FILE *file, u08 readMethod);
 void cmdInputRead(char *prompt, cmdInput_t *cmdInput);
 
 // mchron command line argument scanning functions

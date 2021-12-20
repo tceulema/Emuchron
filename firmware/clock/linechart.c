@@ -3,13 +3,7 @@
 // Title    : Animation code for MONOCHRON line chart clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -32,7 +26,6 @@
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
 static void spotLineUpdate(u08 axisEnd, u08 xLeft, u08 xRight, u08 oldValLeft,
@@ -46,7 +39,7 @@ static void spotLineUpdate(u08 axisEnd, u08 xLeft, u08 xRight, u08 oldValLeft,
 void spotLineChartCycle(void)
 {
   // Update common Spotfire clock elements and check if clock requires update
-  if (spotCommonUpdate() == GLCD_FALSE)
+  if (spotCommonUpdate() == MC_FALSE)
     return;
 
   DEBUGP("Update LineChart");
@@ -92,7 +85,7 @@ static void spotLineUpdate(u08 axisEnd, u08 xLeft, u08 xRight, u08 oldValLeft,
 
   // See if we need to update the chart line
   if (oldValLeft == newValLeft && oldValRight == newValRight &&
-      mcClockInit == GLCD_FALSE)
+      mcClockInit == MC_FALSE)
     return;
 
   // Get height of old and new line height on left and right side
@@ -106,52 +99,51 @@ static void spotLineUpdate(u08 axisEnd, u08 xLeft, u08 xRight, u08 oldValLeft,
     (u08)((LINE_HEIGHT_MAX / (float)LINE_VAL_STEPS) * newValRight + 0.5);
 
   // Check if we actually need to redraw lines
+  glcdColorSetBg();
   if (oldLeftHeight != newLeftHeight || oldRightHeight != newRightHeight ||
-      mcClockInit == GLCD_TRUE)
+      mcClockInit == MC_TRUE)
   {
     // Remove old line
     glcdLine(xLeft, LINE_Y_START - oldLeftHeight, xRight,
-      LINE_Y_START - oldRightHeight, mcBgColor);
+      LINE_Y_START - oldRightHeight);
   }
 
   // Check if the new line will interfere with the value on the left side
-  if (oldLeftHeight != newLeftHeight || mcClockInit == GLCD_TRUE)
+  if (oldLeftHeight != newLeftHeight || mcClockInit == MC_TRUE)
   {
     // Remove old left line value
     glcdFillRectangle(xLeft + LINE_VALUE_X_OFFSET - 1,
-      LINE_Y_START - oldLeftHeight + LINE_VALUE_Y_OFFSET - 1, 13, 9,
-      mcBgColor);
+      LINE_Y_START - oldLeftHeight + LINE_VALUE_Y_OFFSET - 1, 13, 9);
   }
 
   // Check if the new line will interfere with the value on the right side
-  if (oldRightHeight != newRightHeight || mcClockInit == GLCD_TRUE)
+  if (oldRightHeight != newRightHeight || mcClockInit == MC_TRUE)
   {
     // Remove old right line value
     if (axisEnd == LINE_AXIS_SEC)
       glcdFillRectangle(xRight + LINE_VALUE_X_OFFSET,
-        LINE_Y_START - oldRightHeight + LINE_VALUE_Y_OFFSET, 11, 7,
-        mcBgColor);
+        LINE_Y_START - oldRightHeight + LINE_VALUE_Y_OFFSET, 11, 7);
   }
 
   // Add new line
+  glcdColorSetFg();
   glcdLine(xLeft, LINE_Y_START - newLeftHeight, xRight,
-    LINE_Y_START - newRightHeight, mcFgColor);
+    LINE_Y_START - newRightHeight);
 
   // Add/repaint new left line value
   animValToStr(newValLeft, lineValue);
   glcdPutStr2(xLeft + LINE_VALUE_X_OFFSET,
-    LINE_Y_START - newLeftHeight + LINE_VALUE_Y_OFFSET, FONT_5X7M, lineValue,
-    mcFgColor);
+    LINE_Y_START - newLeftHeight + LINE_VALUE_Y_OFFSET, FONT_5X7M, lineValue);
+  glcdColorSetBg();
   glcdRectangle(xLeft + LINE_VALUE_X_OFFSET - 1,
-    LINE_Y_START - newLeftHeight + LINE_VALUE_Y_OFFSET - 1, 13, 9,
-    mcBgColor);
+    LINE_Y_START - newLeftHeight + LINE_VALUE_Y_OFFSET - 1, 13, 9);
+  glcdColorSetFg();
 
   // Add/repaint new right line value
   animValToStr(newValRight, lineValue);
   glcdPutStr2(xRight + LINE_VALUE_X_OFFSET,
-    LINE_Y_START - newRightHeight + LINE_VALUE_Y_OFFSET, FONT_5X7M, lineValue,
-    mcFgColor);
+    LINE_Y_START - newRightHeight + LINE_VALUE_Y_OFFSET, FONT_5X7M, lineValue);
+  glcdColorSetBg();
   glcdRectangle(xRight + LINE_VALUE_X_OFFSET - 1,
-    LINE_Y_START - newRightHeight + LINE_VALUE_Y_OFFSET - 1, 13, 9,
-    mcBgColor);
+    LINE_Y_START - newRightHeight + LINE_VALUE_Y_OFFSET - 1, 13, 9);
 }

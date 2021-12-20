@@ -3,15 +3,11 @@
 // Title    : Animation code for MONOCHRON wave banner clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../ks0108.h"
+#include "../ks0108conf.h"
 #include "wave.h"
 
 // Layout of the wave banner
@@ -66,11 +62,11 @@ static const uint32_t __attribute__ ((progmem)) charset[] =
 // Generated sinus y variation movements for wave banner.
 // So, why don't we calculate the sin() values in our cycle method code instead
 // of hardcoding them here at the expense of flexibility?
-// Calculating the sin() value in the code twice for every BANNER_LENGTH element
-// takes a whopping ~45 msec. Keeping in mind we have a 75 msec clock cycle
-// time it turns out we do not have enough time left to do the actual wave
-// drawing. As such, we're forced to implement pre-calculated sin() values as
-// progmem data.
+// Calculating the sin() value in the code twice for every BANNER_LENGTH
+// element takes a whopping ~45 msec. Keeping in mind we have a 75 msec clock
+// cycle time it turns out we do not have enough time left to do the actual
+// wave drawing. As such, we're forced to implement pre-calculated sin() values
+// as progmem data.
 // The values below were generated using utility wavesin.c [support].
 static const uint8_t __attribute__ ((progmem)) yDelta[] =
 {
@@ -112,7 +108,7 @@ void waveCycle(void)
   for (i = 0; i < GLCD_YPIXELS - 8; i = i + 8)
   {
     // Reset cursor status and base offset in sinus table
-    cursorOk = GLCD_FALSE;
+    cursorOk = MC_FALSE;
     yDeltaIdx = yDeltaStart;
     yDeltaPrevIdx = yDeltaPrevStart;
 
@@ -139,7 +135,7 @@ void waveCycle(void)
       else if (j == START_TIMEDATE_SEP - 1)
       {
         // Skip the entire separator as it is always blank
-        cursorOk = GLCD_FALSE;
+        cursorOk = MC_FALSE;
         j = START_DAY_DIGIT_1 - 1;
         continue;
       }
@@ -186,14 +182,14 @@ void waveCycle(void)
             (((y + 29) >> 3) < (i >> 3) || ((yPrev + 29) >> 3) < (i >> 3)))
         {
           // New and current lcd byte is not used so no need to write to lcd
-          cursorOk = GLCD_FALSE;
+          cursorOk = MC_FALSE;
         }
         else
         {
           // Set lcd cursor when we skipped a certain x area for the y-line
-          if (cursorOk == GLCD_FALSE)
+          if (cursorOk == MC_FALSE)
           {
-            cursorOk = GLCD_TRUE;
+            cursorOk = MC_TRUE;
             glcdSetAddress(BANNER_START_X + j * 2 + k, i >> 3);
           }
 
@@ -228,5 +224,5 @@ void waveCycle(void)
 void waveInit(u08 mode)
 {
   DEBUGP("Init wave");
-  glcdLine(0, 56, 127, 56, mcFgColor);
+  glcdLine(0, 56, 127, 56);
 }

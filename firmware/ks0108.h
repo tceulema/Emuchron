@@ -1,38 +1,21 @@
 //*****************************************************************************
 // Filename : 'ks0108.h'
-// Title    : Graphic lcd driver for HD61202/KS0108 displays
+// Title    : Low-level graphics lcd api for hd61202/ks0108 displays
 //*****************************************************************************
 
 #ifndef KS0108_H
 #define KS0108_H
 
-#include "global.h"
-#include "ks0108conf.h"
+#include "avrlibtypes.h"
 
-// Our own definition of the glcd truth.
-// Why do we do this? It turns out that gcc sometimes get utterly confused
-// using the TRUE and FALSE defines/macros resulting in bad object code.
-// This may be due to the mixing of stdlib, avr, ncurses and glut code.
-// Even worse, similar issues also pop up in actual monochron firmware built
-// in this environment by showing unexplained erratic behavior.
-// In any case, I do not trust TRUE and FALSE in combination with this
-// stdlib, avr, ncurses and glut software environment.
-#define GLCD_FALSE	0
-#define GLCD_TRUE	1
-
-// Lcd color values
-#define GLCD_OFF	0
-#define GLCD_ON		1
-
-// HD61202/KS0108 command set:
-// Note that GLCD_SET_PAGE and GLCD_SET_Y_ADDR are utterly confusing when used
-// in Monochron.
-// GLCD_SET_PAGE   - This is actually the vertical y-byte address (0..7)
+// The hd61202/ks0108 command set for use in glcdControlWrite():
+// Note that GLCD_SET_PAGE and GLCD_SET_Y_ADDR def names are utterly confusing.
 // GLCD_SET_Y_ADDR - This is actually the horizontal x address (0..63)
-#define GLCD_ON_CTRL		0x3e	// 0011111X: lcd on/off control
-#define GLCD_START_LINE		0xc0	// 11XXXXXX: set lcd start line
-#define GLCD_SET_PAGE		0xb8	// 10111XXX: set lcd page (X) address
-#define GLCD_SET_Y_ADDR		0x40	// 01YYYYYY: set lcd Y address
+// GLCD_SET_PAGE   - This is actually the vertical y-byte address (0..7)
+#define GLCD_ON_CTRL		0x3e	// 0011111X: set ctrl display on/off
+#define GLCD_SET_Y_ADDR		0x40	// 01XXXXXX: set ctrl X address
+#define GLCD_SET_PAGE		0xb8	// 10111YYY: set ctrl Y-byte address
+#define GLCD_START_LINE		0xc0	// 11YYYYYY: set ctrl Y start line
 
 #define GLCD_OFF_DISPLAY	0x00	// DB0: turn display off
 #define GLCD_ON_DISPLAY		0x01	// DB0: turn display on
@@ -41,22 +24,12 @@
 #define GLCD_STATUS_ONOFF	0x20	// (0) -> lcd is on
 #define GLCD_STATUS_RESET	0x10	// (1) -> lcd is reset
 
-// Determine the number of controllers
-// (make sure we round up for partial use of more than one controller)
-#define GLCD_NUM_CONTROLLERS \
-  ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
-
 // Hardware oriented functions
-//u08 glcdControlRead(u08 controller);
 void glcdControlWrite(u08 controller, u08 data);
 u08  glcdDataRead(void);
 void glcdDataWrite(u08 data);
-void glcdInit(u08 color);
+void glcdInit(void);
 
 // Functional oriented functions
-void glcdClearScreen(u08 color);
-void glcdResetScreen(void);
-void glcdNextAddress(void);
 void glcdSetAddress(u08 xAddr, u08 yAddr);
-//void glcdStartLine(u08 startLine);
 #endif

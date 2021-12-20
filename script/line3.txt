@@ -6,6 +6,7 @@
 
 # Erase lcd display
 le
+psf
 
 # Set verariables for hororizontal and verertical display size
 vs hor=127
@@ -14,14 +15,14 @@ vs ver=63
 # Paint in total 11x4 edge-to-edge lines
 rf factor=0 factor<=1 factor=factor+0.1
   # Lines from left to top and left to bottom
-  pl f 0 ver*factor hor*factor 0
-  pl f 0 ver*factor hor*factor ver
+  pl 0 ver*factor hor*factor 0
+  pl 0 ver*factor hor*factor ver
   # Lines from right to top and right to bottom
-  pl f hor ver*factor hor*factor 0
-  pl f hor ver*factor hor*factor ver
+  pl hor ver*factor hor*factor 0
+  pl hor ver*factor hor*factor ver
 rn
 
 # Paint the glcdline function name in a cleared box
-prf f 47 26 33 11 0 5
-pr f 48 27 31 9
-pa f 50 29 5x5p h 1 1 glcdline
+prf 47 26 33 11 0 5
+pr 48 27 31 9
+pa 50 29 5x5p h 1 1 glcdline

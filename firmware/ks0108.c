@@ -1,20 +1,32 @@
 //*****************************************************************************
 // Filename : 'ks0108.c'
-// Title    : Graphic lcd driver for HD61202/KS0108 displays
+// Title    : Low-level graphics lcd api for hd61202/ks0108 displays
 //*****************************************************************************
 
 #ifndef EMULIN
-#include "util.h"
-#else
-#include "emulator/stub.h"
-#include "emulator/stubrefs.h"
+#include <avr/interrupt.h>
+#endif
+#include "global.h"
+#include "ks0108conf.h"
+#ifdef EMULIN
 #include "emulator/mchronutil.h"
 #include "emulator/controller.h"
 #endif
 #include "ks0108.h"
 
-// Definition of a structure that holds the current controller, functional lcd
-// cursor and the active y line cursor in both controllers (x=0..127, y=0..7)
+// This module 'talks' to the lcd controllers that drive the lcd display.
+// The Monochron 128x64 lcd uses two controllers; one for the left side and one
+// for the right side. Each controller takes care of 64x64 pixels.
+// Only one of them may be selected as active controller though. This module
+// administers which controller is selected and switches between controllers
+// only when needed. It further takes care of an administration of the
+// functional lcd cursor and the hardware y cursor in each controller.
+// The controller and cursor administration prevents unneccessary interaction
+// with the controllers, thus improving the graphics performance of the glcd
+// layer.
+
+// Definition of a structure that holds the active controller, functional lcd
+// cursor and the active y line cursor in each controller (y=0..7)
 typedef struct _glcdLcdCursor_t
 {
   u08 controller;
@@ -23,116 +35,37 @@ typedef struct _glcdLcdCursor_t
   u08 ctrlYAddr[GLCD_NUM_CONTROLLERS];
 } glcdLcdCursor_t;
 
-// The functional lcd cursor
+// The lcd controller and cursor administration
 static glcdLcdCursor_t glcdLcdCursor;
 
 // Local function prototypes
-static void glcdBusyWait(u08 controller);
+static void glcdBusyWait(void);
 static void glcdControlSelect(u08 controller);
-static void glcdInitHW(void);
-static void glcdReset(u08 resetState);
-static void glcdSetXAddress(u08 xAddr);
+static void glcdNextAddress(void);
+static void glcdSetXAddress(void);
 static void glcdSetYAddress(u08 yAddr);
-
-//
-// Function: glcdInit
-//
-// Initialize the lcd
-//
-void glcdInit(u08 color)
-{
-  // Initialize hardware and bring lcd out of reset
-  glcdInitHW();
-  glcdReset(GLCD_FALSE);
-
-  // Initialize each controller in the lcd by clearing the screen
-  glcdClearScreen(color);
-}
-
-//
-// Function: glcdInitHW
-//
-// Initialize the lcd hardware
-//
-static void glcdInitHW(void)
-{
-  // Initialize I/O ports
-  // If I/O interface is in use
-#ifdef GLCD_PORT_INTERFACE
-
-  //TODO: make setup of chip select lines contingent on how
-  // many controllers are actually in the display
-
-  // Initialize lcd control lines levels
-  cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
-  cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
-  cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
-  cbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
-#ifdef GLCD_CTRL_CS1
-  cbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
-#endif
-#ifdef GLCD_CTRL_CS2
-  cbi(GLCD_CTRL_CS2_PORT, GLCD_CTRL_CS2);
-#endif
-#ifdef GLCD_CTRL_CS3
-  cbi(GLCD_CTRL_CS3_PORT, GLCD_CTRL_CS3);
-#endif
-#ifdef GLCD_CTRL_RESET
-  cbi(GLCD_CTRL_RESET_PORT, GLCD_CTRL_RESET);
-#endif
-  // Initialize lcd control port to output
-  sbi(GLCD_CTRL_RS_DDR, GLCD_CTRL_RS);
-  sbi(GLCD_CTRL_RW_DDR, GLCD_CTRL_RW);
-  sbi(GLCD_CTRL_E_DDR, GLCD_CTRL_E);
-  sbi(GLCD_CTRL_CS0_DDR, GLCD_CTRL_CS0);
-#ifdef GLCD_CTRL_CS1
-  sbi(GLCD_CTRL_CS1_DDR, GLCD_CTRL_CS1);
-#endif
-#ifdef GLCD_CTRL_CS2
-  sbi(GLCD_CTRL_CS2_DDR, GLCD_CTRL_CS2);
-#endif
-#ifdef GLCD_CTRL_CS3
-  sbi(GLCD_CTRL_CS3_DDR, GLCD_CTRL_CS3);
-#endif
-#ifdef GLCD_CTRL_RESET
-  sbi(GLCD_CTRL_RESET_DDR, GLCD_CTRL_RESET);
-#endif
-  // Initialize lcd data
-  GLCD_DATAH_PORT &= ~(0xf0);
-  GLCD_DATAL_PORT &= ~(0x0f);
-  //outb(GLCD_DATA_PORT, 0x00);
-  // Initialize lcd data port to output
-  GLCD_DATAH_DDR |= 0xf0;
-  GLCD_DATAL_DDR |= 0x0f;
-  //outb(GLCD_DATA_DDR, 0xff);
-#endif
-}
 
 //
 // Function: glcdBusyWait
 //
-// Wait until the lcd is no longer busy
+// Wait until the active lcd controller is no longer busy
 //
-static void glcdBusyWait(u08 controller)
+static void glcdBusyWait(void)
 {
-#ifdef GLCD_PORT_INTERFACE
-  cli();
-  // Wait until lcd busy bit goes to zero
-  // Select the controller chip
-  glcdControlSelect(controller);
   // Do a read from control register
-  //outb(GLCD_DATA_PORT, 0xff);
+  cli();
   GLCD_DATAH_PORT |= 0xf0;
   GLCD_DATAL_PORT |= 0x0f;
 
   cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
-  //outb(GLCD_DATA_DDR, 0x00);
   GLCD_DATAH_DDR &= ~(0xf0);
   GLCD_DATAL_DDR &= ~(0x0f);
   sbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   asm volatile ("nop"); asm volatile ("nop");
-  //while (inb(GLCD_DATA_PIN) & GLCD_STATUS_BUSY)
+#ifdef EMULIN
+  ctrlBusyState();
+#endif
   while (((GLCD_DATAH_PIN & 0xf0) | (GLCD_DATAL_PIN & 0x0f)) & GLCD_STATUS_BUSY)
   {
     cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
@@ -142,21 +75,40 @@ static void glcdBusyWait(u08 controller)
     asm volatile ("nop"); asm volatile ("nop");
     asm volatile ("nop"); asm volatile ("nop");
   }
+
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
-  //outb(GLCD_DATA_DDR, 0xff);
   GLCD_DATAH_DDR |= 0xf0;
   GLCD_DATAL_DDR |= 0x0f;
   sei();
-#else
-  // Enable RAM waitstate
-  //sbi(MCUCR, SRW);
-  // Wait until lcd busy bit goes to zero
-  while (*(volatile unsigned char *)
-    (GLCD_CONTROLLER0_CTRL_ADDR + GLCD_CONTROLLER_ADDR_OFFSET * controller) &
-      GLCD_STATUS_BUSY);
-  // Disable RAM waitstate
-  //cbi(MCUCR, SRW);
+}
+
+//
+// Function: glcdControlSelect
+//
+// Select lcd controller 0 or 1
+//
+static void glcdControlSelect(u08 controller)
+{
+#ifdef EMULIN
+  // Check if controller is out of bounds (should never happen)
+  if (controller >= GLCD_NUM_CONTROLLERS)
+    emuCoreDump(CD_GLCD, __func__, controller, 0, 0, 0);
+#endif
+
+  // Unselect other controller and select requested controller
+  if (controller == 0)
+  {
+    cbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
+    sbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
+  }
+  else
+  {
+    cbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
+    sbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
+  }
+#ifdef EMULIN
+  ctrlControlSet();
 #endif
 }
 
@@ -171,174 +123,110 @@ void glcdControlWrite(u08 controller, u08 data)
   // Check if controller is out of bounds (should never happen)
   if (controller >= GLCD_NUM_CONTROLLERS)
     emuCoreDump(CD_GLCD, __func__, controller, 0, 0, data);
-
-  // Execute the action in the controller
-  ctrlExecute(CTRL_METHOD_COMMAND, controller, data);
 #endif
-#ifdef GLCD_PORT_INTERFACE
+
   cli();
-  // Wait until lcd not busy
-  glcdBusyWait(controller);
+  // Temporarily switch to requested controller when needed
+  if (controller != glcdLcdCursor.controller)
+    glcdControlSelect(controller);
+
+  glcdBusyWait();
   cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
-  //outb(GLCD_DATA_DDR, 0xff);
   GLCD_DATAH_DDR |= 0xf0;
   GLCD_DATAL_DDR |= 0x0f;
-  //outb(GLCD_DATA_PORT, data);
-  // Clear and set top nibble
+
   GLCD_DATAH_PORT &= ~0xf0;
   GLCD_DATAH_PORT |= data & 0xf0;
-  // Clear and set bottom nibble
   GLCD_DATAL_PORT &= ~0x0f;
   GLCD_DATAL_PORT |= data & 0x0f;
+#ifdef EMULIN
+  ctrlExecute(CTRL_METHOD_CTRL_W);
+#endif
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
+
+  // Switch back to administered controller when needed
+  if (controller != glcdLcdCursor.controller)
+    glcdControlSelect(glcdLcdCursor.controller);
   sei();
-#else
-  // Enable RAM waitstate
-  //sbi(MCUCR, SRW);
-  // Wait until lcd not busy
-  glcdBusyWait(controller);
-  *(volatile unsigned char *) (GLCD_CONTROLLER0_CTRL_ADDR +
-    GLCD_CONTROLLER_ADDR_OFFSET * controller) = data;
-  // Disable RAM waitstate
-  //cbi(MCUCR, SRW);
-#endif
 }
 
 //
-// Function: glcdControlRead
+// Function: glcdDataRead
 //
-// Read from the lcd controller
+// Read an 8-pixel byte from the lcd using the controller cursor
 //
-/*u08 glcdControlRead(u08 controller)
+u08 glcdDataRead(void)
 {
+#ifdef EMULIN
+  // Check if administrative cursor is out of bounds (should never happen)
+  if (glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
+      glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
+    emuCoreDump(CD_GLCD, __func__, glcdLcdCursor.controller,
+      glcdLcdCursor.lcdXAddr, glcdLcdCursor.lcdYAddr, 0);
+#endif
+
   register u08 data;
-#ifdef GLCD_PORT_INTERFACE
+
   cli();
-  // Wait until lcd not busy
-  glcdBusyWait(controller);
-  cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
-  //outb(GLCD_DATA_DDR, 0x00);
+  glcdBusyWait();
+  sbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   GLCD_DATAH_DDR &= ~(0xf0);
   GLCD_DATAL_DDR &= ~(0x0f);
+
   sbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
-  //data = inb(GLCD_DATA_PIN);
+#ifdef EMULIN
+  ctrlExecute(CTRL_METHOD_READ);
+#endif
   data = (GLCD_DATAH_PIN & 0xf0) | (GLCD_DATAL_PIN & 0x0f);
+
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
-  //outb(GLCD_DATA_DDR, 0xff);
-  GLCD_DATAH_DDR |= 0xf0;
-  GLCD_DATAL_DDR |= 0x0f;
   sei();
-#else
-  // Enable RAM waitstate
-  //sbi(MCUCR, SRW);
-  // Wait until lcd not busy
-  glcdBusyWait(controller);
-  data = *(volatile unsigned char *) (GLCD_CONTROLLER0_CTRL_ADDR +
-    GLCD_CONTROLLER_ADDR_OFFSET * controller);
-  // Disable RAM waitstate
-  //cbi(MCUCR, SRW);
-#endif
+
   return data;
-}*/
-
-//
-// Function: glcdControlSelect
-//
-// Select lcd controller
-//
-static void glcdControlSelect(u08 controller)
-{
-#ifdef GLCD_PORT_INTERFACE
-  //TODO: make control of chip select lines contingent on how
-  // many controllers are actually in the display
-
-  // Unselect all controllers
-  cbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
-#ifdef GLCD_CTRL_CS1
-  cbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
-#endif
-#ifdef GLCD_CTRL_CS2
-  cbi(GLCD_CTRL_CS2_PORT, GLCD_CTRL_CS2);
-#endif
-#ifdef GLCD_CTRL_CS3
-  cbi(GLCD_CTRL_CS3_PORT, GLCD_CTRL_CS3);
-#endif
-
-  // Select requested controller
-  switch (controller)
-  {
-  case 0:
-    sbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
-    break;
-#ifdef GLCD_CTRL_CS1
-  case 1:
-    sbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
-    break;
-#endif
-#ifdef GLCD_CTRL_CS2
-  case 2:
-    sbi(GLCD_CTRL_CS2_PORT, GLCD_CTRL_CS2);
-    break;
-#endif
-#ifdef GLCD_CTRL_CS3
-  case 3:
-    sbi(GLCD_CTRL_CS3_PORT, GLCD_CTRL_CS3);
-    break;
-#endif
-  default:
-    break;
-  }
-#endif
 }
 
 //
 // Function: glcdDataWrite
 //
-// Write an 8-pixel byte to the lcd
+// Write an 8-pixel byte to the lcd using the controller cursor
 //
 void glcdDataWrite(u08 data)
 {
 #ifdef EMULIN
   // Check if administrative cursor is out of bounds (should never happen)
-  if (glcdLcdCursor.controller >= GLCD_NUM_CONTROLLERS ||
-      glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
+  if (glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
       glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
     emuCoreDump(CD_GLCD, __func__, glcdLcdCursor.controller,
       glcdLcdCursor.lcdXAddr, glcdLcdCursor.lcdYAddr, data);
+#endif
 
-  // Write data to controller lcd buffer
-  ctrlExecute(CTRL_METHOD_WRITE, glcdLcdCursor.controller, data);
-#else
-#ifdef GLCD_PORT_INTERFACE
   cli();
-  // Wait until lcd not busy
-  glcdBusyWait(glcdLcdCursor.controller);
+  glcdBusyWait();
   sbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
   sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
-  //outb(GLCD_DATA_DDR, 0xff);
   GLCD_DATAH_DDR |= 0xf0;
   GLCD_DATAL_DDR |= 0x0f;
 
-  //outb(GLCD_DATA_PORT, data);
-  // Clear and set top nibble
   GLCD_DATAH_PORT &= ~0xf0;
   GLCD_DATAH_PORT |= data & 0xf0;
-  // Clear and set bottom nibble
   GLCD_DATAL_PORT &= ~0x0f;
   GLCD_DATAL_PORT |= data & 0x0f;
+#ifdef EMULIN
+  ctrlExecute(CTRL_METHOD_WRITE);
+#endif
 
   asm volatile ("nop"); asm volatile ("nop");
   asm volatile ("nop"); asm volatile ("nop");
@@ -346,163 +234,94 @@ void glcdDataWrite(u08 data)
   asm volatile ("nop"); asm volatile ("nop");
   cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
   sei();
-#else
-  // Enable RAM waitstate
-  //sbi(MCUCR, SRW);
-  // Wait until lcd not busy
-  glcdBusyWait(glcdLcdCursor.controller);
-  *(volatile unsigned char *) (GLCD_CONTROLLER0_CTRL_ADDR +
-    GLCD_CONTROLLER_ADDR_OFFSET * glcdLcdCursor.controller) = data;
-  // Disable RAM waitstate
-  //cbi(MCUCR, SRW);
-#endif
-#endif
 
   // Increment our local address counter
   glcdNextAddress();
 }
 
 //
-// Function: glcdDataRead
+// Function: glcdInit
 //
-// Read an 8-pixel byte from the lcd
+// Initialize the lcd hardware and setup controller/cursor administration
 //
-u08 glcdDataRead(void)
+void glcdInit(void)
 {
-  register u08 data;
+  u08 i;
 
-#ifdef EMULIN
-  // Check if administrative cursor is out of bounds (should never happen)
-  if (glcdLcdCursor.controller >= GLCD_NUM_CONTROLLERS ||
-      glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS ||
-      glcdLcdCursor.lcdYAddr >= GLCD_CONTROLLER_YPAGES)
-    emuCoreDump(CD_GLCD, __func__, glcdLcdCursor.controller,
-      glcdLcdCursor.lcdXAddr, glcdLcdCursor.lcdYAddr, 0);
-
-  // Read data from controller lcd buffer
-  data = ctrlExecute(CTRL_METHOD_READ, glcdLcdCursor.controller, 0);
-#else
-#ifdef GLCD_PORT_INTERFACE
-  cli();
-  // Wait until lcd not busy
-  glcdBusyWait(glcdLcdCursor.controller);
-  sbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
-  //outb(GLCD_DATA_DDR, 0x00);
-  GLCD_DATAH_DDR &= ~(0xf0);
-  GLCD_DATAL_DDR &= ~(0x0f);
-
-  sbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
-  sbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
-  asm volatile ("nop"); asm volatile ("nop");
-  asm volatile ("nop"); asm volatile ("nop");
-  asm volatile ("nop"); asm volatile ("nop");
-  asm volatile ("nop"); asm volatile ("nop");
-  //data = inb(GLCD_DATA_PIN);
-  data = (GLCD_DATAH_PIN & 0xf0) | (GLCD_DATAL_PIN & 0x0f);
-
-  cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
+  // Initialize lcd control lines levels
+  cbi(GLCD_CTRL_RS_PORT, GLCD_CTRL_RS);
   cbi(GLCD_CTRL_RW_PORT, GLCD_CTRL_RW);
-  sei();
-#else
-  // Enable RAM waitstate
-  //sbi(MCUCR, SRW);
-  // Wait until lcd not busy
-  glcdBusyWait(glcdLcdCursor.controller);
-  data = *(volatile unsigned char *) (GLCD_CONTROLLER0_CTRL_ADDR +
-    GLCD_CONTROLLER_ADDR_OFFSET * glcdLcdCursor.controller);
-  // Disable RAM waitstate
-  //cbi(MCUCR, SRW);
-#endif
-#endif
-  return data;
-}
+  cbi(GLCD_CTRL_E_PORT, GLCD_CTRL_E);
+  cbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
+  cbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
 
-//
-// Function: glcdReset
-//
-// Reset the lcd
-//
-static void glcdReset(u08 resetState)
-{
-  u08 i;
-  // Reset lcd if argument is true.
-  // Run lcd if argument is false.
-#ifdef GLCD_PORT_INTERFACE
-#ifdef GLCD_CTRL_RESET
-  if (resetState)
-    cbi(GLCD_CTRL_RESET_PORT, GLCD_CTRL_RESET);
-  else
-    sbi(GLCD_CTRL_RESET_PORT, GLCD_CTRL_RESET);
-#endif
-#endif
+  // Initialize lcd control port to output
+  sbi(GLCD_CTRL_RS_DDR, GLCD_CTRL_RS);
+  sbi(GLCD_CTRL_RW_DDR, GLCD_CTRL_RW);
+  sbi(GLCD_CTRL_E_DDR, GLCD_CTRL_E);
+  sbi(GLCD_CTRL_CS0_DDR, GLCD_CTRL_CS0);
+  sbi(GLCD_CTRL_CS1_DDR, GLCD_CTRL_CS1);
 
-  // Init admin of controller y page so it will sync at the first cursor request
+  // Initialize lcd data
+  GLCD_DATAH_PORT &= ~(0xf0);
+  GLCD_DATAL_PORT &= ~(0x0f);
+
+  // Initialize lcd data port to output
+  GLCD_DATAH_DDR |= 0xf0;
+  GLCD_DATAL_DDR |= 0x0f;
+
+  // Hardware is now properly setup so now we can initialize the software
+  // administration of the active controller and the lcd cursor
+
+  // Select controller 0 as active controller
+  glcdControlSelect(0);
+  glcdLcdCursor.controller = 0;
+
+  // Init admin of controller y page so it will sync at first cursor request
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-    glcdLcdCursor.ctrlYAddr[i] = 255;
+    glcdLcdCursor.ctrlYAddr[i] = MAX_U08;
 }
 
 //
-// Function: glcdClearScreen
+// Function: glcdNextAddress
 //
-// Clear the lcd contents using the specified color, and reset the controller
-// display and startline settings that may have been modified by functional
-// clock code
+// Increment lcd cursor position
 //
-void glcdClearScreen(u08 color)
+static void glcdNextAddress(void)
 {
-  u08 i;
-  u08 xAddr;
-  u08 data;
-
-  if (color == GLCD_ON)
-    data = 0xff;
-  else
-    data = 0x00;
-
-  // Clear lcd by looping through all pages
-  for (i = 0; i < GLCD_CONTROLLER_YPAGES; i++)
+  // Moving to the next logical x address is more complicated than it seems
+  // since we need to map a logical address into a controller address with a
+  // potential controller address overflow situation. Also, a read/write action
+  // performed on a controller almost always results in an automatic increment
+  // of the cursor in the controller.
+  // The following situations apply:
+  // - Go to x+1 in current controller on current y line.
+  //   This is done automatically in the controller after the 2nd sequential
+  //   read or after every write operation.
+  // - At end of controller, move to x=0 in next controller on current y line.
+  //   To do: Set x and y cursor in next controller.
+  // - At end of display line, the cheapest thing to do is to follow what
+  //   happens in the last controller (controller 1): reset x to 0 in that
+  //   controller.
+  if (glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS - 1)
   {
-    // Set page address
-    glcdSetAddress(0, i);
-
-    // Clear all lines of this page of display memory
-    for (xAddr = 0; xAddr < GLCD_XPIXELS; xAddr++)
-      glcdDataWrite(data);
+    // We're at the end of an lcd line; put x cursor on the start of
+    // the last controller (controller 1) for the current y-line
+    glcdLcdCursor.lcdXAddr =
+      (GLCD_NUM_CONTROLLERS - 1) * GLCD_CONTROLLER_XPIXELS;
   }
-
-  // Enable all controller displays and reset startline to 0
-  glcdResetScreen();
-}
-
-//
-// Function: glcdResetScreen
-//
-// Reset the lcd display by enabling display and setting startline to 0
-//
-void glcdResetScreen(void)
-{
-  u08 i;
-
-  // Switch on display and reset startline
-  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+  else
   {
-    glcdControlWrite(i, GLCD_START_LINE | 0);
-    glcdControlWrite(i, GLCD_ON_CTRL | GLCD_ON_DISPLAY);
+    // Next x
+    glcdLcdCursor.lcdXAddr++;
+    if ((glcdLcdCursor.lcdXAddr & GLCD_CONTROLLER_XPIXMASK) == 0)
+    {
+      // Move to the next controller and init its cursor
+      glcdSetXAddress();
+      glcdSetYAddress(glcdLcdCursor.lcdYAddr);
+    }
   }
 }
-
-//
-// Function: glcdStartLine
-//
-// Display the controller lcd data with a vertical pixel offset value
-//
-/*void glcdStartLine(u08 startLine)
-{
-  u08 i;
-
-  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-    glcdControlWrite(i, GLCD_START_LINE | startLine);
-}*/
 
 //
 // Function: glcdSetAddress
@@ -512,17 +331,15 @@ void glcdResetScreen(void)
 void glcdSetAddress(u08 xAddr, u08 yAddr)
 {
 #ifdef EMULIN
-  extern long long ctrlLcdSetAddress;
-
   // Check if requested cursor is out of bounds (should never happen)
-  ctrlLcdSetAddress++;
-  if (xAddr >= GLCD_XPIXELS || (yAddr >> GLCD_CONTROLLER_YPAGEBITS) > 0)
+  if (xAddr >= GLCD_XPIXELS || yAddr >= GLCD_CONTROLLER_YPAGES)
     emuCoreDump(CD_GLCD, __func__, 0, xAddr, yAddr, 0);
 #endif
   // Set cursor x and y address.
   // The set address functions are setup such that we must set the x position
   // first to get the destination controller and only then set the y position.
-  glcdSetXAddress(xAddr);
+  glcdLcdCursor.lcdXAddr = xAddr;
+  glcdSetXAddress();
   glcdSetYAddress(yAddr);
 }
 
@@ -531,12 +348,16 @@ void glcdSetAddress(u08 xAddr, u08 yAddr)
 //
 // Set lcd cursor x position
 //
-static void glcdSetXAddress(u08 xAddr)
+static void glcdSetXAddress(void)
 {
-  // Record address change locally
-  glcdLcdCursor.lcdXAddr = xAddr;
-  glcdLcdCursor.controller =
-    glcdLcdCursor.lcdXAddr >> GLCD_CONTROLLER_XPIXBITS;
+  u08 ctrlNew = glcdLcdCursor.lcdXAddr >> GLCD_CONTROLLER_XPIXBITS;
+
+  // Change active controller when necessary
+  if (glcdLcdCursor.controller != ctrlNew)
+  {
+    glcdControlSelect(ctrlNew);
+    glcdLcdCursor.controller = ctrlNew;
+  }
 
   // Set x address (confusingly named GLCD_SET_Y_ADDR) on destination
   // controller
@@ -551,56 +372,14 @@ static void glcdSetXAddress(u08 xAddr)
 //
 static void glcdSetYAddress(u08 yAddr)
 {
-  // Record address change locally
-  glcdLcdCursor.lcdYAddr = yAddr & GLCD_CONTROLLER_YPAGEMASK;
+  // Update administrative cursor
+  glcdLcdCursor.lcdYAddr = yAddr;
 
-  // Set page address on destination controller only when changed
-  if (glcdLcdCursor.lcdYAddr !=
-      glcdLcdCursor.ctrlYAddr[glcdLcdCursor.controller])
+  // Set y address (confusingly named GLCD_SET_PAGE) on destination controller
+  // only when changed
+  if (yAddr != glcdLcdCursor.ctrlYAddr[glcdLcdCursor.controller])
   {
-    glcdLcdCursor.ctrlYAddr[glcdLcdCursor.controller] = glcdLcdCursor.lcdYAddr;
-    glcdControlWrite(glcdLcdCursor.controller,
-      GLCD_SET_PAGE | glcdLcdCursor.lcdYAddr);
-  }
-}
-
-//
-// Function: glcdNextAddress
-//
-// Increment lcd cursor position
-//
-void glcdNextAddress(void)
-{
-  // Moving to the next logical x address is more complicated than it seems
-  // since we need to map a logical address into a controller address with a
-  // potential controller address overflow situation. Also, a read/write action
-  // performed on a controller almost always results in an automatic increment
-  // of the cursor in the controller.
-  // The following situations apply:
-  // - Go to x+1 in current controller on current y line.
-  //   This is done automatically in the controller after the 2nd sequential
-  //   read or after every write operation.
-  // - At end of controller, move to x=0 in next controller on current y line.
-  //   To do: Set x and y cursor in next controller.
-  // - At end of display line, move to x=0 in controller 0 on its current y
-  //   line (that may differ from the y line in the active controller).
-  //   To do: Set x cursor in controller 0.
-
-  if (glcdLcdCursor.lcdXAddr >= GLCD_XPIXELS - 1)
-  {
-    // We're at the end of an lcd line; init x cursor on controller 0 on
-    // its current line
-    glcdSetXAddress(0);
-  }
-  else
-  {
-    // Next x
-    glcdLcdCursor.lcdXAddr++;
-    if ((glcdLcdCursor.lcdXAddr & GLCD_CONTROLLER_XPIXMASK) == 0)
-    {
-      // We move to next controller; init cursor on that controller
-      glcdSetXAddress(glcdLcdCursor.lcdXAddr);
-      glcdSetYAddress(glcdLcdCursor.lcdYAddr);
-    }
+    glcdLcdCursor.ctrlYAddr[glcdLcdCursor.controller] = yAddr;
+    glcdControlWrite(glcdLcdCursor.controller, GLCD_SET_PAGE | yAddr);
   }
 }

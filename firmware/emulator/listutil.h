@@ -6,7 +6,7 @@
 #ifndef LISTUTIL_H
 #define LISTUTIL_H
 
-#include "../global.h"
+#include "../avrlibtypes.h"
 #include "interpreter.h"
 
 // mchron interpreter command line/list execution functions

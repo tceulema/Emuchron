@@ -5,16 +5,19 @@
 #
 
 le
-pa f 1 1 5x5p h 1 1 glcdfillcircle2 and glcdcircle2
-pcf f 17 24 16 0
-pc f 17 24 16 0
-pcf f 79 24 16 1
-pc f 79 24 16 0
-pcf b 48 46 16 3
-pc f 48 46 16 0
-pcf f 109 46 16 2
-pc f 109 46 16 0
-pc f 17 52 10 0
-pc f 48 18 10 2
-pc f 79 52 10 1
-pc f 109 18 10 3
+psf
+pa 1 1 5x5p h 1 1 glcdfillcircle2 and glcdcircle2
+pcf 17 24 16 0
+pc 17 24 16 0
+pcf 79 24 16 1
+pc 79 24 16 0
+psb
+pcf 48 46 16 3
+psf
+pc 48 46 16 0
+pcf 109 46 16 2
+pc 109 46 16 0
+pc 17 52 10 0
+pc 48 18 10 2
+pc 79 52 10 1
+pc 109 18 10 3

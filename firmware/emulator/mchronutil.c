@@ -13,16 +13,17 @@
 #include <unistd.h>
 
 // Monochron defines
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../ks0108.h"
+#include "../monomain.h"
 
 // Dedicated clock defines
 #include "../clock/qr.h"
 
-// Emuchron stubs and utilities
-#include "stub.h"
+// Emuchron utilities
+#include "dictutil.h"
 #include "listutil.h"
 #include "scanutil.h"
 #include "varutil.h"
@@ -58,8 +59,8 @@ extern cmdInput_t cmdInput;
 extern const char *__progname;
 
 // Flags indicating active state upon exit
-u08 invokeExit = GLCD_FALSE;
-static u08 closeWinMsg = GLCD_FALSE;
+u08 invokeExit = MC_FALSE;
+static u08 closeWinMsg = MC_FALSE;
 
 // Local function prototypes
 static void emuEepromPrintItem(uint16_t item, char *name);
@@ -68,15 +69,16 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
 //
 // Function: emuArgcArgvGet
 //
-// Process mchron startup command line arguments
+// Process mchron startup command line arguments.
+// Return: MC_TRUE (success) or MC_FALSE (failure).
 //
 u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 {
   FILE *fp;
   int argCount = 1;
   char *tty = emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.tty;
-  u08 argHelp = GLCD_FALSE;
-  u08 argError = GLCD_FALSE;
+  u08 argHelp = MC_FALSE;
+  u08 argError = MC_FALSE;
 
   // Init references to command line argument positions
   emuArgcArgv->argDebug = 0;
@@ -86,8 +88,8 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   emuArgcArgv->argLcdType = 0;
 
   // Init the lcd device data
-  emuArgcArgv->ctrlDeviceArgs.useNcurses = GLCD_FALSE;
-  emuArgcArgv->ctrlDeviceArgs.useGlut = GLCD_TRUE;
+  emuArgcArgv->ctrlDeviceArgs.useNcurses = MC_FALSE;
+  emuArgcArgv->ctrlDeviceArgs.useGlut = MC_TRUE;
   emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.tty[0] = '\0';
   emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.winClose = emuShutdown;
   emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.posX = 100;
@@ -115,7 +117,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     else if (strncmp(argv[argCount], "-h", 4) == 0)
     {
       // Request for help: end scan
-      argHelp = GLCD_TRUE;
+      argHelp = MC_TRUE;
       argCount = argc;
     }
     else if (strncmp(argv[argCount], "-l", 4) == 0)
@@ -143,16 +145,16 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     }
 
     if (argCount > argc)
-      argError = GLCD_TRUE;
+      argError = MC_TRUE;
   }
 
   // Check result of command line processing
-  if (argError == GLCD_TRUE)
+  if (argError == MC_TRUE)
     printf("%s: invalid/incomplete command argument\n\n", __progname);
-  if (argHelp == GLCD_TRUE || argError == GLCD_TRUE)
+  if (argHelp == MC_TRUE || argError == MC_TRUE)
   {
     system("/usr/bin/head -24 ../support/help.txt | /usr/bin/tail -21 2>&1");
-    return CMD_RET_ERROR;
+    return MC_FALSE;
   }
 
   // Validate lcd stub output device
@@ -160,24 +162,24 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   {
     if (strcmp(argv[emuArgcArgv->argLcdType], "glut") == 0)
     {
-      emuArgcArgv->ctrlDeviceArgs.useGlut = GLCD_TRUE;
-      emuArgcArgv->ctrlDeviceArgs.useNcurses = GLCD_FALSE;
+      emuArgcArgv->ctrlDeviceArgs.useGlut = MC_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurses = MC_FALSE;
     }
     else if (strcmp(argv[emuArgcArgv->argLcdType], "ncurses") == 0)
     {
-      emuArgcArgv->ctrlDeviceArgs.useGlut = GLCD_FALSE;
-      emuArgcArgv->ctrlDeviceArgs.useNcurses = GLCD_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useGlut = MC_FALSE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurses = MC_TRUE;
     }
     else if (strcmp(argv[emuArgcArgv->argLcdType], "all") == 0)
     {
-      emuArgcArgv->ctrlDeviceArgs.useGlut = GLCD_TRUE;
-      emuArgcArgv->ctrlDeviceArgs.useNcurses = GLCD_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useGlut = MC_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurses = MC_TRUE;
     }
     else
     {
       printf("%s: -l: invalid lcd stub device type %s\n", __progname,
         argv[emuArgcArgv->argLcdType]);
-      return CMD_RET_ERROR;
+      return MC_FALSE;
     }
   }
 
@@ -196,7 +198,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     if (status != 0)
     {
       printf("%s: -g: invalid glut geometry\n", __progname);
-      return CMD_RET_ERROR;
+      return MC_FALSE;
     }
 
     // An 'x' separator splits the two numeric geometry arguments
@@ -221,7 +223,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     if (status != 0)
     {
       printf("%s: -p: invalid glut position\n", __progname);
-      return CMD_RET_ERROR;
+      return MC_FALSE;
     }
 
     // A ',' separator splits the two numeric position arguments
@@ -239,7 +241,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     {
       printf("%s: -t: tty too long (max = %d chars)\n", __progname,
         NCURSES_TTYLEN - 1);
-      return CMD_RET_ERROR;
+      return MC_FALSE;
     }
     strcpy(tty, argv[emuArgcArgv->argTty]);
   }
@@ -256,7 +258,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     {
       printf("%s: cannot get $HOME\n", __progname);
       printf("- use switch \"-t <tty>\" to set lcd output device\n");
-      return CMD_RET_ERROR;
+      return MC_FALSE;
     }
     fullPath = malloc(strlen(home) + strlen(MCHRON_CONFIG) +
       strlen(NCURSES_TTYFILE) + 1);
@@ -272,7 +274,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
       printf("- manually create folder ~%s\n", MCHRON_CONFIG);
       printf("- start a new monochron ncurses terminal or use switch \"-t <tty>\" to set\n");
       printf("  mchron ncurses terminal tty\n");
-      return CMD_RET_ERROR;
+      return MC_FALSE;
     }
 
     // Read output device in first line. It has a fixed max length.
@@ -296,7 +298,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   }
 
   // All seems to be ok
-  return CMD_RET_OK;
+  return MC_TRUE;
 }
 
 //
@@ -355,21 +357,7 @@ void emuClockUpdate(void)
 
   // Update clock layout
   ctrlLcdFlush();
-  rtcTimeEvent = GLCD_FALSE;
-}
-
-//
-// Function: emuColorGet
-//
-// Get the requested color
-//
-u08 emuColorGet(char colorId)
-{
-  // Validate color
-  if (colorId == 'b')
-    return mcBgColor;
-  else // colorId == 'f'
-    return mcFgColor;
+  rtcTimeEvent = MC_FALSE;
 }
 
 //
@@ -416,7 +404,7 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
 
   // Dump all Monochron variables. Might be useful.
   printf("*** registered variables\n");
-  varPrint(".", GLCD_TRUE);
+  varPrint(".", MC_TRUE);
 
   // Stating the obvious
   printf("*** debug by loading coredump file (when created) in a debugger\n");
@@ -433,7 +421,7 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   // is killed by aborting mchron. Note that at this point glut is still
   // running in its own thread and will have its layout constantly refreshed.
   // This allows a glut screendump to be made if needed.
-  if (ctrlDeviceActive(CTRL_DEVICE_NCURSES) == GLCD_TRUE)
+  if (ctrlDeviceActive(CTRL_DEVICE_NCURSES) == MC_TRUE)
   {
     // Flush the ncurses device so we get its contents as-is at the time of
     // the forced coredump
@@ -443,7 +431,7 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   {
     // Have end-user confirm abort, allowing a screendump to be made prior to
     // actual coredump
-    waitKeypress(GLCD_FALSE);
+    waitKeypress(MC_FALSE);
   }
 
   // Cleanup command line read interface, forcing the readline history to be
@@ -480,7 +468,7 @@ void emuEepromPrint(void)
     printf("invalid\n");
 
   // All Monochron eeprom settings
-  printf("byte address name             value\n");
+  printf("byte address name            value\n");
   emuEepromPrintItem(EEPNAME(EE_INIT));
   emuEepromPrintItem(EEPNAME(EE_BRIGHT));
   emuEepromPrintItem(EEPNAME(EE_VOLUME));
@@ -578,6 +566,24 @@ u08 emuOrientationGet(char orientationId)
 }
 
 //
+// Function: emuSearchTypeGet
+//
+// Get the requested command dictionary search type
+//
+u08 emuSearchTypeGet(char searchType)
+{
+  // Get dictionary search type
+  if (searchType == 'a')
+    return CMD_SEARCH_ARG;
+  else if (searchType == 'd')
+    return CMD_SEARCH_DESCR;
+  else if (searchType == 'n')
+    return CMD_SEARCH_NAME;
+  else // '.'
+    return CMD_SEARCH_ALL;
+}
+
+//
 // Function: emuShutdown
 //
 // This function is used in two ways. First, it is used to implement a graceful
@@ -591,9 +597,9 @@ void emuShutdown(void)
   alarmSoundStop();
   cmdInputCleanup(&cmdInput);
   ctrlCleanup();
-  if (invokeExit == GLCD_FALSE && closeWinMsg == GLCD_FALSE)
+  if (invokeExit == MC_FALSE && closeWinMsg == MC_FALSE)
   {
-    closeWinMsg = GLCD_TRUE;
+    closeWinMsg = MC_TRUE;
     printf("\nlcd device closed - exit\n");
   }
   exit(-1);
@@ -623,14 +629,14 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
   {
     // Keyboard: "^C"
     printf("\n<ctrl>c - interrupt\n");
-    invokeExit = GLCD_TRUE;
+    invokeExit = MC_TRUE;
     emuShutdown();
   }
   else if (sig == SIGTSTP)
   {
     // Keyboard: "^Z"
     printf("\n<ctrl>z - stop\n");
-    invokeExit = GLCD_TRUE;
+    invokeExit = MC_TRUE;
     emuShutdown();
   }
   else if (sig == SIGABRT)
@@ -662,7 +668,7 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
     // separately, eventually causing the program to coredump
     kbModeSet(KB_MODE_LINE);
     alarmSoundStop();
-    invokeExit = GLCD_TRUE;
+    invokeExit = MC_TRUE;
     printf("\n<ctrl>\\ - quit\n");
     abort();
   }
@@ -712,9 +718,9 @@ void emuSigSetup(void)
 u08 emuStartModeGet(char startId)
 {
   if (startId == 'c')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else // startId == 'n'
-    return GLCD_FALSE;
+    return MC_FALSE;
 }
 
 //
@@ -784,7 +790,7 @@ void emuTimeSync(void)
 {
   rtcDateTimeNext.timeSec = 60;
   DEBUGTP("Clear time event");
-  rtcTimeEvent = GLCD_FALSE;
+  rtcTimeEvent = MC_FALSE;
   rtcMchronTimeInit();
 }
 
@@ -796,7 +802,7 @@ void emuTimeSync(void)
 u08 grBufCopy(emuGrBuf_t *emuGrBufFrom, emuGrBuf_t *emuGrBufTo)
 {
   // Reset target buffer
-  grBufInit(emuGrBufTo, GLCD_TRUE);
+  grBufInit(emuGrBufTo, MC_TRUE);
 
   // Copy buffer but make fresh copy of origin string and buffer data
   *emuGrBufTo = *emuGrBufFrom;
@@ -876,7 +882,7 @@ void grBufInfoPrint(emuGrBuf_t *emuGrBuf)
 void grBufInit(emuGrBuf_t *emuGrBuf, u08 reset)
 {
   // Clear malloc-ed buffer origin info, when requested
-  if (reset == GLCD_TRUE)
+  if (reset == MC_TRUE)
   {
     if (emuGrBuf->bufOrigin != NULL)
       free(emuGrBuf->bufOrigin);
@@ -917,7 +923,7 @@ void grBufLoadCtrl(u08 x, u08 y, u08 width, u08 height, char formatName,
   u08 formatBits;
 
   // Setup for loading graphics data
-  grBufInit(emuGrBuf, GLCD_TRUE);
+  grBufInit(emuGrBuf, MC_TRUE);
   format = emuFormatGet(formatName, &formatBytes, &formatBits);
 
   // Split up requested image in frames and reserve buffer space
@@ -1022,7 +1028,7 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
   u08 formatBits;
 
   // Setup for loading graphics data
-  grBufInit(emuGrBuf, GLCD_TRUE);
+  grBufInit(emuGrBuf, MC_TRUE);
   format = emuFormatGet(formatName, &formatBytes, &formatBits);
 
   // Open graphics data file
@@ -1041,7 +1047,7 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
     if (count * formatBytes >= GRAPH_BUF_BYTES)
     {
       printf("buffer overflow at element %d\n", count);
-      grBufInit(emuGrBuf, GLCD_TRUE);
+      grBufInit(emuGrBuf, MC_TRUE);
       fclose(fp);
       return CMD_RET_ERROR;
     }
@@ -1052,7 +1058,7 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
         (format == ELM_DWORD && bufVal > 0xffffffff))
     {
       printf("%s? data value overflow at element %d\n", argName, count + 1);
-      grBufInit(emuGrBuf, GLCD_TRUE);
+      grBufInit(emuGrBuf, MC_TRUE);
       fclose(fp);
       return CMD_RET_ERROR;
     }
@@ -1070,7 +1076,7 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
   if (scanRetVal == 0)
   {
     printf("%s? data scan error at element %i\n", argName, count + 1);
-    grBufInit(emuGrBuf, GLCD_TRUE);
+    grBufInit(emuGrBuf, MC_TRUE);
     fclose(fp);
     return CMD_RET_ERROR;
   }
@@ -1229,7 +1235,7 @@ char waitDelay(int delay)
     select(0, NULL, NULL, NULL, &tvWait);
 
     // Scan keyboard
-    ch = kbKeypressScan(GLCD_TRUE);
+    ch = kbKeypressScan(MC_TRUE);
     if (ch == 'q')
       break;
 
@@ -1266,10 +1272,10 @@ char waitKeypress(u08 allowQuit)
     kbModeSet(KB_MODE_SCAN);
 
   // Clear keyboard buffer
-  kbKeypressScan(GLCD_FALSE);
+  kbKeypressScan(MC_FALSE);
 
   // Wait for single keypress
-  if (allowQuit == GLCD_FALSE)
+  if (allowQuit == MC_FALSE)
     printf("<wait: press key to continue> ");
   else
     printf("<wait: q = quit, other key = continue> ");
@@ -1278,7 +1284,7 @@ char waitKeypress(u08 allowQuit)
   {
     // Sleep 150 msec and scan keyboard
     waitSleep(150);
-    ch = kbKeypressScan(GLCD_TRUE);
+    ch = kbKeypressScan(MC_TRUE);
   }
 
   // Return to line mode if needed
@@ -1341,7 +1347,7 @@ char waitTimerExpiry(struct timeval *tvTimer, int expiry, u08 allowQuit,
     // Wait the remaining time of the timer, defaulting to at least 1 msec
     if (remaining != NULL)
       *remaining = timeDiff;
-    if (allowQuit == GLCD_TRUE)
+    if (allowQuit == MC_TRUE)
     {
       if ((int)(timeDiff / 1000) == 0)
         ch = waitDelay(1);

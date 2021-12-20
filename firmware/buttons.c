@@ -5,9 +5,7 @@
 
 #include <avr/interrupt.h>
 #include <util/delay.h>
-#include "monomain.h"
-#include "ks0108.h"
-#include "util.h"
+#include "global.h"
 #include "buttons.h"
 
 //
@@ -69,8 +67,8 @@ volatile uint8_t btnTickerHold = 0;
 
 // The button hold release request and confirm variables allow for
 // proper 'high speed incrementing' behavior when setting config values
-volatile uint8_t btnHoldRelReq = GLCD_FALSE;
-volatile uint8_t btnHoldRelCfm = GLCD_FALSE;
+volatile uint8_t btnHoldRelReq = MC_FALSE;
+volatile uint8_t btnHoldRelCfm = MC_FALSE;
 
 // Local variable to detect changes in buttons being pressed
 static volatile uint8_t btnLastState = BTN_NONE;
@@ -154,10 +152,10 @@ SIGNAL(ADC_vect)
     // No presses
     btnHold = BTN_NONE;
     btnLastState = BTN_NONE;
-    if (btnHoldRelReq == GLCD_TRUE)
+    if (btnHoldRelReq == MC_TRUE)
     {
-      btnHoldRelCfm = GLCD_TRUE;
-      btnHoldRelReq = GLCD_FALSE;
+      btnHoldRelCfm = MC_TRUE;
+      btnHoldRelReq = MC_FALSE;
       DEBUGP("rlc");
     }
     btnTickerConv = BTN_TICK_CONV_SLOW_MS;

@@ -14,6 +14,7 @@
 
 // Start async button ADC conversion
 void btnConvStart(void);
+
 // Button initialization
 void btnInit(void);
 #endif

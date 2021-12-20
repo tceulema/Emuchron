@@ -4,13 +4,7 @@
 //*****************************************************************************
 
 #include <math.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -33,7 +27,6 @@
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
 static void spotSpeedDialMarkerUpdate(u08 x, u08 marker);
@@ -47,7 +40,7 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal);
 void spotSpeedDialCycle(void)
 {
   // Update common Spotfire clock elements and check if clock requires update
-  if (spotCommonUpdate() == GLCD_FALSE)
+  if (spotCommonUpdate() == MC_FALSE)
     return;
 
   DEBUGP("Update SpeedDial");
@@ -79,7 +72,7 @@ void spotSpeedDialInit(u08 mode)
   {
     // Draw the speed dial
     glcdCircle2(SPEED_X_START + i * SPEED_X_OFFSET_SIZE, SPEED_Y_START,
-      SPEED_RADIUS, CIRCLE_FULL, mcFgColor);
+      SPEED_RADIUS, CIRCLE_FULL);
 
     // Draw speed dial markers
     for (j = 0; j < 7; j++)
@@ -102,7 +95,7 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
   char needleValue[3];
 
   // See if we need to update the needle
-  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+  if (oldVal == newVal && mcClockInit == MC_FALSE)
     return;
 
   // Calculate changes in needle
@@ -120,13 +113,15 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
   newDy = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
 
   // Only work on the needle when it has changed
-  if (oldDx != newDx || oldDy != newDy || mcClockInit == GLCD_TRUE)
+  if (oldDx != newDx || oldDy != newDy || mcClockInit == MC_TRUE)
   {
     // Remove old needle
-    glcdLine(x, SPEED_Y_START, x + oldDx, SPEED_Y_START + oldDy, mcBgColor);
+    glcdColorSetBg();
+    glcdLine(x, SPEED_Y_START, x + oldDx, SPEED_Y_START + oldDy);
+    glcdColorSetFg();
 
     // Add new needle
-    glcdLine(x, SPEED_Y_START, x + newDx, SPEED_Y_START + newDy, mcFgColor);
+    glcdLine(x, SPEED_Y_START, x + newDx, SPEED_Y_START + newDy);
 
     // Repaint (potentially) erased speed dial marker
     if (oldVal % 10 == 0)
@@ -136,7 +131,7 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
   // Update speed dial value
   animValToStr(newVal, needleValue);
   glcdPutStr2(x + SPEED_VALUE_X_OFFSET, SPEED_Y_START + SPEED_VALUE_Y_OFFSET,
-    FONT_5X7M, needleValue, mcFgColor);
+    FONT_5X7M, needleValue);
 }
 
 //
@@ -154,5 +149,5 @@ static void spotSpeedDialMarkerUpdate(u08 x, u08 marker)
   dx = (s08)(tmp * (SPEED_RADIUS - 2 + 0.4L));
   tmp = -cos(SPEED_NDL_RADIAL_SIZE / 6.00 * marker + SPEED_NDL_RADIAL_START);
   dy = (s08)(tmp * (SPEED_RADIUS - 2 + 0.4L));
-  glcdDot(x + dx, SPEED_Y_START + dy, mcFgColor);
+  glcdDot(x + dx, SPEED_Y_START + dy);
 }

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <termios.h>
 #include <unistd.h>
 #include <sys/select.h>
@@ -16,14 +17,13 @@
 #include <errno.h>
 
 // Monochron and emuchron defines
+#include "../global.h"
 #include "../monomain.h"
 #include "../buttons.h"
-#include "../ks0108.h"
-#include "../glcd.h"
 #include "../config.h"
-#include "stub.h"
 #include "mchronutil.h"
 #include "scanutil.h"
+#include "stub.h"
 
 // When used in a VM, Linux ALSA performance gets progressively worse with
 // every Debian release. As of Debian 8, short audio pulses are being clipped
@@ -63,6 +63,9 @@
 #define CYCLE_REQ_NOWAIT	3
 #define CYCLE_REQ_WAIT		4
 
+// Debug output buffer size
+#define DEBUG_BUFSIZE		100
+
 // Monochron global data
 extern volatile uint8_t almAlarming;
 extern uint16_t almTickerSnooze;
@@ -80,36 +83,42 @@ extern const char *__progname;
 volatile uint8_t btnPressed = BTN_NONE;
 volatile uint8_t btnHold = BTN_NONE;
 volatile uint8_t btnTickerHold = 0;
-volatile uint8_t btnHoldRelReq = GLCD_FALSE;
-volatile uint8_t btnHoldRelCfm = GLCD_FALSE;
+volatile uint8_t btnHoldRelReq = MC_FALSE;
+volatile uint8_t btnHoldRelCfm = MC_FALSE;
 
-// Stubbed hardware related stuff
-uint16_t MCUSR = 0;
-uint16_t DDRB = 0;
-uint16_t DDRC = 0;
-uint16_t DDRD = 0;
-uint16_t TCCR0A = 0;
-uint16_t TCCR0B = 0;
-uint16_t OCR0A = 0;
-uint16_t OCR2A = 0;
-// Initial value 16 for OCR2B defines full lcd backlight brightness
-uint16_t OCR2B = 16;
-uint16_t TIMSK0 = 0;
-uint16_t TIMSK2 = 0;
-uint16_t TCCR1B = 0;
-uint16_t TCCR2A = 0;
-uint16_t TCCR2B = 0;
-uint16_t PORTB = 0;
-uint16_t PORTC = 0;
-uint16_t PORTD = 0;
-uint16_t PINB = 0;
-uint16_t PIND = 0;
+// Stubbed hardware related stuff - Not sure if sizes are correct (8/16-bit)
+uint8_t MCUSR = 0;
+uint8_t DDRB = 0;
+uint8_t DDRC = 0;
+uint8_t DDRD = 0;
+uint8_t UDR0 = 0;
+uint16_t UBRR0 = 0;
+uint8_t UCSR0A = 0;
+uint8_t UCSR0B = 0;
+uint8_t UCSR0C = 0;
+uint8_t TCCR0A = 0;
+uint8_t TCCR0B = 0;
+uint8_t OCR0A = 0;
+uint8_t OCR2A = 0;
+uint8_t OCR2B = 16; // Init value 16 defines full lcd backlight brightness
+uint8_t TIMSK0 = 0;
+uint8_t TIMSK2 = 0;
+uint8_t TCCR1B = 0;
+uint8_t TCCR2A = 0;
+uint8_t TCCR2B = 0;
+uint8_t PORTB = 0;
+uint8_t PORTC = 0;
+uint8_t PORTD = 0;
+uint8_t PINB = 0;
+uint8_t PIND = 0;
 
-// Debug output file
+// Debug output file and debug output buffer
 FILE *stubDebugStream = NULL;
+static unsigned char debugBuffer[DEBUG_BUFSIZE];
+static u08 debugCount = 0;
 
 // Keypress hold data
-static u08 hold = GLCD_FALSE;
+static u08 hold = MC_FALSE;
 static char lastChar = '\0';
 
 // Stubbed eeprom data. An atmega328p has 1 KB of eeprom.
@@ -126,9 +135,9 @@ static void (*stubHelp)(void) = NULL;
 
 // Event handler stub data
 static u08 eventCycleState = CYCLE_NOWAIT;
-static u08 eventCfgTimeout = GLCD_TRUE;
-static u08 eventQuitReq = GLCD_FALSE;
-static u08 eventInit = GLCD_TRUE;
+static u08 eventCfgTimeout = MC_TRUE;
+static u08 eventQuitReq = MC_FALSE;
+static u08 eventInit = MC_TRUE;
 
 // Date/time and timer statistics data
 static double timeDelta = 0L;
@@ -220,8 +229,8 @@ static void alarmPidStop(void)
 //
 void alarmSoundReset(void)
 {
-  mcAlarming = GLCD_FALSE;
-  almAlarming = GLCD_FALSE;
+  mcAlarming = MC_FALSE;
+  almAlarming = MC_FALSE;
   almTickerSnooze = 0;
   almTickerAlarm = -1;
 }
@@ -235,7 +244,7 @@ void alarmSoundReset(void)
 void alarmSoundStop(void)
 {
   alarmPidStop();
-  mcAlarming = GLCD_FALSE;
+  mcAlarming = MC_FALSE;
   almTickerSnooze = 0;
 }
 
@@ -247,11 +256,11 @@ void alarmSoundStop(void)
 void alarmSwitchSet(u08 on, u08 show)
 {
   // Switch alarm on or off
-  if (on == GLCD_TRUE)
+  if (on == MC_TRUE)
     ALARM_PIN = ALARM_PIN & ~_BV(ALARM);
   else
     ALARM_PIN = ALARM_PIN | _BV(ALARM);
-  if (show == GLCD_TRUE)
+  if (show == MC_TRUE)
     alarmSwitchShow();
 }
 
@@ -281,8 +290,125 @@ void alarmSwitchToggle(u08 show)
     ALARM_PIN = ALARM_PIN & ~_BV(ALARM);
   else
     ALARM_PIN = ALARM_PIN | _BV(ALARM);
-  if (show == GLCD_TRUE)
+  if (show == MC_TRUE)
     alarmSwitchShow();
+}
+
+//
+// Function: _delay_ms
+//
+// Stub to delay time in milliseconds
+//
+void _delay_ms(int x)
+{
+  struct timeval tvWait;
+
+  // This is ugly....
+  // When we're asked to sleep for KEYPRESS_DLY_1 msec assume we're called
+  // from buttons.c.
+  // Applying this sleep will make a poor UI experience with respect to
+  // keyboard input handling. This is caused by undetected/unprocessed
+  // trailing keyboard events caused by system sleep interaction. By ignoring
+  // KEYPRESS_DLY_1 msec requests I will make you, dear user, very happy.
+  if (x == KEYPRESS_DLY_1)
+    return;
+  tvWait.tv_sec = 0;
+  tvWait.tv_usec = x * 1000;
+  select(0, NULL, NULL, NULL, &tvWait);
+}
+
+//
+// Function: eeprom_read_byte
+//
+// Stub for eeprom data read
+//
+uint8_t eeprom_read_byte(uint8_t *eprombyte)
+{
+  if ((size_t)eprombyte >= EE_SIZE)
+    emuCoreDump(CD_EEPROM, __func__, (int)(size_t)eprombyte, 0, 0, 0);
+  return stubEeprom[(size_t)eprombyte];
+}
+
+//
+// Function: eeprom_write_byte
+//
+// Stub for eeprom data write
+//
+void eeprom_write_byte(uint8_t *eprombyte, uint8_t value)
+{
+  if ((size_t)eprombyte >= EE_SIZE)
+    emuCoreDump(CD_EEPROM, __func__, (int)(size_t)eprombyte, 0, 0, 0);
+  stubEeprom[(size_t)eprombyte] = value;
+}
+
+//
+// Function: i2cMasterReceiveNI
+//
+// Receive time data from RTC
+//
+u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
+{
+  if (length == 7)
+  {
+    // Assume it is a request to get the RTC time
+    struct timeval tv;
+    struct tm *tm;
+    time_t timeClock;
+
+    gettimeofday(&tv, NULL);
+    timeClock = tv.tv_sec + timeDelta;
+    tm = localtime(&timeClock);
+
+    data[0] = bcdEncode(tm->tm_sec);
+    data[1] = bcdEncode(tm->tm_min);
+    data[2] = bcdEncode(tm->tm_hour);
+    data[4] = bcdEncode(tm->tm_mday);
+    data[5] = bcdEncode(tm->tm_mon + 1);
+    data[6] = bcdEncode(tm->tm_year % 100);
+    return 0;
+  }
+  else
+  {
+    // Unsupported request
+    return 1;
+  }
+}
+
+//
+// Function: i2cMasterSendNI
+//
+// Send command data to RTC
+//
+u08 i2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
+{
+  u08 retVal;
+
+  if (length == 1)
+  {
+    // Assume it is a request to verify the presence of the RTC
+    retVal = 0;
+  }
+  else if (length == 8)
+  {
+    // Assume it is a request to set the RTC time
+    uint8_t sec, min, hr, date, mon, yr;
+
+    sec = ((data[1] >> 4) & 0xf) * 10 + (data[1] & 0xf);
+    min = ((data[2] >> 4) & 0xf) * 10 + (data[2] & 0xf);
+    hr = ((data[3] >> 4) & 0xf) * 10 + (data[3] & 0xf);
+    date = ((data[5] >> 4) & 0xf) * 10 + (data[5] & 0xf);
+    mon = ((data[6] >> 4) & 0xf) * 10 + (data[6] & 0xf);
+    yr = ((data[7] >> 4) & 0xf) * 10 + (data[7] & 0xf);
+    stubTimeSet(sec, min, hr, date, mon, yr);
+    retVal = 0;
+  }
+  else
+  {
+    // Unsupported request
+    retVal = 1;
+  }
+
+  return retVal;
 }
 
 //
@@ -324,7 +450,7 @@ static int kbHit(void)
 char kbKeypressScan(u08 quitFind)
 {
   char ch = '\0';
-  u08 quitFound = GLCD_FALSE;
+  u08 quitFound = MC_FALSE;
   u08 myKbMode = KB_MODE_LINE;
 
   // Switch to keyboard scan mode if needed
@@ -336,8 +462,8 @@ char kbKeypressScan(u08 quitFind)
   while (kbHit())
   {
     ch = getchar();
-    if (quitFind == GLCD_TRUE && (ch == 'q' || ch == 'Q'))
-      quitFound = GLCD_TRUE;
+    if (quitFind == MC_TRUE && (ch == 'q' || ch == 'Q'))
+      quitFound = MC_TRUE;
   }
 
   // Return to line mode if needed
@@ -345,7 +471,7 @@ char kbKeypressScan(u08 quitFind)
     kbModeSet(KB_MODE_LINE);
 
   // Return quit key or lowercase keypress
-  if (quitFound == GLCD_TRUE)
+  if (quitFound == MC_TRUE)
     ch = 'q';
   else if (ch >= 'A' && ch <= 'Z')
     ch = ch - 'A' + 'a';
@@ -420,41 +546,6 @@ void stubBeep(uint16_t hz, uint8_t msec)
 }
 
 //
-// Function: stubDelay
-//
-// Stub to delay time in milliseconds
-//
-void stubDelay(int x)
-{
-  struct timeval tvWait;
-
-  // This is ugly....
-  // When we're asked to sleep for KEYPRESS_DLY_1 msec assume we're called
-  // from buttons.c.
-  // Applying this sleep will make a poor UI experience with respect to
-  // keyboard input handling. This is caused by undetected/unprocessed
-  // trailing keyboard events caused by system sleep interaction. By ignoring
-  // KEYPRESS_DLY_1 msec requests I will make you, dear user, very happy.
-  if (x == KEYPRESS_DLY_1)
-    return;
-  tvWait.tv_sec = 0;
-  tvWait.tv_usec = x * 1000;
-  select(0, NULL, NULL, NULL, &tvWait);
-}
-
-//
-// Function: stubEepRead
-//
-// Stub for eeprom data read
-//
-uint8_t stubEepRead(uint8_t *eprombyte)
-{
-  if ((size_t)eprombyte >= EE_SIZE)
-    emuCoreDump(CD_EEPROM, __func__, (int)(size_t)eprombyte, 0, 0, 0);
-  return stubEeprom[(size_t)eprombyte];
-}
-
-//
 // Function: stubEepReset
 //
 // Stub for eeprom initialization
@@ -462,18 +553,6 @@ uint8_t stubEepRead(uint8_t *eprombyte)
 void stubEepReset(void)
 {
   memset(stubEeprom, 0xff, EE_SIZE);
-}
-
-//
-// Function: stubEepWrite
-//
-// Stub for eeprom data write
-//
-void stubEepWrite(uint8_t *eprombyte, uint8_t value)
-{
-  if ((size_t)eprombyte >= EE_SIZE)
-    emuCoreDump(CD_EEPROM, __func__, (int)(size_t)eprombyte, 0, 0, 0);
-  stubEeprom[(size_t)eprombyte] = value;
 }
 
 //
@@ -486,36 +565,36 @@ void stubEepWrite(uint8_t *eprombyte, uint8_t value)
 char stubEventGet(u08 stats)
 {
   char ch = '\0';
-  uint8_t keypress = GLCD_FALSE;
+  uint8_t keypress = MC_FALSE;
   suseconds_t remaining;
 
   // Flush the lcd device
   ctrlLcdFlush();
 
   // Prevent config menu event timeout
-  if (eventCfgTimeout == GLCD_FALSE)
+  if (eventCfgTimeout == MC_FALSE)
     cfgTickerActivity = CFG_TICK_ACTIVITY_SEC;
 
   // Sleep the remainder of the current cycle
-  if (eventInit == GLCD_TRUE)
+  if (eventInit == MC_TRUE)
   {
     // The first entry may not invoke a sleep but instead marks the timer
     // timestamp for the next cycle
     waitTimerStart(&tvCycleTimer);
-    eventInit = GLCD_FALSE;
+    eventInit = MC_FALSE;
   }
   else
   {
     // Wait remaining time for cycle while detecting timer expiry
-    waitTimerExpiry(&tvCycleTimer, ANIM_TICK_CYCLE_MS, GLCD_FALSE, &remaining);
-    if (stats == GLCD_TRUE)
+    waitTimerExpiry(&tvCycleTimer, ANIM_TICK_CYCLE_MS, MC_FALSE, &remaining);
+    if (stats == MC_TRUE)
     {
       if (remaining >= 0)
       {
         inTimeCount++;
         waitTotal = waitTotal + remaining;
-        if (minSleep > (int)(remaining / 1000))
-          minSleep = (int)(remaining / 1000);
+        if (minSleep > (int)round(remaining / 1000))
+          minSleep = (int)round(remaining / 1000);
       }
       else if (eventCycleState == CYCLE_NOWAIT)
       {
@@ -528,7 +607,7 @@ char stubEventGet(u08 stats)
   if ((OCR2B >> OCR2B_BITSHIFT) != stubBacklight)
   {
     stubBacklight = (OCR2B >> OCR2B_BITSHIFT);
-    ctrlLcdBacklightSet((u08)stubBacklight);
+    ctrlLcdBacklightSet(stubBacklight);
   }
 
   // Check if we run in single timer cycle
@@ -536,11 +615,11 @@ char stubEventGet(u08 stats)
       eventCycleState == CYCLE_WAIT_STATS)
   {
     // Statistics
-    if (stats == GLCD_TRUE)
+    if (stats == MC_TRUE)
       singleCycleCount++;
 
     // Reset any keypress hold
-    hold = GLCD_FALSE;
+    hold = MC_FALSE;
 
     // When going to cycle mode stop the alarm (if sounding) for non-nerve
     // wrecking emulator behavior, and also give a cycle mode helpmessage
@@ -567,15 +646,15 @@ char stubEventGet(u08 stats)
     }
 
     // Wait for keypress every 75 msec interval
-    ch = kbKeypressScan(GLCD_FALSE);
+    ch = kbKeypressScan(MC_FALSE);
     while (ch == '\0')
     {
       waitSleep(75);
-      ch = kbKeypressScan(GLCD_FALSE);
+      ch = kbKeypressScan(MC_FALSE);
     }
 
     // Detect cascading quit that overides keypress
-    if (eventQuitReq == GLCD_TRUE)
+    if (eventQuitReq == MC_TRUE)
       ch = 'q';
 
     // Verify keypress and its impact on the wait state
@@ -583,7 +662,7 @@ char stubEventGet(u08 stats)
     {
       // Quit the clock emulator mode
       eventCycleState = CYCLE_REQ_NOWAIT;
-      eventQuitReq = GLCD_TRUE;
+      eventQuitReq = MC_TRUE;
       printf("\n");
       return ch;
     }
@@ -619,13 +698,13 @@ char stubEventGet(u08 stats)
   monoTimer();
 
   // Do we need to do anything with the alarm sound
-  if (alarmPid == -1 && almAlarming == GLCD_TRUE && almTickerSnooze == 0 &&
+  if (alarmPid == -1 && almAlarming == MC_TRUE && almTickerSnooze == 0 &&
       (eventCycleState == CYCLE_REQ_NOWAIT || eventCycleState == CYCLE_NOWAIT))
   {
     // Start playing the alarm sound
     alarmPidStart();
   }
-  else if (alarmPid >= 0 && (almAlarming == GLCD_FALSE ||
+  else if (alarmPid >= 0 && (almAlarming == MC_FALSE ||
       almTickerSnooze > 0 || eventCycleState == CYCLE_WAIT))
   {
     // Stop playing the alarm sound
@@ -637,7 +716,7 @@ char stubEventGet(u08 stats)
   while (kbHit())
   {
     // Get keyboard character and make uppercase char a lowercase char
-    keypress = GLCD_TRUE;
+    keypress = MC_TRUE;
     ch = getchar();
     if (ch >= 'A' && ch <= 'Z')
       ch = ch - 'A' + 'a';
@@ -645,19 +724,19 @@ char stubEventGet(u08 stats)
     // Detect button hold start/end
     if (ch == lastChar)
     {
-      hold = GLCD_TRUE;
+      hold = MC_TRUE;
     }
     else
     {
       lastChar = ch;
-      hold = GLCD_FALSE;
+      hold = MC_FALSE;
     }
 
     if (ch == 'a')
     {
       // Toggle the alarm switch
       printf("\n");
-      alarmSwitchToggle(GLCD_TRUE);
+      alarmSwitchToggle(MC_TRUE);
     }
     else if (ch == 'c')
     {
@@ -695,7 +774,7 @@ char stubEventGet(u08 stats)
     else if (ch == 'q')
     {
       // Signal request to quit
-      eventQuitReq = GLCD_TRUE;
+      eventQuitReq = MC_TRUE;
     }
     else if (ch == 'r')
     {
@@ -718,7 +797,7 @@ char stubEventGet(u08 stats)
     else if (ch == '+')
     {
       // + button
-      if (hold == GLCD_FALSE)
+      if (hold == MC_FALSE)
         btnPressed = BTN_PLUS;
       else
         btnHold = BTN_PLUS;
@@ -731,19 +810,19 @@ char stubEventGet(u08 stats)
   }
 
   // Detect button hold end and confirm when requested
-  if (keypress == GLCD_FALSE || btnHold == BTN_NONE)
+  if (keypress == MC_FALSE || btnHold == BTN_NONE)
   {
     lastChar = '\0';
-    hold = GLCD_FALSE;
-    if (btnHoldRelReq == GLCD_TRUE)
+    hold = MC_FALSE;
+    if (btnHoldRelReq == MC_TRUE)
     {
-      btnHoldRelCfm = GLCD_TRUE;
-      btnHoldRelReq = GLCD_FALSE;
+      btnHoldRelCfm = MC_TRUE;
+      btnHoldRelReq = MC_FALSE;
     }
   }
 
   // Detect cascading quit that overides any keypress
-  if (eventQuitReq == GLCD_TRUE)
+  if (eventQuitReq == MC_TRUE)
     ch = 'q';
 
   return ch;
@@ -756,10 +835,10 @@ char stubEventGet(u08 stats)
 //
 void stubEventInit(u08 startWait, u08 cfgTimeout, void (*stubHelpHandler)(void))
 {
-  eventInit = GLCD_TRUE;
+  eventInit = MC_TRUE;
   eventCfgTimeout = cfgTimeout;
-  eventQuitReq = GLCD_FALSE;
-  if (startWait == GLCD_TRUE)
+  eventQuitReq = MC_FALSE;
+  if (startWait == MC_TRUE)
     eventCycleState = CYCLE_REQ_WAIT;
   else
     eventCycleState = CYCLE_NOWAIT;
@@ -822,76 +901,6 @@ void stubHelpMonochron(void)
 }
 
 //
-// Function: stubI2cMasterReceiveNI
-//
-// Receive time data from RTC
-//
-u08 stubI2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
-{
-  if (length == 7)
-  {
-    // Assume it is a request to get the RTC time
-    struct timeval tv;
-    struct tm *tm;
-    time_t timeClock;
-
-    gettimeofday(&tv, NULL);
-    timeClock = tv.tv_sec + timeDelta;
-    tm = localtime(&timeClock);
-
-    data[0] = bcdEncode(tm->tm_sec);
-    data[1] = bcdEncode(tm->tm_min);
-    data[2] = bcdEncode(tm->tm_hour);
-    data[4] = bcdEncode(tm->tm_mday);
-    data[5] = bcdEncode(tm->tm_mon + 1);
-    data[6] = bcdEncode(tm->tm_year % 100);
-    return 0;
-  }
-  else
-  {
-    // Unsupported request
-    return 1;
-  }
-}
-
-//
-// Function: stubI2cMasterSendNI
-//
-// Send command data to RTC
-//
-u08 stubI2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
-{
-  u08 retVal;
-
-  if (length == 1)
-  {
-    // Assume it is a request to verify the presence of the RTC
-    retVal = 0;
-  }
-  else if (length == 8)
-  {
-    // Assume it is a request to set the RTC time
-    uint8_t sec, min, hr, date, mon, yr;
-
-    sec = ((data[1] >> 4) & 0xf) * 10 + (data[1] & 0xf);
-    min = ((data[2] >> 4) & 0xf) * 10 + (data[2] & 0xf);
-    hr = ((data[3] >> 4) & 0xf) * 10 + (data[3] & 0xf);
-    date = ((data[5] >> 4) & 0xf) * 10 + (data[5] & 0xf);
-    mon = ((data[6] >> 4) & 0xf) * 10 + (data[6] & 0xf);
-    yr = ((data[7] >> 4) & 0xf) * 10 + (data[7] & 0xf);
-    stubTimeSet(sec, min, hr, date, mon, yr);
-    retVal = 0;
-  }
-  else
-  {
-    // Unsupported request
-    retVal = 1;
-  }
-
-  return retVal;
-}
-
-//
 // Function: stubLogfileClose
 //
 // Close the debug logfile
@@ -905,19 +914,22 @@ void stubLogfileClose(void)
 //
 // Function: stubLogfileOpen
 //
-// Open the debug logfile
+// Open the debug logfile.
+// Return: MC_TRUE (success) or MC_FALSE (failure).
 //
-int stubLogfileOpen(char fileName[])
+u08 stubLogfileOpen(char fileName[])
 {
   if (!DEBUGGING)
   {
     printf("%s: -d: master debugging is off\n", __progname);
-    printf("assign value 1 to \"#define DEBUGGING\" in monomain.h [firmware] and rebuild\n");
+    printf("assign value 1 to \"#define DEBUGGING\" in global.h [firmware] and rebuild\n");
     printf("mchron.\n");
-    return CMD_RET_ERROR;
+    return MC_FALSE;
   }
   else
   {
+    // Initialize the debug output buffer and try to open logfile
+    memset(debugBuffer, '\0', sizeof(debugBuffer));
     stubDebugStream = fopen(fileName, "a");
     if (stubDebugStream == NULL)
     {
@@ -925,31 +937,16 @@ int stubLogfileOpen(char fileName[])
       int error = errno;
       printf("%s: -d: error opening debug output file: %s\n", __progname,
         strerror(error));
-      return CMD_RET_ERROR;
+      return MC_FALSE;
     }
     else
     {
       // Disable buffering so we can properly 'tail -f' the file
       setbuf(stubDebugStream, NULL);
       DEBUGP("**** logging started");
-      return CMD_RET_OK;
+      return MC_TRUE;
     }
   }
-}
-
-//
-// Function: stubPutString
-//
-// Stub for debug string. Output is redirected to output file as specified on
-// the mchron command line. If no output file is specified, debug info is
-// discarded.
-// Note: To enable debugging set DEBUGGING to 1 in monomain.h
-//
-void stubPutString(char *x, char *format)
-{
-  if (stubDebugStream != NULL)
-    fprintf(stubDebugStream, format, x);
-  return;
 }
 
 //
@@ -965,8 +962,8 @@ void stubStatsPrint(void)
   if (inTimeCount == 0)
     printf("         avgSleep=- msec, ");
   else
-    printf("         avgSleep=%d msec, ",
-      (int)(waitTotal / (double)inTimeCount / 1000));
+    printf("         avgSleep=%.0f msec, ",
+      waitTotal / (double)inTimeCount / 1000);
 
   if (minSleep == ANIM_TICK_CYCLE_MS + 1)
     printf("minSleep=- msec\n");
@@ -1039,7 +1036,7 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
     tmNewCopy.tm_min = min;
     tmNewCopy.tm_hour = hr;
   }
-  // else 80 -> default back to system time as currently populated
+  // else DT_TIME_RESET -> default back to system time as currently populated
 
   // Verify what to do with date
   if (date == DT_DATE_KEEP)
@@ -1056,7 +1053,7 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
     tmNewCopy.tm_mon = mon - 1;
     tmNewCopy.tm_year = yr + 100;
   }
-  // else 80 -> default back to system time as currently populated
+  // else DT_DATE_RESET -> default back to system time as currently populated
 
   // Prepare for a validity check on the requested date
   tmNewDateValidate1 = tmNewCopy;
@@ -1070,7 +1067,7 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
   {
     // The requested date is too far in future or past
     printf("date? beyond system range\n");
-    return GLCD_FALSE;
+    return MC_FALSE;
   }
   timeDeltaNew = difftime(timeNew, timeNow);
 
@@ -1086,7 +1083,7 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
       tmNewDateValidate1.tm_year != tmNewDateValidate2.tm_year)
   {
     printf("date? invalid\n");
-    return GLCD_FALSE;
+    return MC_FALSE;
   }
 
   // Get delta between earlier retrieved current and new time and apply it on a
@@ -1113,7 +1110,7 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
   // Sync mchron clock time based on new delta
   rtcTimeRead();
 
-  return GLCD_TRUE;
+  return MC_TRUE;
 }
 
 //
@@ -1122,28 +1119,28 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
 // Stub for debug char. Output is redirected to output file as specified on the
 // mchron command line. If no output file is specified, debug info is
 // discarded.
+// The debug char is buffered until a newline is pushed or the buffer is full.
 // Note: To enable debugging set DEBUGGING to 1 in monomain.h
 //
-void stubUartPutChar(char x)
+void stubUartPutChar(void)
 {
-  if (stubDebugStream != NULL)
-    fprintf(stubDebugStream, "%c", x);
-  return;
-}
+  unsigned char debugChar = (unsigned char)UDR0;
 
-//
-// Function: stubUartPutDec
-//
-// Stub for debug decimal. Output is redirected to output file as specified on
-// the mchron command line. If no output file is specified, debug info is
-// discarded.
-// Note: To enable debugging set DEBUGGING to 1 in monomain.h
-//
-void stubUartPutDec(int x, char *format)
-{
   if (stubDebugStream != NULL)
-    fprintf(stubDebugStream, format, x);
-  return;
+  {
+    // Buffer the debug character
+    debugBuffer[debugCount] = debugChar;
+    debugCount++;
+
+    // Dump buffer when a newline is pushed or the buffer is full
+    if (debugChar == '\n' || debugCount == sizeof(debugBuffer) - 1)
+    {
+      // Dump and reset buffer
+      fprintf(stubDebugStream, "%s", debugBuffer);
+      memset(debugBuffer, '\0', debugCount);
+      debugCount = 0;
+    }
+  }
 }
 
 //
@@ -1151,7 +1148,3 @@ void stubUartPutDec(int x, char *format)
 //
 void i2cInit(void) { return; }
 void btnInit(void) { return; }
-void uart_init(uint16_t x) { return; }
-void wdt_disable(void) { return; }
-void wdt_enable(uint16_t x) { return; }
-void wdt_reset(void) { return; }

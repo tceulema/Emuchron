@@ -8,10 +8,11 @@
 #
 # Instructions:
 # 1) Manually load the mario frames into buffer 0 and display them on the lcd
-#    using the following three commands:
+#    using the following four commands:
 #    le
+#    psf
 #    gfs 0 9 12 ../script/bitmap/mario.txt
-#    pb f 0 3 13 0 0 36 12
+#    pb 0 3 13 0 0 36 12
 # 2) For convenience make the glut window big and then have it display
 #    individual pixels using the following command:
 #    lgg 1 0
@@ -31,27 +32,28 @@ vs height=12
 vs frames=4
 
 # Some people don't read instructions...
-prf b 0 0 128 8 2 0
-pa f 5 1 5x5p h 1 1 ** please read the instructions **
+psf
+prf 0 0 128 8 2 5
+pa 5 1 5x5p h 1 1 ** please read the instructions **
 hm --- press 'q' to quit ---
 
 # Copy the (modified) mario frame data from the lcd controller into buffer 1
 gci 1 w 3 13 frames*width height
 
 # Remove any visible mario in the walking area
-prf b 0 33 128 height 2 0
+prf 0 33 128 height 2 5
 
 # Make mario move from left to right and back
 wts
 rf null true null
   # Left to right
   rf x=3 x<60 x=x+1
-    pb f 1 x 33 (2+int(x/2)%2)*width 0 width height
+    pb 1 x 33 (2+int(x/2)%2)*width 0 width height
     wte 150
   rn
   # Right to left
   rf x=60 x>3 x=x-1
-    pb f 1 x 33 (int(x/2)%2)*width 0 width height
+    pb 1 x 33 (int(x/2)%2)*width 0 width height
     wte 150
   rn
 rn

@@ -22,6 +22,7 @@ vs xCenter=64
 vs yCenter=32
 
 # First paint circles, then clear them, then rinse and repeat
+psf
 rf null true null
 
   # Clear screen
@@ -38,19 +39,19 @@ rf null true null
     # Paint circles dot by dot
     rf x=0 x<=y x=x+1
       iif x!=0&&x!=y
-        pd f xCenter+x yCenter-y
-        pd f xCenter-y yCenter+x
-        pd f xCenter+y yCenter+x
+        pd xCenter+x yCenter-y
+        pd xCenter-y yCenter+x
+        pd xCenter+y yCenter+x
       ien
       iif x!=y
-        pd f xCenter-x yCenter-y
+        pd xCenter-x yCenter-y
       ien
       iif x!=0
-        pd f xCenter+x yCenter+y
+        pd xCenter+x yCenter+y
       ien
-      pd f xCenter-x yCenter+y
-      pd f xCenter+y yCenter-x
-      pd f xCenter-y yCenter-x
+      pd xCenter-x yCenter+y
+      pd xCenter+y yCenter-x
+      pd xCenter-y yCenter-x
 
       # After painting a set of dots wait a while so we can
       # see how a circle is actually drawn on the lcd

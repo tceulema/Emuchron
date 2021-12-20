@@ -4,15 +4,10 @@
 //*****************************************************************************
 
 #include <math.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../ks0108conf.h"
 #include "mosquito.h"
 
 // Info on hr/min/sec elements of mosquito clock
@@ -65,7 +60,6 @@ extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
 extern char *animMonths[12];
 
 // Common text labels
@@ -121,7 +115,7 @@ void mosquitoCycle(void)
   animADAreaUpdate(MOS_ALARM_X_START, MOS_AD_Y_START, AD_AREA_ALM_ONLY);
 
   // Each minute change the direction of the elements
-  if (mcClockTimeEvent == GLCD_TRUE && mcClockNewTM != mcClockOldTM)
+  if (mcClockTimeEvent == MC_TRUE && mcClockNewTM != mcClockOldTM)
     mosquitoDirectionSet();
 
   // Question: Why not move all elements in every clock cycle?
@@ -154,8 +148,8 @@ void mosquitoCycle(void)
 
   // Redraw all time elements regardless whether changed or not to
   // countereffect distorted elements that are overlapped by others
-  if ((mcCycleCounter & 1) == 1 || mcClockTimeEvent == GLCD_TRUE ||
-      mcClockInit == GLCD_TRUE)
+  if ((mcCycleCounter & 1) == 1 || mcClockTimeEvent == MC_TRUE ||
+      mcClockInit == MC_TRUE)
   {
     mosquitoElementDraw(&elementSec, mcClockNewTS);
     mosquitoElementDraw(&elementMin, mcClockNewTM);
@@ -173,7 +167,7 @@ void mosquitoInit(u08 mode)
   DEBUGP("Init Mosquito");
 
   // Draw static clock layout
-  glcdFillRectangle(0, MOS_AD_BAR_Y_START, GLCD_XPIXELS, 1, mcFgColor);
+  glcdFillRectangle(0, MOS_AD_BAR_Y_START, GLCD_XPIXELS, 1);
 
   // Init the several time graphic elements
   elementSec = elementSecInit;
@@ -236,17 +230,19 @@ static void mosquitoElementDraw(timeElement_t *element, u08 value)
 
   animValToStr(value, msg);
 
-  // Draw element value
-  glcdPutStr2(element->posX, element->posY, FONT_5X7M, msg, mcFgColor);
-  // Draw border around element value
-  glcdRectangle(element->posX - 1, element->posY - 1, 13, 9, mcBgColor);
+  // Draw element value with border around element value
+  glcdPutStr2(element->posX, element->posY, FONT_5X7M, msg);
+  glcdColorSetBg();
+  glcdRectangle(element->posX - 1, element->posY - 1, 13, 9);
+  glcdColorSetFg();
 
-  // Draw element text
+  // Draw element text with border around element text
   pxDone = glcdPutStr2(element->posX + element->textOffset,
-    element->posY + MOS_TXT_Y_OFFSET, FONT_5X5P, element->text, mcFgColor);
-  // Draw border around element text
+    element->posY + MOS_TXT_Y_OFFSET, FONT_5X5P, element->text);
+  glcdColorSetBg();
   glcdRectangle(element->posX + element->textOffset - 1,
-    element->posY + MOS_TXT_Y_OFFSET - 1, pxDone + 1, 7, mcBgColor);
+    element->posY + MOS_TXT_Y_OFFSET - 1, pxDone + 1, 7);
+  glcdColorSetFg();
 }
 
 //
@@ -296,33 +292,34 @@ static void mosquitoElementMovePrep(timeElement_t *element)
   dx = (s08)mathPosXNew - (s08)posX;
   dy = (s08)mathPosYNew - (s08)posY;
 
+  glcdColorSetBg();
   if (dx > 1)
   {
     // Clear left side of element value and text
-    glcdFillRectangle(posX, posY, (u08)(dx - 1), 7, mcBgColor);
-    glcdFillRectangle(textPosX, posY + 8, (u08)(dx - 1), 5, mcBgColor);
+    glcdFillRectangle(posX, posY, (u08)(dx - 1), 7);
+    glcdFillRectangle(textPosX, posY + 8, (u08)(dx - 1), 5);
   }
   else if (dx < -1)
   {
     // Clear right side of element value and text
-    glcdFillRectangle((u08)(posX + 12 + dx), posY, (u08)(-dx - 1), 7,
-      mcBgColor);
+    glcdFillRectangle((u08)(posX + 12 + dx), posY, (u08)(-dx - 1), 7);
     glcdFillRectangle((u08)(textPosX + width + dx + 1), posY + 8,
-      (u08)(-dx - 1), 5, mcBgColor);
+      (u08)(-dx - 1), 5);
   }
   if (dy > 1)
   {
     // Clear top side of element value and text
-    glcdFillRectangle(posX, posY, 11, (u08)(dy - 1), mcBgColor);
-    glcdFillRectangle(textPosX, posY + 8, width, (u08)(dy - 1), mcBgColor);
+    glcdFillRectangle(posX, posY, 11, (u08)(dy - 1));
+    glcdFillRectangle(textPosX, posY + 8, width, (u08)(dy - 1));
   }
   else if (dy < -1)
   {
     // Clear bottom side of element value and text
-    glcdFillRectangle(posX, posY + 8 + dy, 11, (u08)(-dy - 1), mcBgColor);
+    glcdFillRectangle(posX, posY + 8 + dy, 11, (u08)(-dy - 1));
     glcdFillRectangle(textPosX, (u08)(posY + 13 - (-dy - 1)), width,
-      (u08)(-dy - 1), mcBgColor);
+      (u08)(-dy - 1));
   }
+  glcdColorSetFg();
 
   // Sync new position of element
   element->posX = (u08)mathPosXNew;

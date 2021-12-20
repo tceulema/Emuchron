@@ -23,7 +23,6 @@ typedef struct _lcdGlutGlcdPix_t
   unsigned char pixelLock;	// Double-click event occured
   unsigned char glcdX;		// The glcd x pixel coordinate
   unsigned char glcdY;		// The glcd y pixel coordinate
-  unsigned char glcdPix;	// The glcd pixel value
 } lcdGlutGlcdPix_t;
 
 // Lcd device control methods

@@ -4,15 +4,10 @@
 //*****************************************************************************
 
 #include <math.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../ks0108conf.h"
 #include "digital.h"
 
 // Uncomment if you want to apply a 'glitch' mode to the clock.
@@ -38,7 +33,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
 #ifdef DIGI_GLITCH
 extern volatile uint8_t mcCycleCounter;
 // mcU8Util1 = glitch sleep duration (sec)
@@ -102,44 +96,42 @@ void digitalCycle(void)
 #endif
 
   // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+  if (mcClockTimeEvent == MC_FALSE && mcClockInit == MC_FALSE)
     return;
 
   DEBUGP("Update Digital");
 
   // Verify changes in date
-  if (mcClockDateEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+  if (mcClockDateEvent == MC_TRUE || mcClockInit == MC_TRUE)
   {
     glcdPutStr2(DIGI_DATE_X_START, digiDateYStart, FONT_5X7M,
-      (char *)animDays[rtcDotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)],
-      mcFgColor);
+      (char *)animDays[calDotw(mcClockNewDM, mcClockNewDD, mcClockNewDY)]);
     glcdPutStr2(DIGI_DATE_X_START + 24, digiDateYStart, FONT_5X7M,
-      (char *)animMonths[mcClockNewDM - 1], mcFgColor);
+      (char *)animMonths[mcClockNewDM - 1]);
     animValToStr(mcClockNewDD, clockInfo);
     clockInfo[2] = ',';
     clockInfo[3] = ' ';
     clockInfo[4] = '2';
     clockInfo[5] = '0';
     animValToStr(mcClockNewDY, &clockInfo[6]);
-    glcdPutStr2(DIGI_DATE_X_START + 48, digiDateYStart, FONT_5X7M, clockInfo,
-      mcFgColor);
+    glcdPutStr2(DIGI_DATE_X_START + 48, digiDateYStart, FONT_5X7M, clockInfo);
   }
 
   // Verify changes in time
   digitalTimeValDraw(mcClockOldTH, mcClockNewTH, 0);
   digitalTimeValDraw(mcClockOldTM, mcClockNewTM, 1);
-  if (digiSecShow == GLCD_TRUE)
+  if (digiSecShow == MC_TRUE)
     digitalTimeValDraw(mcClockOldTS, mcClockNewTS, 2);
 
 #ifdef DIGI_HM_BLINK
   // For the CHRON_DIGITAL_HM clock make the bottom dot ":" separator blink
-  if (digiSecShow == GLCD_FALSE)
+  if (digiSecShow == MC_FALSE)
   {
-    u08 color = mcFgColor;
     if ((mcClockNewTS & 0x1) == 0)
-      color = mcBgColor;
+      glcdColorSetBg();
     glcdFillRectangle(60 + DIGI_HM_BLINK_BEZEL, 22 + DIGI_HM_BLINK_BEZEL,
-      8 - 2 * DIGI_HM_BLINK_BEZEL, 10 - 2 * DIGI_HM_BLINK_BEZEL, color);
+      8 - 2 * DIGI_HM_BLINK_BEZEL, 10 - 2 * DIGI_HM_BLINK_BEZEL);
+    glcdColorSetFg();
   }
 #endif
 
@@ -214,7 +206,7 @@ void digitalCycle(void)
 void digitalHmInit(u08 mode)
 {
   // Setup the variables for the digital clock in HH:MM format
-  digiSecShow = GLCD_FALSE;
+  digiSecShow = MC_FALSE;
   digiTimeXStart = 4;
   digiTimeYStart = 2;
   digiTimeXScale = 4;
@@ -233,7 +225,7 @@ void digitalHmInit(u08 mode)
 void digitalHmsInit(u08 mode)
 {
   // Setup the variables for the digital clock in HH:MM:SS format
-  digiSecShow = GLCD_TRUE;
+  digiSecShow = MC_TRUE;
   digiTimeXStart = 16;
   digiTimeYStart = 12;
   digiTimeXScale = 2;
@@ -256,15 +248,18 @@ static void digitalInit(u08 mode)
   // Draw static clock layout.
   // On partial init clear digital clock area but leave alarm area unharmed.
   if (mode == DRAW_INIT_PARTIAL)
-    glcdFillRectangle(0, 0, GLCD_XPIXELS, DIGI_ALARM_Y_START - 1, mcBgColor);
+  {
+    glcdColorSetBg();
+    glcdFillRectangle(0, 0, GLCD_XPIXELS, DIGI_ALARM_Y_START - 1);
+    glcdColorSetFg();
+  }
 
   // Draw the ":" separators between hour:min(:sec)
   glcdPutStr3(digiTimeXStart + 2 * 6 * digiTimeXScale + digiTimeXScale,
-    digiTimeYStart, FONT_5X7M, ":", digiTimeXScale, digiTimeYScale, mcFgColor);
-  if (digiSecShow == GLCD_TRUE)
+    digiTimeYStart, FONT_5X7M, ":", digiTimeXScale, digiTimeYScale);
+  if (digiSecShow == MC_TRUE)
     glcdPutStr3(digiTimeXStart + 5 * 6 * digiTimeXScale + 2 * digiTimeXScale,
-      digiTimeYStart, FONT_5X7M, ":", digiTimeXScale, digiTimeYScale,
-      mcFgColor);
+      digiTimeYStart, FONT_5X7M, ":", digiTimeXScale, digiTimeYScale);
 
 #ifdef DIGI_GLITCH
   // Reset lcd display and init the first glitch cycle
@@ -283,12 +278,12 @@ static void digitalTimeValDraw(u08 oldVal, u08 newVal, u08 factor)
   char clockInfo[3];
 
   // See if we need to update the time element
-  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+  if (oldVal == newVal && mcClockInit == MC_FALSE)
     return;
 
   animValToStr(newVal, clockInfo);
   glcdPutStr3(digiTimeXStart + factor * 19 * digiTimeXScale, digiTimeYStart,
-    FONT_5X7M, clockInfo, digiTimeXScale, digiTimeYScale, mcFgColor);
+    FONT_5X7M, clockInfo, digiTimeXScale, digiTimeYScale);
 }
 
 //

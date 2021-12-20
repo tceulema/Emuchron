@@ -7,6 +7,8 @@
 
 # Repeat for both controllers
 rf ctrl=0 ctrl<2 ctrl=ctrl+1
+  # Set the active lcd controller
+  lcs ctrl
   # A controller has 64 x columns...
   rf x=0 x<64 x=x+1
     # ... and 8 vertical y bytes of 8 pixels each
@@ -16,17 +18,19 @@ rf ctrl=0 ctrl<2 ctrl=ctrl+1
       # twice. Upon the second read the byte is properly read and the
       # controller x cursor is incremented.
       # Weird? Yes, but that's how the controller hardware works.
-      lcs ctrl x y
-      lr ctrl myLcdByte
-      lr ctrl myLcdByte
+      lxs x
+      lys y
+      lr myLcdByte
+      lr myLcdByte
 
       # Set the cursor back to where we came from and write the inverted byte
       # back to the lcd
-      lcs ctrl x y
-      lw ctrl ~myLcdByte&0xff
+      lxs x
+      lys y
+      lw ~myLcdByte&0xff
     rn
   rn
 rn
 
-# Reset and sync hardware with glcd software cursor to (0,0)
+# Reset and sync controller hardware with glcd software cursor to (0,0)
 lcr

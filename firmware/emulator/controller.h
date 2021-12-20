@@ -11,7 +11,7 @@
 #include "lcdncurses.h"
 
 // The controller interface source methods
-#define CTRL_METHOD_COMMAND	0	// A glcdControlWrite() method
+#define CTRL_METHOD_CTRL_W	0	// A glcdControlWrite() method
 #define CTRL_METHOD_READ	1	// A glcdDataRead() method
 #define CTRL_METHOD_WRITE	2	// A glcdDataWrite() method
 
@@ -51,8 +51,14 @@ void ctrlRegPrint(void);
 void ctrlStatsPrint(u08 type);
 void ctrlStatsReset(u08 type);
 
-// Controller device emulator method
-u08 ctrlExecute(u08 method, u08 controller, u08 data);
+// Controller data pin/port utility methods
+void ctrlBusyState(void);
+void ctrlControlSet(void);
+void ctrlPortDataSet(u08 data);
+
+// Controller device emulator methods
+void ctrlControlSelect(u08 controller);
+void ctrlExecute(u08 method);
 
 // Glut glcd pixel double-click methods
 void ctrlGlcdPixConfirm(void);

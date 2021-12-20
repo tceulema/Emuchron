@@ -4,15 +4,10 @@
 //*****************************************************************************
 
 #include <string.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../ks0108.h"
 #include "qrencode.h"
 #include "qr.h"
 
@@ -104,7 +99,7 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
+extern volatile uint8_t mcFgColor;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
 
@@ -147,7 +142,7 @@ void qrCycle(void)
 
   // Only when a time event, init or QR cycle is flagged we need to update the
   // clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE &&
+  if (mcClockTimeEvent == MC_FALSE && mcClockInit == MC_FALSE &&
       mcU8Util1 == 0)
     return;
 
@@ -157,11 +152,11 @@ void qrCycle(void)
   }
 
   // Verify changes in date+time
-  if (mcClockTimeEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+  if (mcClockTimeEvent == MC_TRUE || mcClockInit == MC_TRUE)
   {
-    if (mcU8Util2 == CHRON_QR_HMS || mcClockInit == GLCD_TRUE ||
+    if (mcU8Util2 == CHRON_QR_HMS || mcClockInit == MC_TRUE ||
         mcClockNewTH != mcClockOldTH || mcClockNewTM != mcClockOldTM ||
-        mcClockDateEvent == GLCD_TRUE)
+        mcClockDateEvent == MC_TRUE)
     {
       // Something has changed in date+time forcing us to update the QR
       char *dow;
@@ -193,7 +188,7 @@ void qrCycle(void)
       {
         // Add date "DDD MMM dd, 20YY".
         // Put the three chars of day of the week and month in QR string.
-        dow = (char *)animDays[rtcDotw(mcClockNewDM, mcClockNewDD,
+        dow = (char *)animDays[calDotw(mcClockNewDM, mcClockNewDD,
           mcClockNewDY)];
         mon = (char *)animMonths[mcClockNewDM - 1];
         for (i = 0; i < 3; i++)
@@ -283,52 +278,53 @@ void qrInit(u08 mode)
   // Start from scratch
   if (mode == DRAW_INIT_FULL)
   {
-    if (mcBgColor == GLCD_ON)
+    if (mcFgColor == GLCD_OFF)
     {
       // Draw a black border around the QR clock
+      glcdColorSet(GLCD_OFF);
       glcdRectangle(QR_X_START - QR_BORDER - 1, QR_Y_START - QR_BORDER - 1,
         QR_PIX_FACTOR * WD + 2 * QR_BORDER + 2,
-        QR_PIX_FACTOR * WD + 2 * QR_BORDER + 2, GLCD_OFF);
+        QR_PIX_FACTOR * WD + 2 * QR_BORDER + 2);
     }
     else
     {
       // Draw a white area for the QR clock
+      glcdColorSet(GLCD_ON);
       glcdFillRectangle(QR_X_START - QR_BORDER, QR_Y_START - QR_BORDER,
         QR_PIX_FACTOR * WD + 2 * QR_BORDER,
-        QR_PIX_FACTOR * WD + 2 * QR_BORDER, GLCD_ON);
+        QR_PIX_FACTOR * WD + 2 * QR_BORDER);
     }
 
     // Draw elements of QR that need to be drawn only once
     qrMarkerDraw(QR_X_START, QR_Y_START);
     qrMarkerDraw(QR_X_START, QR_Y_START + 18 * QR_PIX_FACTOR);
     qrMarkerDraw(QR_X_START + 18 * QR_PIX_FACTOR, QR_Y_START);
+    glcdColorSet(GLCD_OFF);
     glcdRectangle(QR_X_START + 16 * QR_PIX_FACTOR,
-      QR_Y_START + 16 * QR_PIX_FACTOR, 10, 10, GLCD_OFF);
+      QR_Y_START + 16 * QR_PIX_FACTOR, 10, 10);
     glcdRectangle(QR_X_START + 16 * QR_PIX_FACTOR + 1,
-      QR_Y_START + 16 * QR_PIX_FACTOR + 1, 8, 8, GLCD_OFF);
+      QR_Y_START + 16 * QR_PIX_FACTOR + 1, 8, 8);
     glcdRectangle(QR_X_START + 18 * QR_PIX_FACTOR,
-      QR_Y_START + 18 * QR_PIX_FACTOR, 2, 2, GLCD_OFF);
+      QR_Y_START + 18 * QR_PIX_FACTOR, 2, 2);
   }
   else
   {
     // Clear the QR area except the markers
+    glcdColorSet(GLCD_ON);
     glcdFillRectangle(QR_X_START + 8 * QR_PIX_FACTOR, QR_Y_START,
-      9 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR + 1, GLCD_ON);
+      9 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR + 1);
     glcdFillRectangle(QR_X_START, QR_Y_START + 8 * QR_PIX_FACTOR,
-      16 * QR_PIX_FACTOR, 10 * QR_PIX_FACTOR, GLCD_ON);
+      16 * QR_PIX_FACTOR, 10 * QR_PIX_FACTOR);
     glcdFillRectangle(QR_X_START + 16 * QR_PIX_FACTOR,
-      QR_Y_START + 8 * QR_PIX_FACTOR, 9 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR,
-      GLCD_ON);
+      QR_Y_START + 8 * QR_PIX_FACTOR, 9 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR);
     glcdFillRectangle(QR_X_START + 8 * QR_PIX_FACTOR,
-      QR_Y_START + 18 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR,
-      GLCD_ON);
+      QR_Y_START + 18 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR, 8 * QR_PIX_FACTOR);
     glcdFillRectangle(QR_X_START + 21 * QR_PIX_FACTOR,
-      QR_Y_START + 16 * QR_PIX_FACTOR, 4 * QR_PIX_FACTOR, 9 * QR_PIX_FACTOR,
-      GLCD_ON);
+      QR_Y_START + 16 * QR_PIX_FACTOR, 4 * QR_PIX_FACTOR, 9 * QR_PIX_FACTOR);
     glcdFillRectangle(QR_X_START + 16 * QR_PIX_FACTOR,
-      QR_Y_START + 21 * QR_PIX_FACTOR, 5 * QR_PIX_FACTOR, 5 * QR_PIX_FACTOR,
-      GLCD_ON);
+      QR_Y_START + 21 * QR_PIX_FACTOR, 5 * QR_PIX_FACTOR, 5 * QR_PIX_FACTOR);
   }
+  glcdColorSetFg();
 
   // Set initial QR generation state to idle
   mcU8Util1 = 0;
@@ -384,18 +380,18 @@ static void qrDraw(void)
     if (yByte == 0)
     {
       // Lcd top row pixels
-      if (mcBgColor == GLCD_OFF)
-        template = 0x78;
-      else
+      if (mcFgColor == GLCD_OFF)
         template = 0x7b;
+      else
+        template = 0x78;
     }
     else if (yByte == 7)
     {
       // Lcd bottom row pixels
-      if (mcBgColor == GLCD_OFF)
-        template = 0x1e;
-      else
+      if (mcFgColor == GLCD_OFF)
         template = 0xde;
+      else
+        template = 0x1e;
     }
     else
     {
@@ -470,7 +466,9 @@ static void qrDraw(void)
 //
 static void qrMarkerDraw(u08 x, u08 y)
 {
-  glcdRectangle(x, y, 14, 14, GLCD_OFF);
-  glcdRectangle(x + 1, y + 1, 12, 12, GLCD_OFF);
-  glcdFillRectangle(x + 4, y + 4, 6, 6, GLCD_OFF);
+  glcdColorSet(GLCD_OFF);
+  glcdRectangle(x, y, 14, 14);
+  glcdRectangle(x + 1, y + 1, 12, 12);
+  glcdFillRectangle(x + 4, y + 4, 6, 6);
+  glcdColorSetFg();
 }

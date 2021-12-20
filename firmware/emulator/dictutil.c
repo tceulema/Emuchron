@@ -8,6 +8,7 @@
 #include <regex.h>
 
 // Emuchron defines
+#include "../global.h"
 #include "dictutil.h"
 
 // Load the mchron command dictionary
@@ -172,12 +173,12 @@ static void dictCmdPrint(cmdCommand_t *cmdCommand)
 // Print mchron command dictionary entries using a regex pattern (where '.'
 // matches every command)
 //
-u08 dictPrint(char *pattern)
+u08 dictPrint(char *pattern, u08 searchType)
 {
   regex_t regex;
+  cmdCommand_t *cmdCommand;
   int status = 0;
-  int i;
-  int j;
+  int i, j, k;
   int commandCount = 0;
 
   // Validate regex pattern
@@ -194,9 +195,50 @@ u08 dictPrint(char *pattern)
     // Loop through each command in the command group
     for (j = 0; j < cmdDictMchron[i].commandCount; j++)
     {
-      // See if command name matches regex pattern
-      status = regexec(&regex, cmdDictMchron[i].cmdCommand[j].cmdName,
-        (size_t)0, NULL, 0);
+      // Try to match the command property with the regex pattern
+      cmdCommand = &cmdDictMchron[i].cmdCommand[j];
+      if (searchType == CMD_SEARCH_NAME)
+      {
+        status = regexec(&regex, cmdCommand->cmdName, (size_t)0, NULL, 0);
+      }
+      else if (searchType == CMD_SEARCH_DESCR)
+      {
+        status = regexec(&regex, cmdCommand->cmdNameDescr, (size_t)0, NULL, 0);
+      }
+      else if (searchType == CMD_SEARCH_ARG)
+      {
+        // Check each command argument. In case a command does not have
+        // arguments try to match the pattern with an empty string.
+        status = -1;
+        if (cmdCommand->argCount == 0)
+          status = regexec(&regex, "", (size_t)0, NULL, 0);
+        for (k = 0; k < cmdCommand->argCount && status != 0; k++)
+        {
+          status = regexec(&regex, cmdCommand->cmdArg[k].argName, (size_t)0,
+            NULL, 0);
+        }
+      }
+      else // CMD_SEARCH_ALL: search name + description + arguments
+      {
+        status = regexec(&regex, cmdCommand->cmdName, (size_t)0, NULL, 0);
+        if (status != 0)
+          status = regexec(&regex, cmdCommand->cmdNameDescr, (size_t)0, NULL,
+            0);
+
+        // Check each command argument. In case a command does not have
+        // arguments try to match the pattern with an empty string.
+        if (status != 0)
+        {
+          if (cmdCommand->argCount == 0)
+            status = regexec(&regex, "", (size_t)0, NULL, 0);
+          for (k = 0; k < cmdCommand->argCount && status != 0; k++)
+          {
+            status = regexec(&regex, cmdCommand->cmdArg[k].argName, (size_t)0,
+              NULL, 0);
+          }
+        }
+      }
+
       if (status == 0)
       {
         // Print its dictionary
@@ -221,7 +263,8 @@ u08 dictPrint(char *pattern)
 //
 // Function: dictVerify
 //
-// Verify the integrity of the command dictionary where possible
+// Verify the integrity of the command dictionary where possible.
+// Return: MC_TRUE (success) or MC_FALSE (failure).
 //
 u08 dictVerify(void)
 {
@@ -420,8 +463,8 @@ u08 dictVerify(void)
   {
     printf("%s: dict: issues found = %d\n", __progname, issueCount);
     printf("make corrections in mchrondict.h [firmware/emulator]\n");
-    return CMD_RET_ERROR;
+    return MC_FALSE;
   }
 
-  return CMD_RET_OK;
+  return MC_TRUE;
 }

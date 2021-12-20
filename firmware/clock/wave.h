@@ -6,6 +6,8 @@
 #ifndef WAVE_H
 #define WANE_H
 
+#include "../avrlibtypes.h"
+
 // Wave banner clock
 void waveCycle(void);
 void waveInit(u08 mode);

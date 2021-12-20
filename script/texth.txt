@@ -5,13 +5,14 @@
 #
 
 le
-pa f 1 1 5x5p h 1 1 hello
-pa f 1 13 5x5p h 1 1 hello
-pa f 1 21 5x5p h 2 2 hello
-pa f 21 1 5x5p h 2 2 Even some more
-pa f 1 36 5x5p h 1 5 Squeeze
+psf
+pa 1 1 5x5p h 1 1 hello
+pa 1 13 5x5p h 1 1 hello
+pa 1 21 5x5p h 2 2 hello
+pa 21 1 5x5p h 2 2 Even some more
+pa 1 36 5x5p h 1 5 Squeeze
 
-pa f 30 13 5x7m h 1 1 Hello
-pa f 75 16 5x7m h 1 3 The Dude
-pa f 42 24 5x7m h 1 1 Hello
-pa f 32 42 5x7m h 4 2 Wide
+pa 30 13 5x7m h 1 1 Hello
+pa 75 16 5x7m h 1 3 The Dude
+pa 42 24 5x7m h 1 1 Hello
+pa 32 42 5x7m h 4 2 Wide

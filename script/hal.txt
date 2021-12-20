@@ -8,14 +8,15 @@
 
 # Erase LCD display
 le
+psf
 lbs 16
 w 1000
 
 # Provide HAL MON status report page
-pa f 28 15 5x5p h 1 1 gpr: 21-tf
-pa f 35 25 5x7m h 3 2 M
-pa f 58 25 5x7m h 3 2 O
-pa f 81 25 5x7m h 3 2 N
+pa 28 15 5x5p h 1 1 gpr: 21-tf
+pa 35 25 5x7m h 3 2 M
+pa 58 25 5x7m h 3 2 O
+pa 81 25 5x7m h 3 2 N
 
 # Set start (xs), length (xl) and step (xe) values for graph x-axis
 # For step use divider values of 120, such as 2, 3, 4, 5, 6, 8, 10, 12
@@ -31,13 +32,13 @@ vs yr=30
 w 3000
 le
 w 500
-pl f 2 ys-yr 2 ys+yr
+pl 2 ys-yr 2 ys+yr
 rf y=ys-yr y<=ys+yr y=y+6
-  pd f 1 y
+  pd 1 y
 rn
-pl f xe-1 31 xs+xl ys
+pl xe-1 31 xs+xl ys
 rf x=xs x<=xs+xl x=x+xe
-  pd f x ys+1
+  pd x ys+1
 rn
 
 # Paint sin and cos curve and line between sin and cos
@@ -48,17 +49,17 @@ rf x=xs+xe x<=xs+xl x=x+xe
     # Initial start-off sin/cos points and a line between them
     vs sp=-sin(0)*yr+ys
     vs cp=-cos(0)*yr+ys
-    pl f xs sp xs cp
+    pl xs sp xs cp
   ien
   wte 30
   # Get new y values
   vs sy=-sin(2*pi/xl*(x-xs))*yr+ys
   vs cy=-cos(2*pi/xl*(x-xs))*yr+ys
   # Connect new point with previous point
-  pl f x-xe sp x sy
-  pl f x-xe cp x cy
+  pl x-xe sp x sy
+  pl x-xe cp x cy
   # Paint line between sin and cos value
-  pl f x sy x cy
+  pl x sy x cy
   # Set new previous values
   vs sp=sy
   vs cp=cy
@@ -85,16 +86,16 @@ vs my=37
 
 # Paint a rectangle box
 w 3000
-pr f bx by 34 15
+pr bx by 34 15
 
 # Flash the glcdline text in the box
 w 1000
 vs w=50
 wts
 rf fl=0 fl<7 fl=fl+1
-  prf f bx+1 by+2 32 5 0 5
+  prf bx+1 by+2 32 5 0 5
   wte w
-  pa f bx+3 by+2 5x5p h 1 1 glcdline
+  pa bx+3 by+2 5x5p h 1 1 glcdline
   wte w
 rn
 
@@ -103,40 +104,40 @@ w 500
 vs w=50
 wts
 rf fl=0 fl<7 fl=fl+1
-  prf f bx+1 by+8 32 5 0 5
+  prf bx+1 by+8 32 5 0 5
   wte w
-  pa f bx+2 by+8 5x5p h 1 1 sin / cos
+  pa bx+2 by+8 5x5p h 1 1 sin / cos
   wte w
 rn
 
 # Add important messages
 w 3000
-pa f mx my 5x5p h 1 1 rnd>1e
-pa f mx my+6 5x5p h 1 1 fx=auto
-pa f mx my+12 5x5p h 1 1 ]]#fail
+pa mx my 5x5p h 1 1 rnd>1e
+pa mx my+6 5x5p h 1 1 fx=auto
+pa mx my+12 5x5p h 1 1 ]]#fail
 
 # Rotate the important messages
 w 2000
 vs w=70
 wts
-prf f 6 43 33 17 0 5
+prf 6 43 33 17 0 5
 rf fl=0 fl<6 fl=fl+1
-  pa f mx my 5x5p h 1 1 rnd>1e
+  pa mx my 5x5p h 1 1 rnd>1e
   wte w
-  pa f mx my+6 5x5p h 1 1 fx=auto
+  pa mx my+6 5x5p h 1 1 fx=auto
   wte w
-  pa f mx my+12 5x5p h 1 1 ]]#fail
+  pa mx my+12 5x5p h 1 1 ]]#fail
   wte w
-  prf f mx my 27 5 0 5
+  prf mx my 27 5 0 5
   wte w
-  prf f mx my+6 27 5 0 5
+  prf mx my+6 27 5 0 5
   wte w
-  prf f mx my+12 27 5 0 5
+  prf mx my+12 27 5 0 5
   wte w
 rn
-pa f mx my 5x5p h 1 1 rnd>1e
-pa f mx my+6 5x5p h 1 1 fx=auto
-pa f mx my+12 5x5p h 1 1 ]]#fail
+pa mx my 5x5p h 1 1 rnd>1e
+pa mx my+6 5x5p h 1 1 fx=auto
+pa mx my+12 5x5p h 1 1 ]]#fail
 
 # Add seemingly random numbers as last message
 w 1500
@@ -144,7 +145,7 @@ vs r=rand(0)
 wts
 rf rn=0 rn<40 rn=rn+1
   vs ra=rand()*99999
-  pn f mx my+18 5x5p h 1 1 ra >%05.f<
+  pn mx my+18 5x5p h 1 1 ra >%05.f<
   wte 100
 rn
 
@@ -153,9 +154,9 @@ w 1000
 vs w=50
 wts
 rf fl=0 fl<15 fl=fl+1
-  prf f mx my+18 30 6 0 5
+  prf mx my+18 30 6 0 5
   wte w
-  pn f mx my+18 5x5p h 1 1 ra >%05.f<
+  pn mx my+18 5x5p h 1 1 ra >%05.f<
   wte w
 rn
 
@@ -164,35 +165,35 @@ w 3000
 vs w=50
 wts
 rf fl=0 fl<15 fl=fl+1
-  prf f bx+1 by+1 32 13 0 5
+  prf bx+1 by+1 32 13 0 5
   wte w
-  pa f bx+3 by+2 5x5p h 1 1 glcdline
-  pa f bx+2 by+8 5x5p h 1 1 sin / cos
+  pa bx+3 by+2 5x5p h 1 1 glcdline
+  pa bx+2 by+8 5x5p h 1 1 sin / cos
   wte w
 rn
 
 # Remove the important messages except last
 w 3000
-prf f mx my 27 17 0 5
+prf mx my 27 17 0 5
 
 # Remove the box and text details in reverse order
 w 1000
-prf f bx+2 by+8 30 5 0 5
+prf bx+2 by+8 30 5 0 5
 w 150
-prf f bx+3 by+2 28 5 0 5
+prf bx+3 by+2 28 5 0 5
 w 150
-prf f bx by 34 15 0 5
+prf bx by 34 15 0 5
 
 # Remove the curves by redrawing the axis
 w 2500
 le
-pl f 2 ys-yr 2 ys+yr
+pl 2 ys-yr 2 ys+yr
 rf y=ys-yr y<=ys+yr y=y+6
-  pd f 1 y
+  pd 1 y
 rn
-pl f xe-1 31 xs+xl ys
+pl xe-1 31 xs+xl ys
 rf x=xs x<=xs+xl x=x+xe
-  pd f x ys+1
+  pd x ys+1
 rn
 
 # Remove the axis by fading backlight and exit

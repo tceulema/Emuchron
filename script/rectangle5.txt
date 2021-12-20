@@ -9,10 +9,11 @@ hm --- press 'q' to quit ---
 
 # Erase lcd display and paint the function name
 le
-pa f 0 0 5x5p h 1 1 glcdFillRectangle2
+psf
+pa 0 0 5x5p h 1 1 glcdFillRectangle2
 
 # Enclose the paint area with a big rectangle
-pr f 3 6 122 57
+pr 3 6 122 57
 
 # Indefinitely keep animating filled rectangles of mixed length and width
 wts
@@ -21,7 +22,7 @@ rf pattern=5 true pattern=(pattern==0?5:pattern-1)
   rf x=0 x<14 x=x+1
     vs dy=1
     rf y=0 y<9 y=y+1
-      prf f x+dx+4 y+dy+7 x+1 y+1 2 (x+y+pattern)%6
+      prf x+dx+4 y+dy+7 x+1 y+1 2 (x+y+pattern)%6
       vs dy=y+dy+1
     rn
     vs dx=x+dx+1

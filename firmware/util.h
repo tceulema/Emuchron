@@ -6,10 +6,12 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#ifndef EMULIN
 #include <avr/pgmspace.h>
+#endif
+#include "avrlibtypes.h"
 
 // Raw constants for the UART to make the bit timing nice
-
 #if (F_CPU == 16000000)
 #define BRRL_9600 103    // for 16MHZ
 #define BRRL_192 52    // for 16MHZ
@@ -18,32 +20,30 @@
 #define BRRL_192 26
 #endif
 
-// Debug printing functions - handy!
-#define uart_putc(c) uart_putchar(c)
-
-void uart_init(uint16_t BRR);
-int uart_putchar(char c);
-char uart_getchar(void);
-
-void uart_putc_hex(uint8_t b);
-void uart_putw_hex(uint16_t w);
-void uart_putdw_hex(uint32_t dw);
-
-void uart_put_dec(int8_t w);
-void uart_putw_dec(uint16_t w);
-void uart_putdw_dec(uint32_t dw);
-void uart_puts(const char* str);
-
-void RAM_putstring(char *str);
-void ROM_putstring(const char *str, uint8_t nl);
-
 // By default we stick strings in ROM to save RAM
 #define putstring(x) ROM_putstring(PSTR(x), 0)
 #define putstring_nl(x) ROM_putstring(PSTR(x), 1)
-#define nop asm volatile ("nop\n\t")
 
-// Some timing functions
-void delay_ms(unsigned char ms);
-void delay_10us(uint8_t us);
-void delay_s(uint8_t s);
+// Init the UART
+void uart_init(uint16_t BRR);
+
+// Read char
+char uart_getchar(void);
+
+// Base function to put a single char
+void uart_putchar(char c);
+
+// Put number in hex format
+void uart_put_hex(uint8_t b);
+void uart_putw_hex(uint16_t w);
+void uart_putdw_hex(uint32_t dw);
+
+// Put number in decimal format
+void uart_put_sdec(int8_t b);
+void uart_put_dec(uint8_t b);
+void uart_putw_dec(uint16_t w);
+void uart_putdw_dec(uint32_t dw);
+
+// Put ROM string with optional newline
+void ROM_putstring(const char *str, uint8_t nl);
 #endif

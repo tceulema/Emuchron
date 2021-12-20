@@ -27,15 +27,7 @@ Commands:
   '#'   - Comments
           Argument: <comments>
               comments: optional ascii text
-  'ap'  - Set alarm switch position
-          Argument: <position>
-              position: 0 = off, 1 = on
-  'as'  - Set alarm time
-          Arguments: <hour> <min>
-              hour: 0..23
-              min: 0..59
-  'at'  - Toggle alarm switch position
-  'b'   - Play audible beep
+  'b'   - Play beep
           Arguments: <frequency> <duration>
               frequency: 150..10000 (Hz)
               duration: 1..255 (msec)
@@ -51,12 +43,6 @@ Commands:
                      16 = bar, 17 = cross, 18 = line, 19 = pie, 20 = bigdigOne,
                      21 = bigdigTwo, 22 = qrHMS, 23 = qrHM, 24 = marioworld,
                      25 = wave, 26 = perftest
-  'dr'  - Reset clock date to system date
-  'ds'  - Set date
-          Arguments: <day> <month> <year>
-              day: 1..31
-              month: 1..12
-              year: 0..99 (year in 20xx)
   'e'   - Execute commands from file
           Arguments: <echo> <filename>
               echo: 'e' = echo commands, 'i' = inherit, 's' = silent
@@ -103,9 +89,10 @@ Commands:
               ysize: 1..32 (sprite height)
               filename: full path or relative to startup directory mchron
   'h'   - Help
-  'hc'  - Show command details
-          Argument: <pattern>
-              pattern: mchron command name regex pattern, '.' = all
+  'hc'  - Search command
+          Arguments: <search> <pattern>
+              search: 'a','d','n','.' (a = arg, d = descr, n = name, . = all)
+              pattern: mchron command search regex pattern, '.' = all
   'he'  - Show expression result
           Argument: <number>
               number: expression
@@ -120,16 +107,14 @@ Commands:
   'iif' - If
           Argument: <condition>
               condition: expression determining block execution
+  'las' - Set active lcd controller
+          Argument <controller>
+              controller: 0, 1
   'lbs' - Set lcd backlight brightness
           Argument: <backlight>
               backlight: 0..16 (0 = dim .. 16 = bright)
   'lcr' - Reset controller lcd cursors
-  'lcs' - Set controller lcd cursor
-          Arguments: <controller> <x> <yline>
-              controller: 0, 1
-              x: 0..63
-              yline: 0..7
-  'lds' - Switch controller lcd display on/off
+  'lds' - Switch lcd controller display on/off
           Arguments: <controller-0> <controller-1>
               controller-0: 0 = off, 1 = on
               controller-1: 0 = off, 1 = on
@@ -149,18 +134,22 @@ Commands:
           Argument: <backlight>
               backlight: 0 = off, 1 = on
   'lp'  - Print controller state/registers
-  'lr'  - Read controller lcd data in variable
-          Arguments: <controller> <variable>
-              controller: 0, 1
+  'lr'  - Read data from active lcd controller
+          Argument: <variable>
               variable: word of [a-zA-Z_] characters
   'lss' - Set controller lcd start line
           Arguments: <controller-0> <controller-1>
               controller-0: 0..63
               controller-1: 0..63
-  'lw'  - Write data to controller lcd
-          Arguments: <controller> <data>
-              controller: 0, 1
+  'lw'  - Write data to active lcd controller
+          Argument: <data>
               data: 0..255
+  'lxs' - Set active lcd controller x cursor
+          Argument: <x>
+              x: 0..63
+  'lys' - Set active lcd controller y cursor
+          Argument: <yline>
+              yline: 0..7
   'm'   - Run Monochron application
           Argument: <mode>
               mode: 'c' = start in single cycle mode, 'n' = start normal
@@ -176,9 +165,7 @@ Commands:
               address: 0..1023
               data: 0..255
   'pa'  - Paint ascii
-          Arguments: <color> <x> <y> <font> <orientation> <xscale> <yscale>
-                     <text>
-              color: 'f' = foreground, 'b' = background
+          Arguments: <x> <y> <font> <orientation> <xscale> <yscale> <text>
               x: 0..127
               y: 0..63
               font: '5x5p' = 5x5 proportional, '5x7m' = 5x7 monospace
@@ -188,8 +175,7 @@ Commands:
               yscale: 1..32
               text: ascii text
   'pb'  - Paint buffer
-          Arguments: <color> <buffer> <x> <y> <xo> <yo> <xsize> <ysize>
-              color: 'b','f' (b = background, f = foreground)
+          Arguments: <buffer> <x> <y> <xo> <yo> <xsize> <ysize>
               buffer: 0..9
               x: 0..127
               y: 0..63
@@ -198,50 +184,43 @@ Commands:
               xsize: 0..128
               ysize: 0..32
   'pbi' - Paint buffer image
-          Arguments: <color> <buffer> <x> <y>
-              color: 'b','f' (b = background, f = foreground)
+          Arguments: <buffer> <x> <y>
               buffer: 0..9
               x: 0..127
               y: 0..63
   'pbs' - Paint buffer sprite
-          Arguments <color> <buffer> <x> <y> <frame>
-              color: 'b','f' (b = background, f = foreground)
+          Arguments <buffer> <x> <y> <frame>
               buffer: 0..9
               x: 0..127
               y: 0..63
               frame: 0..127
   'pc'  - Paint circle
-          Arguments: <color> <x> <y> <radius> <pattern>
-              color: 'f' = foreground, 'b' = background
+          Arguments: <x> <y> <radius> <pattern>
               x: 0..127
               y: 0..63
               radius: 0..31
               pattern: 0 = full line, 1 = half (even), 2 = half (uneven),
                        3 = 3rd line
   'pcf' - Paint circle with fill pattern
-          Arguments: <color> <x> <y> <radius> <pattern>
-              color: 'f' = foreground, 'b' = background
+          Arguments: <x> <y> <radius> <pattern>
               x: 0..127
               y: 0..63
               radius: 0..32
               pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
                        4 = inverse, 5 = blank
   'pd'  - Paint dot
-          Arguments: <color> <x> <y>
-              color: 'f' = foreground, 'b' = background
+          Arguments: <x> <y>
               x: 0..127
               y: 0..63
   'pl'  - Paint line
-          Arguments: <color> <xstart> <ystart> <xend> <yend>
-              color: 'f' = foreground, 'b' = background
+          Arguments: <xstart> <ystart> <xend> <yend>
               xstart: 0..127
               ystart: 0..63
               xend: 0..127
               yend: 0..63
   'pn'  - Paint number
-          Arguments: <color> <x> <y> <font> <orientation> <xscale> <yscale>
-                     <number> <format>
-              color: 'f' = foreground, 'b' = background
+          Arguments: <x> <y> <font> <orientation> <xscale> <yscale> <number>
+                     <format>
               x: 0..127
               y: 0..63
               font: '5x5p' = 5x5 proportional, '5x7m' = 5x7 monospace
@@ -252,15 +231,13 @@ Commands:
               number: expression
               format: 'c'-style format string containing '%f', '%e' or '%g'
   'pr'  - Paint rectangle
-          Arguments: <color> <x> <y> <xsize> <ysize>
-              color: 'f' = foreground, 'b' = background
+          Arguments: <x> <y> <xsize> <ysize>
               x: 0..127
               y: 0..63
               xsize: 1..128
               ysize: 1..64
   'prf' - Paint rectangle with fill pattern
-          Arguments: <color> <x> <y> <xsize> <ysize> <align> <pattern>
-              color: 'f' = foreground, 'b' = background
+          Arguments: <x> <y> <xsize> <ysize> <align> <pattern>
               x: 0..127
               y: 0..63
               xsize: 1..128
@@ -268,6 +245,11 @@ Commands:
               align (for pattern 1-3): 0 = top, 1 = bottom, 2 = auto
               pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
                        4 = inverse, 5 = blank
+  'ps'  - Set draw color
+          Argument: <color>
+              color: 0, 1 (0 = Off, 1 = On)
+  'psb' - Set draw color to background color
+  'psf' - Set draw color to foreground color
   'rf'  - Repeat for
           Arguments: <init> <condition> <post>
               init: expression executed once at initialization
@@ -276,6 +258,20 @@ Commands:
   'rn'  - Repeat next
   'sp'  - Print application statistics
   'sr'  - Reset application statistics
+  'tap' - Set alarm switch position
+          Argument: <position>
+              position: 0 = off, 1 = on
+  'tas' - Set alarm time
+          Arguments: <hour> <min>
+              hour: 0..23
+              min: 0..59
+  'tat' - Toggle alarm switch position
+  'tdr' - Reset clock date to system date
+  'tds' - Set date
+          Arguments: <day> <month> <year>
+              day: 1..31
+              month: 1..12
+              year: 0..99 (year in 20xx)
   'tf'  - Flush Monochron time and date to active clock
   'tp'  - Print time/date/alarm
   'tr'  - Reset time to system time
@@ -309,11 +305,11 @@ Commands:
 Examples:
   le
     Erase lcd display
-  pr f 10 20 15 18
-    Paint rectangle in foreground color at position 10,20 with size 15x18
-  pcf f 64 32 20 1
-    Paint filled circle in foreground color with center at position 64,32 and
-    radius 20 using fill pattern 'half'
+  pr 10 20 15 18
+    Paint rectangle at position 10,20 with size 15x18
+  pcf 64 32 20 1
+    Paint filled circle with center at position 64,32 and radius 20 using fill
+    pattern 'half'
   ts 19 12 34
     Set mchron time to 19:12:34
 

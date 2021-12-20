@@ -6,6 +6,8 @@
 #ifndef SPOTFIRE_H
 #define SPOTFIRE_H
 
+#include "../avrlibtypes.h"
+
 // Common defines for bars in barchart and cascade plot
 #define SPOT_BAR_Y_START	54
 #define SPOT_BAR_HEIGHT_MAX	29

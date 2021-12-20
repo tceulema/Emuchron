@@ -6,6 +6,8 @@
 #ifndef PONG_H
 #define PONG_H
 
+#include "../avrlibtypes.h"
+
 // Pong clock
 void pongButton(u08 pressedButton);
 void pongCycle(void);

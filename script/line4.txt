@@ -7,6 +7,7 @@
 
 # Erase lcd display
 le
+psf
 
 # Set horizontal and vertical display size
 vs hor=127
@@ -17,20 +18,20 @@ vs lines=6
 # Paint in total 5x5 lines twice
 rf factor=1/lines factor<1 factor=factor+1/lines
   # From left to top and left to bottom
-  pl f 0 ver*factor (hor-hor*factor)/2 0
-  pl f 0 ver*factor hor*factor/2 ver
-  pl f 64 ver*factor (hor-hor*factor)/2+64 0
-  pl f 64 ver*factor hor*factor/2+64 ver
+  pl 0 ver*factor (hor-hor*factor)/2 0
+  pl 0 ver*factor hor*factor/2 ver
+  pl 64 ver*factor (hor-hor*factor)/2+64 0
+  pl 64 ver*factor hor*factor/2+64 ver
 
   # From right to top and right to bottom
-  pl f hor/2 ver*factor hor*factor/2 0
-  pl f hor/2 ver*factor (hor-hor*factor)/2 ver
-  pl f hor ver*factor hor*factor/2+64 0
-  pl f hor ver*factor (hor-hor*factor)/2+64 ver
+  pl hor/2 ver*factor hor*factor/2 0
+  pl hor/2 ver*factor (hor-hor*factor)/2 ver
+  pl hor ver*factor hor*factor/2+64 0
+  pl hor ver*factor (hor-hor*factor)/2+64 ver
 rn
 
 # Paint the glcdline function name in a rectangle box
-pr f 17 27 31 9
-pa f 19 29 5x5p h 1 1 glcdline
-pr f 81 27 31 9
-pa f 83 29 5x5p h 1 1 glcdline
+pr 17 27 31 9
+pa 19 29 5x5p h 1 1 glcdline
+pr 81 27 31 9
+pa 83 29 5x5p h 1 1 glcdline

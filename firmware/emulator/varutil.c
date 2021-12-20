@@ -11,7 +11,7 @@
 #include <regex.h>
 
 // Monochron and emuchron defines
-#include "../ks0108.h"
+#include "../global.h"
 #include "mchronutil.h"
 #include "scanutil.h"
 #include "varutil.h"
@@ -76,7 +76,7 @@ u08 varClear(int varId)
     delVar = delVar->next;
 
   // If the variable is inactive it is an error (but we'll remove anyway)
-  if (delVar->active == GLCD_FALSE)
+  if (delVar->active == MC_FALSE)
     retVal = CMD_RET_ERROR;
 
   // Remove variable from the list
@@ -117,7 +117,7 @@ int varIdGet(char *varName, u08 create)
 {
   int bucketId;
   int bucketListId;
-  u08 found = GLCD_FALSE;
+  u08 found = MC_FALSE;
   int compare = 0;
   int i = 0;
   varVariable_t *checkVar;
@@ -141,12 +141,12 @@ int varIdGet(char *varName, u08 create)
 
   // Find the variable in the bucket
   checkVar = varBucket[bucketId].var;
-  while (i < varBucket[bucketId].count && found == GLCD_FALSE)
+  while (i < varBucket[bucketId].count && found == MC_FALSE)
   {
     compare = strcmp(checkVar->varName, varName);
     if (compare == 0)
     {
-      found = GLCD_TRUE;
+      found = MC_TRUE;
       bucketListId = i;
     }
     else
@@ -167,12 +167,12 @@ int varIdGet(char *varName, u08 create)
   }
 
   // Determine search result
-  if (found == GLCD_TRUE)
+  if (found == MC_TRUE)
   {
     // Var name found
     bucketListId = i;
   }
-  else if (create == GLCD_FALSE)
+  else if (create == MC_FALSE)
   {
     // Var name not found
     return -2;
@@ -191,7 +191,7 @@ int varIdGet(char *varName, u08 create)
     myVar = malloc(sizeof(varVariable_t));
     myVar->varName = malloc(strlen(varName) + 1);
     strcpy(myVar->varName, varName);
-    myVar->active = GLCD_FALSE;
+    myVar->active = MC_FALSE;
     myVar->varValue = 0;
     myVar->next = NULL;
 
@@ -238,7 +238,7 @@ void varInit(void)
 
   varCount = 0;
   //printf("\nbucket mask: %d, bucket size count: %d\n",
-  //  VAR_BUCKETS_MASK ,VAR_BUCKET_SIZE_COUNT);
+  //  VAR_BUCKETS_MASK, VAR_BUCKET_SIZE_COUNT);
 }
 
 //
@@ -256,7 +256,7 @@ u08 varPrint(char *pattern, u08 summary)
   int varInUse = 0;
   int i;
   int varIdx = 0;
-  u08 allSorted = GLCD_FALSE;
+  u08 allSorted = MC_FALSE;
 
   // Validate regex pattern
   if (regcomp(&regex, pattern, REG_EXTENDED | REG_NOSUB) != 0)
@@ -284,9 +284,9 @@ u08 varPrint(char *pattern, u08 summary)
     }
 
     // Sort the array based on var name
-    while (allSorted == GLCD_FALSE)
+    while (allSorted == MC_FALSE)
     {
-      allSorted = GLCD_TRUE;
+      allSorted = MC_TRUE;
       for (i = 0; i < varIdx - 1; i++)
       {
         if (strcmp(varSort[i]->varName, varSort[i + 1]->varName) > 0)
@@ -294,7 +294,7 @@ u08 varPrint(char *pattern, u08 summary)
           myVar = varSort[i];
           varSort[i] = varSort[i + 1];
           varSort[i + 1] = myVar;
-          allSorted = GLCD_FALSE;
+          allSorted = MC_FALSE;
         }
       }
       varIdx--;
@@ -303,7 +303,7 @@ u08 varPrint(char *pattern, u08 summary)
     // Print the vars from the sorted array
     for (i = 0; i < varCount; i++)
     {
-      if (varSort[i]->active == GLCD_TRUE)
+      if (varSort[i]->active == MC_TRUE)
       {
         // See if variable name matches regex pattern
         status = regexec(&regex, varSort[i]->varName, (size_t)0, NULL, 0);
@@ -311,7 +311,7 @@ u08 varPrint(char *pattern, u08 summary)
         {
           varInUse++;
           spaceCount = spaceCount + printf("%s=", varSort[i]->varName) +
-            cmdArgValuePrint(varSort[i]->varValue, GLCD_FALSE, GLCD_FALSE);
+            cmdArgValuePrint(varSort[i]->varValue, MC_FALSE, MC_FALSE);
           if (spaceCount % 10 != 0)
           {
             printf("%*s", 10 - spaceCount % 10, "");
@@ -330,7 +330,7 @@ u08 varPrint(char *pattern, u08 summary)
   // End on newline if needed and provide variable summary
   if (spaceCount != 0)
     printf("\n");
-  if (summary == GLCD_TRUE && varInUse != 1)
+  if (summary == MC_TRUE && varInUse != 1)
     printf("registered variables: %d\n", varInUse);
 
   // Cleanup regex
@@ -360,7 +360,7 @@ int varReset(void)
     {
       delVar = nextVar;
       nextVar = delVar->next;
-      if (delVar->active == GLCD_TRUE)
+      if (delVar->active == MC_TRUE)
         varInUse++;
       free(delVar->varName);
       free(delVar);
@@ -448,7 +448,7 @@ double varValSet(int varId, double value)
       myVar = myVar->next;
 
     // Make variable active (if not already) and assign value
-    myVar->active = GLCD_TRUE;
+    myVar->active = MC_TRUE;
     myVar->varValue = value;
   }
 

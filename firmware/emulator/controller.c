@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename : 'controller.c'
-// Title    : Lcd controller stub functionality for emuchron emulator
+// Title    : Lcd ks0108 controller stub functionality for emuchron emulator
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
@@ -8,23 +8,18 @@
 #include <string.h>
 
 // Monochron and emuchron defines
-#include "../monomain.h"
+#include "../global.h"
 #include "../ks0108.h"
-#include "interpreter.h"
+#include "../ks0108conf.h"
 #include "mchronutil.h"
 #include "controller.h"
-
-// The lcd backlight register
-extern uint16_t OCR2B;
 
 // The glut glcd pixel double-click event data
 extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
 
 //
-// Our implementation of the 128x64 pixel lcd display image:
-// - Two controllers, each containing 512 byte.
-//
-// Per controller:
+// Our Monochron 128x64 pixel lcd display image is implemented as follows:
+// Two ks0108 controllers, each controlling 64x64 lcd pixels (= 512 byte).
 //  <- 64 px -><- 64 px->
 //  ^          ^
 //  |  64 px   |  64 px
@@ -48,7 +43,7 @@ extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
 //   7  |    |    |    |     |    |         |    |    |    |     |    |
 //      +----+----+----+ ... +----+         +----+----+----+ ... +----+
 //       :
-//       : repeat 6 byte for additional 48 y px
+//       : repeat 6 bytes for additional 48 y px
 //       :
 //      +----+----+----+ ... +----+         +----+----+----+ ... +----+
 //  56  |    |    |    |     |    |         |    |    |    |     |    |
@@ -70,7 +65,7 @@ extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
 // command set and controller lcd data read/write operations. This also means
 // that the controllers operate completely independent from one another.
 //
-// The controller commands are:
+// The controller control write commands are:
 // - Switch controller display on/off (note: this is NOT backlight)
 // - Set controller cursor x
 // - Set controller cursor y
@@ -85,13 +80,10 @@ extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
 // controller machine event however is forwarded via this module to each of the
 // active lcd devices, each holding a private copy of the lcd image data.
 //
-// This module is setup such that a single state-event machine is supported
-// that emulates a set of two lcd controllers.
-// The main reasons for this are ease of use and the fact that a Monochron
-// actually only has a single set of controllers, so why support more.
-// With some coding efforts however, this module can be changed to support
-// multiple controller sets each having its own state, registers and lcd image,
-// but this is considered out-of-scope for the Emuchron project.
+// This module is setup such that it supports a set of two lcd controllers,
+// which is an exact representation of Monochron hardware. With some coding
+// efforts this module can be changed to support any combination of
+// controllers, all driven by the same state-event machine.
 //
 // So how do we implement an lcd controller as a finite state machine?
 // Any operation that interacts with the controller is mapped into a controller
@@ -121,27 +113,27 @@ extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
 //      event   +---------------+---------------+---------------+
 //              | set cursor x  | set cursor x  | set cursor x  |
 //  set cursor  |               |               |               |
-//      x       | CURSOR        | CURSOR        | CURSOR        |
+//      x       | next = CURSOR | next = CURSOR | next = CURSOR |
 //              +---------------+---------------+---------------+
 //              | set cursor y  | set cursor y  | set cursor y  |
 //  set cursor  |               |               |               |
-//    y page    | CURSOR        | CURSOR        | CURSOR        |
+//      y       | next = CURSOR | next = CURSOR | next = CURSOR |
 //              +---------------+---------------+---------------+
 //              | set display   | set display   | set display   |
-//    display   |               |               |               |
-//    on/off    | CURSOR        | READ          | WRITE         |
+//  set display |               |               |               |
+//    on/off    | next = CURSOR | next = READ   | next = WRITE  |
 //              +---------------+---------------+---------------+
 //              | set startline | set startline | set startline |
 //   set start  |               |               |               |
-//     line     | CURSOR        | READ          | WRITE         |
+//     line     | next = CURSOR | next = READ   | next = WRITE  |
 //              +---------------+---------------+---------------+
 //              | dummy read    | read lcd      | dummy read    |
-//  data read   |               | cursor++      |               |
-//              | READ          | READ          | READ          |
+//   data read  |               | cursor++      |               |
+//              | next = READ   | next = READ   | next = READ   |
 //              +---------------+---------------+---------------+
 //              | write lcd     | write lcd     | write lcd     |
 //  data write  | cursor++      | cursor++      | cursor++      |
-//              | WRITE         | WRITE         | WRITE         |
+//              | next = WRITE  | next = WRITE  | next = WRITE  |
 //              +---------------+---------------+---------------+
 //
 // Regarding cursor++:
@@ -150,6 +142,16 @@ extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
 // - Only the x column cursor is auto-incremented.
 // - At the end of a controller line at position 63, the x cursor resets to
 //   position 0. In other words: resets to the beginning of the same y page.
+//
+// The stubbed Atmel ports and pins interface for this module is limited to the
+// following elements:
+// GLCD_DATAH_PORT    - High nibble data byte port for write/control input
+// GLCD_DATAL_PORT    - Low nibble data byte port for write/control input
+// GLCD_DATAH_PIN     - High nibble data byte pin for read/busy output
+// GLCD_DATAL_PIN     - Low nibble data byte pin for read/busy output
+// GLCD_CTRL_CS0_PORT - Control port for selecting controller 0
+// GLCD_CTRL_CS1_PORT - Control port for selecting controller 1
+// Other elements like E/RS/RW ports are not supported.
 //
 
 // The controller commands (in addition to lcd read and write commands)
@@ -175,6 +177,15 @@ extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
 
 // Definition of a structure holding the lcd image data for a controller
 typedef u08 ctrlImage_t[GLCD_CONTROLLER_XPIXELS][GLCD_CONTROLLER_YPAGES];
+
+// Definition of a structure holding the glcd interface statistics counters
+typedef struct _ctrlGlcdStats_t
+{
+  long long dataRead;			// Bytes read from lcd
+  long long dataWrite;			// Bytes written to lcd
+  long long addressSet;			// Cursor address set in lcd
+  long long ctrlSet;			// Set lcd controller
+} ctrlGlcdStats_t;
 
 // Definition of a structure holding the controller statistics counters
 typedef struct _ctrlStats_t
@@ -283,20 +294,19 @@ static ctrlSEDiagram_t ctrlSEDiagram =
   }
 };
 
+// The active controller (0 or 1)
+static u08 controller = 0;
+
 // The controller data containing the state, registers, lcd image and stats
 static ctrlController_t ctrlControllers[GLCD_NUM_CONTROLLERS];
 
-// Identifiers to indicate what lcd stub devices are used
-static u08 useGlut = GLCD_FALSE;
-static u08 useNcurses = GLCD_FALSE;
-static u08 useDevice = CTRL_DEVICE_NULL;
+// Statistics counters on lcd glcd interface
+static ctrlGlcdStats_t ctrlGlcdStats;
 
-// Statistics counters on glcd interface. The ncurses and glut devices have
-// their own dedicated statistics counters that are administered independent
-// from these.
-static long long ctrlLcdByteRead = 0;	// Bytes read from lcd
-static long long ctrlLcdByteWrite = 0;	// Bytes written to lcd
-long long ctrlLcdSetAddress = 0;	// Cursor address set in lcd
+// Identifiers to indicate what lcd stub devices are used
+static u08 useGlut = MC_FALSE;
+static u08 useNcurses = MC_FALSE;
+static u08 useDevice = CTRL_DEVICE_NULL;
 
 // Local function prototypes
 static void ctrlAddressNext(ctrlRegister_t *ctrlRegister);
@@ -325,15 +335,16 @@ static void ctrlAddressNext(ctrlRegister_t *ctrlRegister)
 static u08 ctrlCursorX(ctrlController_t *ctrlController, u08 payload)
 {
   // Check if register will be changed
+  ctrlGlcdStats.addressSet++;
   ctrlController->ctrlStats.xReq++;
   if (ctrlController->ctrlRegister.x != payload)
   {
-    // Set y-page in controller register
+    // Set x cursor in controller register
     ctrlController->ctrlStats.xCnf++;
     ctrlController->ctrlRegister.x = payload;
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -347,12 +358,12 @@ static u08 ctrlCursorY(ctrlController_t *ctrlController, u08 payload)
   ctrlController->ctrlStats.yReq++;
   if (ctrlController->ctrlRegister.y != payload)
   {
-    // Set y-page in controller register
+    // Set y cursor in controller register
     ctrlController->ctrlStats.yCnf++;
     ctrlController->ctrlRegister.y = payload;
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -362,7 +373,7 @@ static u08 ctrlCursorY(ctrlController_t *ctrlController, u08 payload)
 //
 static u08 ctrlDisplay(ctrlController_t *ctrlController, u08 payload)
 {
-  u08 retVal = GLCD_FALSE;
+  u08 retVal = MC_FALSE;
 
   // Check if register will be changed
   ctrlController->ctrlStats.displayReq++;
@@ -371,7 +382,7 @@ static u08 ctrlDisplay(ctrlController_t *ctrlController, u08 payload)
     // Set display on/off in controller register and signal redraw
     ctrlController->ctrlStats.displayCnf++;
     ctrlController->ctrlRegister.display = payload;
-    retVal = GLCD_TRUE;
+    retVal = MC_TRUE;
   }
 
   return retVal;
@@ -380,16 +391,17 @@ static u08 ctrlDisplay(ctrlController_t *ctrlController, u08 payload)
 //
 // Function: ctrlExecute
 //
-// Execute an action in the controller finite state machine
+// Execute an action in the active controller finite state machine
 //
-u08 ctrlExecute(u08 method, u08 controller, u08 data)
+void ctrlExecute(u08 method)
 {
   u08 x;
   u08 y;
   u08 event;
+  u08 data;
   u08 command = 0;
   u08 payload = 0;
-  u08 lcdUpdate = GLCD_FALSE;
+  u08 lcdUpdate = MC_FALSE;
   ctrlController_t *ctrlController = &ctrlControllers[controller];
   u08 state = ctrlController->state;
 
@@ -398,22 +410,25 @@ u08 ctrlExecute(u08 method, u08 controller, u08 data)
   {
     // Read from the lcd controller. The result will end up in controller
     // register dataRead.
-    ctrlLcdByteRead++;
+    ctrlGlcdStats.dataRead++;
+    data = 0;
     event = CTRL_EVENT_READ;
   }
   else if (method == CTRL_METHOD_WRITE)
   {
     // Write to the lcd controller
-    ctrlLcdByteWrite++;
+    ctrlGlcdStats.dataWrite++;
     x = ctrlController->ctrlRegister.x + controller * GLCD_CONTROLLER_XPIXELS;
     y = ctrlController->ctrlRegister.y;
-    event = CTRL_EVENT_WRITE;
+    data = (GLCD_DATAH_PORT & 0xf0) | (GLCD_DATAL_PORT & 0x0f);
     payload = data;
+    event = CTRL_EVENT_WRITE;
   }
-  else if (method == CTRL_METHOD_COMMAND)
+  else if (method == CTRL_METHOD_CTRL_W)
   {
     // Send command to the lcd controller.
     // Decode data to controller in event, command and payload.
+    data = (GLCD_DATAH_PORT & 0xf0) | (GLCD_DATAL_PORT & 0x0f);
     event = ctrlEventGet(data, &command, &payload);
   }
   else
@@ -431,36 +446,40 @@ u08 ctrlExecute(u08 method, u08 controller, u08 data)
   ctrlController->state = ctrlSEDiagram[event][state].stateNext;
 
   // Update the lcd devices if needed
-  if (lcdUpdate == GLCD_TRUE)
+  if (lcdUpdate == MC_TRUE)
   {
     if (event == CTRL_EVENT_DISPLAY)
     {
-      if (useGlut == GLCD_TRUE)
+      if (useGlut == MC_TRUE)
         lcdGlutDisplaySet(controller, payload);
-      if (useNcurses == GLCD_TRUE)
+      if (useNcurses == MC_TRUE)
         lcdNcurDisplaySet(controller, payload);
     }
     else if (event == CTRL_EVENT_STARTLINE)
     {
-      if (useGlut == GLCD_TRUE)
+      if (useGlut == MC_TRUE)
         lcdGlutStartLineSet(controller, payload);
-      if (useNcurses == GLCD_TRUE)
+      if (useNcurses == MC_TRUE)
         lcdNcurStartLineSet(controller, payload);
     }
     else if (event == CTRL_EVENT_WRITE)
     {
-      if (useGlut == GLCD_TRUE)
+      if (useGlut == MC_TRUE)
         lcdGlutDataWrite(x, y, payload);
-      if (useNcurses == GLCD_TRUE)
+      if (useNcurses == MC_TRUE)
         lcdNcurDataWrite(x, y, payload);
     }
   }
 
-  // In case of a read request return the data from the controller register
+  // In case of a read request return the data from the controller register in
+  // the returning H/L data pins
   if (event == CTRL_EVENT_READ)
-    return ctrlController->ctrlRegister.dataRead;
-  else
-    return 0;
+  {
+    GLCD_DATAH_PIN &= 0x0f;
+    GLCD_DATAH_PIN |= (ctrlController->ctrlRegister.dataRead & 0xf0);
+    GLCD_DATAL_PIN &= 0xf0;
+    GLCD_DATAL_PIN |= (ctrlController->ctrlRegister.dataRead & 0x0f);
+  }
 }
 
 //
@@ -482,7 +501,7 @@ static u08 ctrlRead(ctrlController_t *ctrlController, u08 payload)
   // Move to next controller address
   ctrlAddressNext(&ctrlController->ctrlRegister);
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -494,7 +513,7 @@ static u08 ctrlReadDummy(ctrlController_t *ctrlController, u08 payload)
 {
   ctrlController->ctrlStats.readReq++;
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -504,7 +523,7 @@ static u08 ctrlReadDummy(ctrlController_t *ctrlController, u08 payload)
 //
 static u08 ctrlStartline(ctrlController_t *ctrlController, u08 payload)
 {
-  u08 retVal = GLCD_FALSE;
+  u08 retVal = MC_FALSE;
 
   // Check if register will be changed
   ctrlController->ctrlStats.startLineReq++;
@@ -513,7 +532,7 @@ static u08 ctrlStartline(ctrlController_t *ctrlController, u08 payload)
     // Set startline in controller register and signal redraw
     ctrlController->ctrlStats.startLineCnf++;
     ctrlController->ctrlRegister.startLine = payload;
-    retVal = GLCD_TRUE;
+    retVal = MC_TRUE;
   }
 
   return retVal;
@@ -528,7 +547,7 @@ static u08 ctrlWrite(ctrlController_t *ctrlController, u08 payload)
 {
   u08 x = ctrlController->ctrlRegister.x;
   u08 y = ctrlController->ctrlRegister.y;
-  u08 retVal = GLCD_FALSE;
+  u08 retVal = MC_FALSE;
 
   // Set data to write in controller state register
   ctrlController->ctrlRegister.dataWrite = payload;
@@ -540,7 +559,7 @@ static u08 ctrlWrite(ctrlController_t *ctrlController, u08 payload)
     // Set lcd display data in controller
     ctrlController->ctrlStats.writeCnf++;
     ctrlController->ctrlImage[x][y] = payload;
-    retVal = GLCD_TRUE;
+    retVal = MC_TRUE;
   }
 
   // Move to next controller address
@@ -550,9 +569,65 @@ static u08 ctrlWrite(ctrlController_t *ctrlController, u08 payload)
 }
 
 //
+// Function: ctrlBusyState
+//
+// Report the active controller to be never busy
+//
+void ctrlBusyState(void)
+{
+  GLCD_DATAH_PIN = GLCD_DATAH_PIN & ~GLCD_STATUS_BUSY;
+}
+
+//
+// Function: ctrlControlSelect
+//
+// Select controller in ports and set it as active controller. 
+// Note that this function eerily resembles glcdControlSelect() in ks0108.c
+// [firmware]. So, why not use that function instead?
+// The reason for this is that glcdControlSelect() is a static function (for
+// good reason) and we do not want to make it public in Monochron code just for
+// wanting to use it in our mchron Emuchron code base.
+// So, not really nice, but we'll cope with it.
+//
+void ctrlControlSelect(u08 controller)
+{
+  // Unselect other controller and select requested controller
+  if (controller == 0)
+  {
+    cbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
+    sbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
+  }
+  else
+  {
+    cbi(GLCD_CTRL_CS0_PORT, GLCD_CTRL_CS0);
+    sbi(GLCD_CTRL_CS1_PORT, GLCD_CTRL_CS1);
+  }
+  ctrlControlSet();
+}
+
+//
+// Function: ctrlControlSet
+//
+// Set active controller. Request for both or no controller is erroneous.
+//
+void ctrlControlSet()
+{
+  ctrlGlcdStats.ctrlSet++;
+  if ((GLCD_CTRL_CS0_PORT & (0x1 << GLCD_CTRL_CS0)) != 0 &&
+      (GLCD_CTRL_CS1_PORT & (0x1 << GLCD_CTRL_CS1)) != 0)
+    emuCoreDump(CD_CTRL, __func__, 1, 0, 0, 0);
+  else if ((GLCD_CTRL_CS0_PORT & (0x1 << GLCD_CTRL_CS0)) != 0)
+    controller = 0;
+  else if ((GLCD_CTRL_CS1_PORT & (0x1 << GLCD_CTRL_CS1)) != 0)
+    controller = 1;
+  else
+    emuCoreDump(CD_CTRL, __func__, 0, 0, 0, 0);
+}
+
+//
 // Function: ctrlEventGet
 //
-// Decode a controller command byte into a controller event and associated
+// Decode a controller control byte into a controller event and associated
 // command and payload.
 // Coredump in case an invalid controller command is provided.
 //
@@ -603,9 +678,8 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
 //
 void ctrlGlcdPixConfirm(void)
 {
-  if (lcdGlutGlcdPix.active == GLCD_TRUE &&
-      lcdGlutGlcdPix.pixelLock == GLCD_TRUE)
-    lcdGlutGlcdPix.pixelLock = GLCD_FALSE;
+  if (lcdGlutGlcdPix.active == MC_TRUE && lcdGlutGlcdPix.pixelLock == MC_TRUE)
+    lcdGlutGlcdPix.pixelLock = MC_FALSE;
 }
 
 //
@@ -615,8 +689,8 @@ void ctrlGlcdPixConfirm(void)
 //
 void ctrlGlcdPixDisable(void)
 {
-  lcdGlutGlcdPix.active = GLCD_FALSE;
-  lcdGlutGlcdPix.pixelLock = GLCD_FALSE;
+  lcdGlutGlcdPix.active = MC_FALSE;
+  lcdGlutGlcdPix.pixelLock = MC_FALSE;
   lcdGlutGlcdPix.glcdX = 0;
   lcdGlutGlcdPix.glcdY = 0;
 }
@@ -630,8 +704,8 @@ void ctrlGlcdPixEnable(void)
 {
   lcdGlutGlcdPix.glcdX = 0;
   lcdGlutGlcdPix.glcdY = 0;
-  lcdGlutGlcdPix.pixelLock = GLCD_FALSE;
-  lcdGlutGlcdPix.active = GLCD_TRUE;
+  lcdGlutGlcdPix.pixelLock = MC_FALSE;
+  lcdGlutGlcdPix.active = MC_TRUE;
 }
 
 //
@@ -641,35 +715,35 @@ void ctrlGlcdPixEnable(void)
 //
 u08 ctrlGlcdPixGet(u08 *x, u08 *y)
 {
-  if (lcdGlutGlcdPix.active == GLCD_TRUE &&
-      lcdGlutGlcdPix.pixelLock == GLCD_TRUE)
+  if (lcdGlutGlcdPix.active == MC_TRUE && lcdGlutGlcdPix.pixelLock == MC_TRUE)
   {
     *x = lcdGlutGlcdPix.glcdX;
     *y = lcdGlutGlcdPix.glcdY;
-    return GLCD_TRUE;
+    return MC_TRUE;
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
 // Function: ctrlInit
 //
 // Initialize the data, registers and state of all controllers and the lcd stub
-// device(s)
+// device(s).
+// Return: MC_TRUE (success) or MC_FALSE (failure).
 //
 u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 {
   u08 i;
-  unsigned char initOk = GLCD_TRUE;
+  unsigned char initOk = MC_TRUE;
 
   // Administer which lcd stub devices are used
   useGlut = ctrlDeviceArgs->useGlut;
   useNcurses = ctrlDeviceArgs->useNcurses;
   useDevice = CTRL_DEVICE_NULL;
-  if (useNcurses == GLCD_TRUE)
+  if (useNcurses == MC_TRUE)
     useDevice = useDevice | CTRL_DEVICE_NCURSES;
-  if (useGlut == GLCD_TRUE)
+  if (useGlut == MC_TRUE)
     useDevice = useDevice | CTRL_DEVICE_GLUT;
 
   // Initialize the controller data, registers and state
@@ -684,21 +758,21 @@ u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
   ctrlGlcdPixDisable();
 
   // Init the ncurses device when requested
-  if (useNcurses == GLCD_TRUE)
+  if (useNcurses == MC_TRUE)
     initOk = lcdNcurInit(&ctrlDeviceArgs->lcdNcurInitArgs);
 
   // Init the OpenGL2/GLUT device when requested
-  if (useGlut == GLCD_TRUE && initOk == GLCD_TRUE)
+  if (useGlut == MC_TRUE && initOk == MC_TRUE)
     initOk = lcdGlutInit(&ctrlDeviceArgs->lcdGlutInitArgs);
 
   // Cleanup in case there was a failure
-  if (initOk == GLCD_FALSE)
+  if (initOk == MC_FALSE)
   {
     ctrlCleanup();
-    return CMD_RET_ERROR;
+    return MC_FALSE;
   }
 
-  return CMD_RET_OK;
+  return MC_TRUE;
 }
 
 //
@@ -708,12 +782,12 @@ u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 //
 void ctrlCleanup(void)
 {
-  if (useNcurses == GLCD_TRUE)
+  if (useNcurses == MC_TRUE)
     lcdNcurCleanup();
-  if (useGlut == GLCD_TRUE)
+  if (useGlut == MC_TRUE)
     lcdGlutCleanup();
-  useNcurses = GLCD_FALSE;
-  useGlut = GLCD_FALSE;
+  useNcurses = MC_FALSE;
+  useGlut = MC_FALSE;
   useDevice = CTRL_DEVICE_NULL;
 }
 
@@ -725,9 +799,9 @@ void ctrlCleanup(void)
 u08 ctrlDeviceActive(u08 device)
 {
   if ((useDevice & device) != device)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
-  return GLCD_TRUE;
+  return MC_TRUE;
 }
 
 //
@@ -738,9 +812,9 @@ u08 ctrlDeviceActive(u08 device)
 void ctrlLcdBacklightSet(u08 brightness)
 {
   OCR2B = (uint16_t)brightness << OCR2B_BITSHIFT;
-  if (useGlut == GLCD_TRUE)
+  if (useGlut == MC_TRUE)
     lcdGlutBacklightSet((unsigned char)brightness);
-  if (useNcurses == GLCD_TRUE)
+  if (useNcurses == MC_TRUE)
     lcdNcurBacklightSet((unsigned char)brightness);
 }
 
@@ -751,9 +825,9 @@ void ctrlLcdBacklightSet(u08 brightness)
 //
 void ctrlLcdFlush(void)
 {
-  if (useGlut == GLCD_TRUE)
+  if (useGlut == MC_TRUE)
     lcdGlutFlush();
-  if (useNcurses == GLCD_TRUE)
+  if (useNcurses == MC_TRUE)
     lcdNcurFlush();
 }
 
@@ -764,7 +838,7 @@ void ctrlLcdFlush(void)
 //
 void ctrlLcdGlutGrSet(u08 bezel, u08 grid)
 {
-  if (useGlut == GLCD_TRUE)
+  if (useGlut == MC_TRUE)
     lcdGlutGraphicsSet((unsigned char)bezel, (unsigned char)grid);
 }
 
@@ -775,7 +849,7 @@ void ctrlLcdGlutGrSet(u08 bezel, u08 grid)
 //
 void ctrlLcdHighlight(u08 highlight, u08 x, u08 y)
 {
-  if (useGlut == GLCD_TRUE)
+  if (useGlut == MC_TRUE)
     lcdGlutHighlightSet((unsigned char)highlight, (unsigned char)x,
       (unsigned char)y);
 }
@@ -787,8 +861,21 @@ void ctrlLcdHighlight(u08 highlight, u08 x, u08 y)
 //
 void ctrlLcdNcurGrSet(u08 backlight)
 {
-  if (useNcurses == GLCD_TRUE)
+  if (useNcurses == MC_TRUE)
     lcdNcurGraphicsSet((unsigned char)backlight);
+}
+
+//
+// Function: ctrlPortDataSet
+//
+// Set controller data high and low port with byte data
+//
+void ctrlPortDataSet(u08 data)
+{
+  GLCD_DATAH_PORT &= ~0xf0;
+  GLCD_DATAH_PORT |= data & 0xf0;
+  GLCD_DATAL_PORT &= ~0x0f;
+  GLCD_DATAL_PORT |= data & 0x0f;
 }
 
 //
@@ -799,11 +886,18 @@ void ctrlLcdNcurGrSet(u08 backlight)
 void ctrlRegPrint(void)
 {
   u08 i;
+  char c;
   ctrlRegister_t *ctrlRegister;
   char *state;
 
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
   {
+    // Indicator for selected controller
+    if (i == controller)
+      c = '*';
+    else
+      c = ' ';
+
     // Get controller state and its registers
     if (ctrlControllers[i].state == CTRL_STATE_CURSOR)
       state = "cursor";
@@ -816,8 +910,8 @@ void ctrlRegPrint(void)
     ctrlRegister = &ctrlControllers[i].ctrlRegister;
 
     // Print them
-    printf("ctrl-%01d : state=%s, display=%d, startline=%d\n",
-      i, state, ctrlRegister->display, ctrlRegister->startLine);
+    printf("ctrl-%01d%c: state=%s, display=%d, startline=%d\n",
+      i, c, state, ctrlRegister->display, ctrlRegister->startLine);
     printf("       : x=%d, y=%d, write=%d (0x%02x), read=%d (0x%02x)\n",
       ctrlRegister->x, ctrlRegister->y, ctrlRegister->dataWrite,
       ctrlRegister->dataWrite, ctrlRegister->dataRead, ctrlRegister->dataRead);
@@ -837,8 +931,13 @@ void ctrlStatsPrint(u08 type)
 
   // Report the lcd interface statistics
   if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
-    printf("glcd   : dataWrite=%llu, dataRead=%llu, setAddress=%llu\n",
-      ctrlLcdByteWrite, ctrlLcdByteRead, ctrlLcdSetAddress);
+  {
+    printf("glcd   : dataWrite=%llu, dataRead=%llu, addressSet=%llu\n",
+      ctrlGlcdStats.dataWrite, ctrlGlcdStats.dataRead,
+      ctrlGlcdStats.addressSet);
+    printf("       : ctrlSet=%llu\n",
+      ctrlGlcdStats.ctrlSet);
+  }
 
   // Report controller statistics
   if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
@@ -850,42 +949,42 @@ void ctrlStatsPrint(u08 type)
       if (ctrlStats->writeReq == 0)
         printf("write=%llu (-%%), ", ctrlStats->writeReq);
       else
-        printf("write=%llu (%d%%), ", ctrlStats->writeReq,
-          (int)(ctrlStats->writeCnf * 100 / ctrlStats->writeReq));
+        printf("write=%llu (%.0f%%), ", ctrlStats->writeReq,
+          ctrlStats->writeCnf * 100 / (double)ctrlStats->writeReq);
       if (ctrlStats->readReq == 0)
         printf("read=%llu (-%%), ", ctrlStats->readReq);
       else
-        printf("read=%llu (%d%%), ", ctrlStats->readReq,
-          (int)(ctrlStats->readCnf * 100 / ctrlStats->readReq));
+        printf("read=%llu (%.0f%%), ", ctrlStats->readReq,
+          ctrlStats->readCnf * 100 / (double)ctrlStats->readReq);
       if (ctrlStats->displayReq == 0)
         printf("display=%llu (-%%)\n", ctrlStats->displayReq);
       else
-        printf("display=%llu (%d%%)\n", ctrlStats->displayReq,
-          (int)(ctrlStats->displayCnf * 100 / ctrlStats->displayReq));
+        printf("display=%llu (%.0f%%)\n", ctrlStats->displayReq,
+          ctrlStats->displayCnf * 100 / (double)ctrlStats->displayReq);
       if (ctrlStats->xReq == 0)
         printf("       : x=%llu (-%%), ", ctrlStats->xReq);
       else
-        printf("       : x=%llu (%d%%), ", ctrlStats->xReq,
-          (int)(ctrlStats->xCnf * 100 / ctrlStats->xReq));
+        printf("       : x=%llu (%.0f%%), ", ctrlStats->xReq,
+          ctrlStats->xCnf * 100 / (double)ctrlStats->xReq);
       if (ctrlStats->yReq == 0)
         printf("y=%llu (-%%), ", ctrlStats->yReq);
       else
-        printf("y=%llu (%d%%), ", ctrlStats->yReq,
-          (int)(ctrlStats->yCnf * 100 / ctrlStats->yReq));
+        printf("y=%llu (%.0f%%), ", ctrlStats->yReq,
+          ctrlStats->yCnf * 100 / (double)ctrlStats->yReq);
       if (ctrlStats->startLineReq == 0)
         printf("startline=%llu (-%%)\n", ctrlStats->startLineReq);
       else
-        printf("startline=%llu (%d%%)\n", ctrlStats->startLineReq,
-          (int)(ctrlStats->startLineCnf * 100 / ctrlStats->startLineReq));
+        printf("startline=%llu (%.0f%%)\n", ctrlStats->startLineReq,
+          ctrlStats->startLineCnf * 100 / (double)ctrlStats->startLineReq);
     }
   }
 
   // Report lcd stub device statistics
   if ((type & CTRL_STATS_LCD) != CTRL_STATS_NULL)
   {
-    if (useGlut == GLCD_TRUE)
+    if (useGlut == MC_TRUE)
       lcdGlutStatsPrint();
-    if (useNcurses == GLCD_TRUE)
+    if (useNcurses == MC_TRUE)
       lcdNcurStatsPrint();
   }
 }
@@ -899,13 +998,9 @@ void ctrlStatsReset(u08 type)
 {
   u08 i;
 
-  // glcd statistics
+  // Lcd glcd statistics
   if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
-  {
-    ctrlLcdByteRead = 0;
-    ctrlLcdByteWrite = 0;
-    ctrlLcdSetAddress = 0;
-  }
+    memset(&ctrlGlcdStats, 0, sizeof(ctrlGlcdStats_t));
 
   // Lcd controller statistics
   if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
@@ -915,9 +1010,9 @@ void ctrlStatsReset(u08 type)
   // Glut and/or ncurses statistics
   if ((type & CTRL_STATS_LCD) != CTRL_STATS_NULL)
   {
-    if (useGlut == GLCD_TRUE)
+    if (useGlut == MC_TRUE)
       lcdGlutStatsReset();
-    if (useNcurses == GLCD_TRUE)
+    if (useNcurses == MC_TRUE)
       lcdNcurStatsReset();
   }
 }

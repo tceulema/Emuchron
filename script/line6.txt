@@ -10,13 +10,14 @@
 
 # Erase lcd display
 le
+psf
 
 # Do rectangle box
 vs bx=64
 vs by=1
-pr f bx by 34 15
-pa f bx+3 by+2 5x5p h 1 1 glcdline
-pa f bx+2 by+8 5x5p h 1 1 sin / cos
+pr bx by 34 15
+pa bx+3 by+2 5x5p h 1 1 glcdline
+pa bx+2 by+8 5x5p h 1 1 sin / cos
 
 # Set start (xs), length (xl) and step (xe) values for x-axis
 # For step use divider values of 120, such as 2, 3, 4, 5, 6, 8, 10, 12
@@ -29,13 +30,13 @@ vs ys=31
 vs yr=30
 
 # Draw x and y axis and markers
-pl f 2 ys-yr 2 ys+yr
+pl 2 ys-yr 2 ys+yr
 rf y=ys-yr y<=ys+yr y=y+6
-  pd f 1 y
+  pd 1 y
 rn
-pl f xe-1 31 xs+xl ys
+pl xe-1 31 xs+xl ys
 rf x=xs x<=xs+xl x=x+xe
-  pd f x ys+1
+  pd x ys+1
 rn
 
 # Paint sin and cos curve and line between sin and cos
@@ -45,17 +46,17 @@ rf x=xs+xe x<=xs+xl x=x+xe
     # Initial start-off sin/cos points and a line between them
     vs sp=-sin(0)*yr+ys
     vs cp=-cos(0)*yr+ys
-    pl f xs sp xs cp
+    pl xs sp xs cp
   ien
   w 40
   # Get new y values
   vs sy=-sin(2*pi/xl*(x-xs))*yr+ys
   vs cy=-cos(2*pi/xl*(x-xs))*yr+ys
   # Connect new point with previous point
-  pl f x-xe sp x sy
-  pl f x-xe cp x cy
+  pl x-xe sp x sy
+  pl x-xe cp x cy
   # Paint line between sin and cos value
-  pl f x sy x cy
+  pl x sy x cy
   # Set new previous values
   vs sp=sy
   vs cp=cy

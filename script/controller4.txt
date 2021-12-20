@@ -10,21 +10,42 @@ le
 w 50
 sr
 
-# Fill the lcd display
+# Fill the lcd display using this variable
 vs lcdbyte=0
+
+# First set the x cursor in both controllers to 0. Due to the cyclic x cursor
+# behavior of the controller upon shifting x (moves position 63 back to 0) we
+# never need to touch the x cursor again.
+lcs 0
+lxs 0
+lcs 1
+lxs 0
+
 rf y=0 y<8 y=y+1
-  lcs 0 0 y
-  lcs 1 0 y
+  # Set y cursor in both lcd controllers. At this point controller 1 is active
+  # so set it in that controller first. Then switch to controller 0 and start
+  # writing data to that controller.
+  lys y
+  lcs 0
+  lys y
   rf x=0 x<128 x=x+1
-    lw x>>6 lcdbyte
+    # Halfway the lcd line switch to controller 1
+    iif x==64
+      lcs 1
+    ien
+    # After writing to the controller its x cursor will auto-increment
+    # and after writing to position 63 reset to 0
+    lw lcdbyte
     vs lcdbyte=(lcdbyte+1)&0xff
   rn
 rn
 
 # Paint markers where the last cursor position is
 # (= bottom left of each controller)
-lw 0 0x55
-lw 1 0x55
+lcs 0
+lw 0x55
+lcs 1
+lw 0x55
 
 # Show the stats after letting glut clear its message buffer
 w 50

@@ -17,7 +17,7 @@
 #
 
 # Make sure we'll be seeing the alarm time
-ap 1
+tap 1
 
 wts
 # Repeat h(our) between 0..23
@@ -28,7 +28,7 @@ rf h=0 h<24 h=h+1
     ts 22 9 30
     # Change the alarm using the 'h' and 'm' variables
     # This will update the layout of the selected clock
-    as h m
+    tas h m
     # Wait remainder of 'w'*0.001 seconds since last wts or wte call
     wte w
   # Next m(inute)

@@ -172,7 +172,7 @@ Line:
 Assignment:
     // Assignment expression to set value of variable
     IDENTIFIER IS Expression { $$ = varValSet((int)$1, $3);
-        exprAssign = GLCD_TRUE; }
+        exprAssign = MC_TRUE; }
 ;
 
 Expression:

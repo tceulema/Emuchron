@@ -3,15 +3,10 @@
 // Title    : Animation code for MONOCHRON slider clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../ks0108conf.h"
 #include "slider.h"
 
 // Specifics for slider clock
@@ -46,7 +41,6 @@ extern volatile uint8_t mcU8Util1;
 extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Common text labels
 extern char animHour[];
@@ -74,7 +68,7 @@ void sliderCycle(void)
   sliderAlarmAreaUpdate();
 
   // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+  if (mcClockTimeEvent == MC_FALSE && mcClockInit == MC_FALSE)
     return;
 
   DEBUGP("Update Slider");
@@ -107,18 +101,17 @@ static void sliderElementInit(u08 x, u08 y, u08 factor, char *label)
   u08 markerX = x + SLIDER_MARKER_X_OFFSET;
   u08 markerY = y + SLIDER_MARKER_Y_OFFSET;
 
-  glcdPutStr2(x, y, FONT_5X5P, label, mcFgColor);
+  glcdPutStr2(x, y, FONT_5X5P, label);
 
   for (i = 0; i <= 9; i++)
   {
     // Draw marker on top row only if in range
     if (i <= factor)
       glcdDot(markerX + SLIDER_MARKER_WIDTH / 2,
-        markerY + SLIDER_MARKER_HEIGHT / 2, mcFgColor);
+        markerY + SLIDER_MARKER_HEIGHT / 2);
     // Draw marker on bottom row
     glcdDot(markerX + SLIDER_MARKER_WIDTH / 2,
-      markerY + SLIDER_MARKER_HEIGHT + 1 + SLIDER_MARKER_HEIGHT / 2,
-      mcFgColor);
+      markerY + SLIDER_MARKER_HEIGHT + 1 + SLIDER_MARKER_HEIGHT / 2);
     markerX = markerX + SLIDER_MARKER_WIDTH + 1;
   }
 }
@@ -133,7 +126,7 @@ static void sliderElementInvert(u08 x, u08 y, u08 element)
   glcdFillRectangle2(x + SLIDER_MARKER_X_OFFSET +
     element * (SLIDER_MARKER_WIDTH + 1),
     y + SLIDER_MARKER_Y_OFFSET, SLIDER_MARKER_WIDTH, SLIDER_MARKER_HEIGHT,
-    ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+    ALIGN_AUTO, FILL_INVERSE);
 }
 
 //
@@ -150,7 +143,7 @@ static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
   u08 valHighNew;
 
   // See if we need to update the time element
-  if (oldVal == newVal && init == GLCD_FALSE)
+  if (oldVal == newVal && init == MC_FALSE)
     return;
 
   valLowOld = oldVal % 10;
@@ -158,10 +151,10 @@ static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
   valLowNew = newVal % 10;
   valHighNew = newVal / 10;
 
-  if (valHighOld != valHighNew || init == GLCD_TRUE)
+  if (valHighOld != valHighNew || init == MC_TRUE)
   {
     // Replace old high value with new one
-    if (init == GLCD_FALSE)
+    if (init == MC_FALSE)
     {
       // Restore previous marker
       sliderElementInvert(x, y, valHighOld);
@@ -170,10 +163,10 @@ static void sliderElementValueSet(u08 x, u08 y, u08 oldVal, u08 newVal,
     sliderElementInvert(x, y, valHighNew);
   }
 
-  if (valLowOld != valLowNew || init == GLCD_TRUE)
+  if (valLowOld != valLowNew || init == MC_TRUE)
   {
     // Replace old low value with new one
-    if (init == GLCD_FALSE)
+    if (init == MC_FALSE)
     {
       // Restore previous marker
       sliderElementInvert(x, y + 1 + SLIDER_MARKER_HEIGHT, valLowOld);
@@ -201,14 +194,14 @@ void sliderInit(u08 mode)
   for (i = 0; i <= 9; i++)
   {
     glcdPutStr2(SLIDER_LEFT_X_START + SLIDER_MARKER_X_OFFSET + i * 4,
-      SLIDER_NUMBER_Y_START, FONT_5X5P, val, mcFgColor);
+      SLIDER_NUMBER_Y_START, FONT_5X5P, val);
     glcdPutStr2(SLIDER_RIGHT_X_START + SLIDER_MARKER_X_OFFSET + i * 4,
-      SLIDER_NUMBER_Y_START, FONT_5X5P, val, mcFgColor);
+      SLIDER_NUMBER_Y_START, FONT_5X5P, val);
     val[0] = val[0] + 1;
   }
 
   // Draw separator between date/time and alarm and the alarm text
-  glcdRectangle(0, 48, GLCD_XPIXELS, 1, mcFgColor);
+  glcdRectangle(0, 48, GLCD_XPIXELS, 1);
 
   // Draw the date and time elements
   sliderElementInit(SLIDER_LEFT_X_START, SLIDER_HOUR_Y_START, 2, animHour);
@@ -219,7 +212,7 @@ void sliderInit(u08 mode)
   sliderElementInit(SLIDER_RIGHT_X_START, SLIDER_YEAR_Y_START, 9, animYear);
 
   // Init alarm blink state
-  mcU8Util1 = GLCD_FALSE;
+  mcU8Util1 = MC_FALSE;
 }
 
 //
@@ -229,10 +222,10 @@ void sliderInit(u08 mode)
 //
 static void sliderAlarmAreaUpdate(void)
 {
-  u08 newAlmDisplayState = GLCD_FALSE;
+  u08 newAlmDisplayState = MC_FALSE;
 
   // Detect change in displaying alarm
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
+  if (mcUpdAlarmSwitch == MC_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {
@@ -244,24 +237,25 @@ static void sliderAlarmAreaUpdate(void)
 
       // Set the alarm element values
       sliderElementValueSet(SLIDER_LEFT_X_START, SLIDER_ALARM_Y_START,
-        mcAlarmH, mcAlarmH, GLCD_TRUE);
+        mcAlarmH, mcAlarmH, MC_TRUE);
       sliderElementValueSet(SLIDER_RIGHT_X_START, SLIDER_ALARM_Y_START,
-        mcAlarmM, mcAlarmM, GLCD_TRUE);
+        mcAlarmM, mcAlarmM, MC_TRUE);
     }
     else
     {
       // Clear area (remove alarm time elements)
+      glcdColorSetBg();
       glcdFillRectangle(SLIDER_LEFT_X_START - 1,
         SLIDER_ALARM_Y_START + SLIDER_MARKER_Y_OFFSET,
-        GLCD_XPIXELS - SLIDER_LEFT_X_START, SLIDER_MARKER_HEIGHT * 2 + 1,
-        mcBgColor);
-      mcU8Util1 = GLCD_FALSE;
+        GLCD_XPIXELS - SLIDER_LEFT_X_START, SLIDER_MARKER_HEIGHT * 2 + 1);
+      glcdColorSetFg();
+      mcU8Util1 = MC_FALSE;
     }
   }
 
   // Set alarm blinking state in case we're alarming
-  if (mcAlarming == GLCD_TRUE && (mcCycleCounter & 0x08) == 8)
-    newAlmDisplayState = GLCD_TRUE;
+  if (mcAlarming == MC_TRUE && (mcCycleCounter & 0x08) == 8)
+    newAlmDisplayState = MC_TRUE;
 
   // Make alarm area blink during alarm or cleanup after end of alarm
   if (newAlmDisplayState != mcU8Util1)
@@ -269,8 +263,8 @@ static void sliderAlarmAreaUpdate(void)
     // Inverse the alarm area
     mcU8Util1 = newAlmDisplayState;
     glcdFillRectangle2(SLIDER_LEFT_X_START - 1, SLIDER_ALARM_Y_START - 1, 17,
-      7, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+      7, ALIGN_AUTO, FILL_INVERSE);
     glcdFillRectangle2(SLIDER_RIGHT_X_START - 1, SLIDER_ALARM_Y_START - 1, 14,
-      7, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+      7, ALIGN_AUTO, FILL_INVERSE);
   }
 }

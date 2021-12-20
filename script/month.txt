@@ -25,6 +25,6 @@
 wts
 rf dr=1 dr<=d dr=dr+1
   ts 22 09 30
-  ds dr m y
+  tds dr m y
   wte w
 rn

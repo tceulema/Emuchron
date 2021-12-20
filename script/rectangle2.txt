@@ -6,27 +6,28 @@
 
 # Erase lcd display
 le
+psf
 
 # Paint header and align options
-pa f 1 1 5x5p h 1 1 glcdFillRectangle2 - fill alignment
-pa f 100 14 5x5p h 1 1 top
-pa f 100 30 5x5p h 1 1 bottom
-pa f 100 48 5x5p h 1 1 auto
+pa 1 1 5x5p h 1 1 glcdFillRectangle2 - fill alignment
+pa 100 14 5x5p h 1 1 top
+pa 100 30 5x5p h 1 1 bottom
+pa 100 48 5x5p h 1 1 auto
 
 # Half filled
-prf f 2 10 19 14 0 1
-prf f 2 26 19 14 1 1
-prf f 2 42 19 14 2 1
-prf f 7 48 19 14 2 1
+prf 2 10 19 14 0 1
+prf 2 26 19 14 1 1
+prf 2 42 19 14 2 1
+prf 7 48 19 14 2 1
 
 # Third up filled
-prf f 35 10 19 14 0 2
-prf f 35 26 19 14 1 2
-prf f 35 42 19 13 2 2
-prf f 40 48 19 14 2 2
+prf 35 10 19 14 0 2
+prf 35 26 19 14 1 2
+prf 35 42 19 13 2 2
+prf 40 48 19 14 2 2
 
 # Third down filled
-prf f 67 10 19 14 0 3
-prf f 67 26 19 14 1 3
-prf f 67 42 19 13 2 3
-prf f 72 49 19 13 2 3
+prf 67 10 19 14 0 3
+prf 67 26 19 14 1 3
+prf 67 42 19 13 2 3
+prf 72 49 19 13 2 3

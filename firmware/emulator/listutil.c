@@ -12,12 +12,18 @@
 #include <time.h>
 
 // Monochron and emuchron defines
-#include "../ks0108.h"
-#include "../monomain.h"
-#include "stub.h"
+#include "../global.h"
 #include "scanutil.h"
 #include "mchronutil.h"
 #include "listutil.h"
+
+// A structure to hold command list execution statistics
+typedef struct _cmdListStats_t
+{
+  struct timeval cmdTvStart;	// List execution start timestamp
+  long long cmdCmdCount;	// Number of commands executed
+  long long cmdLineCount;	// Number of lines executed
+} cmdListStats_t;
 
 // Current command file execution depth
 extern int fileExecDepth;
@@ -37,12 +43,10 @@ int listExecDepth = 0;
 
 // System timer data for command list 100 msec keyboard scan
 static timer_t kbTimerId;
-static unsigned char kbTimerTripped;
+static u08 kbTimerTripped;
 
 // Command list execution statistics
-static struct timeval cmdTvStart;
-static int cmdCmdCount = 0;
-static int cmdLineCount = 0;
+static cmdListStats_t cmdListStats;
 
 // Local function prototypes
 static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
@@ -69,7 +73,7 @@ cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
   cmdLine->lineNum = 0;
   cmdLine->input = NULL;
   cmdLine->args = NULL;
-  cmdLine->initialized = GLCD_FALSE;
+  cmdLine->initialized = MC_FALSE;
   cmdLine->cmdCommand = NULL;
   cmdLine->cmdPcCtrlParent = NULL;
   cmdLine->cmdPcCtrlChild = NULL;
@@ -104,7 +108,7 @@ u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
   u08 retVal = CMD_RET_OK;
 
   // Have we scanned the command line arguments yet
-  if (cmdLine->initialized == GLCD_FALSE)
+  if (cmdLine->initialized == MC_FALSE)
   {
     // Start command line scanner by getting command and its dictionary entry
     retVal = cmdArgInit(&input, cmdLine);
@@ -329,7 +333,7 @@ u08 cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
   if (listExecDepth == 0)
   {
     kbModeSet(KB_MODE_SCAN);
-    kbTimerTripped = GLCD_FALSE;
+    kbTimerTripped = MC_FALSE;
     emuSysTimerStart(&kbTimerId, 100, cmdListRaiseScan);
   }
   listExecDepth++;
@@ -347,7 +351,7 @@ u08 cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
     }
 
     // Execute the command in the command line
-    cmdLineCount++;
+    cmdListStats.cmdLineCount++;
     cmdCommand = cmdProgCounter->cmdCommand;
     if (cmdCommand == NULL)
     {
@@ -358,7 +362,7 @@ u08 cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
     else if (cmdCommand->cmdPcCtrlType == PC_CONTINUE)
     {
       // Execute a regular command via the generic handler
-      cmdCmdCount++;
+      cmdListStats.cmdCmdCount++;
       cmdPcCtrlType = PC_CONTINUE;
       retVal = cmdLineExecute(cmdProgCounter, NULL);
     }
@@ -367,9 +371,9 @@ u08 cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
       // This is a control block command from a repeat or if construct. Get the
       // command arguments (if not already done) and execute the associated
       // program counter control block handler from the command dictionary.
-      cmdCmdCount++;
+      cmdListStats.cmdCmdCount++;
       input = cmdProgCounter->input;
-      if (cmdProgCounter->initialized == GLCD_FALSE)
+      if (cmdProgCounter->initialized == MC_FALSE)
       {
         cmdArgInit(&input, cmdProgCounter);
         retVal = cmdArgRead(input, cmdProgCounter);
@@ -383,10 +387,10 @@ u08 cmdListExecute(cmdLine_t *cmdLineRoot, char *source)
     }
 
     // Verify if a command interrupt was requested
-    if (retVal == CMD_RET_OK && kbTimerTripped == GLCD_TRUE)
+    if (retVal == CMD_RET_OK && kbTimerTripped == MC_TRUE)
     {
-      kbTimerTripped = GLCD_FALSE;
-      ch = kbKeypressScan(GLCD_TRUE);
+      kbTimerTripped = MC_FALSE;
+      ch = kbKeypressScan(MC_TRUE);
       if (ch == 'q')
       {
         printf("quit\n");
@@ -443,7 +447,7 @@ u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   FILE *fp;				// Input file pointer
   cmdLine_t *cmdLineLast = NULL;	// The last cmdline in linked list
   cmdPcCtrl_t *cmdPcCtrlLast = NULL;	// The last cmdPcCtrl in linked list
-  cmdPcCtrl_t *searchPcCtrl = NULL;	// Active cmdPcCtrl in search efforts
+  cmdPcCtrl_t *cmdPcCtrlSearch = NULL;	// Active cmdPcCtrl in search efforts
   int lineNum = 1;
   int lineNumErr = 0;
   cmdInput_t cmdInput;
@@ -462,10 +466,8 @@ u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
   }
 
   // Initialize our file readline interface method and do the first read
-  cmdInput.file = fp;
-  cmdInput.readMethod = CMD_INPUT_MANUAL;
-  cmdInputInit(&cmdInput);
-  cmdInputRead("", &cmdInput);
+  cmdInputInit(&cmdInput, fp, CMD_INPUT_MANUAL);
+  cmdInputRead(NULL, &cmdInput);
 
   // Add each line in the command file in a command linked list
   while (cmdInput.input != NULL)
@@ -485,7 +487,7 @@ u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
 
     // Get next input line
     lineNum++;
-    cmdInputRead("", &cmdInput);
+    cmdInputRead(NULL, &cmdInput);
   }
 
   // File content is loaded in linked list or error occurred while parsing
@@ -513,24 +515,24 @@ u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
 
   // Postprocessing the linked lists.
   // We may not find a control block that is not linked to a command line.
-  searchPcCtrl = cmdPcCtrlLast;
-  while (searchPcCtrl != NULL)
+  cmdPcCtrlSearch = cmdPcCtrlLast;
+  while (cmdPcCtrlSearch != NULL)
   {
-    if (searchPcCtrl->cmdLineChild == NULL)
+    if (cmdPcCtrlSearch->cmdLineChild == NULL)
     {
       // Unlinked control block
       printf("parse: command unmatched in block starting at line %d\n",
-        searchPcCtrl->cmdLineParent->lineNum);
+        cmdPcCtrlSearch->cmdLineParent->lineNum);
       printf(CMD_STACK_TRACE);
       printf(CMD_STACK_FMT, fileExecDepth, fileName,
-        searchPcCtrl->cmdLineParent->lineNum,
-        searchPcCtrl->cmdLineParent->input);
+        cmdPcCtrlSearch->cmdLineParent->lineNum,
+        cmdPcCtrlSearch->cmdLineParent->input);
       return CMD_RET_ERROR;
     }
     else
     {
       // Continue search backwards
-      searchPcCtrl = searchPcCtrl->prev;
+      cmdPcCtrlSearch = cmdPcCtrlSearch->prev;
     }
   }
 
@@ -569,7 +571,7 @@ static u08 cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
   // List build-up is interrupted when the user enters ^D on a blank line, when
   // a control block command cannot be matched or when a non-existing command
   // is entered.
-  while (GLCD_TRUE)
+  while (MC_TRUE)
   {
     // Create new command line, add it to the linked list, and fill in
     // its functional payload
@@ -651,8 +653,8 @@ static u08 cmdListKeyboardLoad(cmdLine_t **cmdLineRoot,
 //
 static void cmdListRaiseScan(void)
 {
-  if (kbTimerTripped == GLCD_FALSE)
-    kbTimerTripped = GLCD_TRUE;
+  if (kbTimerTripped == MC_FALSE)
+    kbTimerTripped = MC_TRUE;
 }
 
 //
@@ -662,9 +664,9 @@ static void cmdListRaiseScan(void)
 //
 void cmdListStatsInit(void)
 {
-  cmdCmdCount = 0;
-  cmdLineCount = 0;
-  gettimeofday(&cmdTvStart, NULL);
+  cmdListStats.cmdCmdCount = 0;
+  cmdListStats.cmdLineCount = 0;
+  gettimeofday(&cmdListStats.cmdTvStart, NULL);
 }
 
 //
@@ -678,16 +680,17 @@ void cmdListStatsPrint(void)
   double secElapsed;
 
   // Print list execution statistics when there's something to show
-  if (cmdLineCount > 0)
+  if (cmdListStats.cmdLineCount > 0)
   {
     gettimeofday(&cmdTvEnd, NULL);
-    secElapsed = TIMEDIFF_USEC(cmdTvEnd, cmdTvStart) / (double)1E6;
-    printf("time=%.3f sec, cmd=%d, line=%d", secElapsed, cmdCmdCount,
-      cmdLineCount);
+    secElapsed = TIMEDIFF_USEC(cmdTvEnd, cmdListStats.cmdTvStart) /
+      (double)1E6;
+    printf("time=%.3f sec, cmd=%llu, line=%llu", secElapsed,
+      cmdListStats.cmdCmdCount, cmdListStats.cmdLineCount);
     if (secElapsed > 0.1)
-      printf(", avgLine=%.0f", cmdLineCount / secElapsed);
+      printf(", avgLine=%.0f", cmdListStats.cmdLineCount / secElapsed);
     printf("\n");
-    cmdLineCount = 0;
+    cmdListStats.cmdLineCount = 0;
   }
 }
 
@@ -719,7 +722,7 @@ static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
 
   // Init the new program counter control block
   cmdPcCtrl->cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
-  cmdPcCtrl->active = GLCD_FALSE;
+  cmdPcCtrl->active = MC_FALSE;
   cmdPcCtrl->cmdLineParent = cmdLine;
   cmdPcCtrl->cmdLineChild = NULL;
   cmdPcCtrl->prev = cmdPcCtrlLast;
@@ -742,40 +745,40 @@ static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
 //
 static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
 {
-  cmdPcCtrl_t *searchPcCtrl = cmdPcCtrlLast;
+  cmdPcCtrl_t *cmdPcCtrlSearch = cmdPcCtrlLast;
   u08 cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
   u08 searchPcCtrlType;
 
-  while (searchPcCtrl != NULL)
+  while (cmdPcCtrlSearch != NULL)
   {
-    if (searchPcCtrl->cmdLineChild == NULL)
+    if (cmdPcCtrlSearch->cmdLineChild == NULL)
     {
       // Found an unlinked control block. Verify if its control block type is
       // compatible with the control block type of the command line.
-      searchPcCtrlType = searchPcCtrl->cmdPcCtrlType;
+      searchPcCtrlType = cmdPcCtrlSearch->cmdPcCtrlType;
       if (cmdPcCtrlType == PC_REPEAT_NEXT && searchPcCtrlType != PC_REPEAT_FOR)
-        return searchPcCtrl->cmdLineParent->lineNum;
+        return cmdPcCtrlSearch->cmdLineParent->lineNum;
       else if (cmdPcCtrlType == PC_IF_ELSE_IF && searchPcCtrlType != PC_IF &&
         searchPcCtrlType != PC_IF_ELSE_IF)
-        return searchPcCtrl->cmdLineParent->lineNum;
+        return cmdPcCtrlSearch->cmdLineParent->lineNum;
       else if (cmdPcCtrlType == PC_IF_ELSE && searchPcCtrlType != PC_IF &&
         searchPcCtrlType != PC_IF_ELSE_IF)
-        return searchPcCtrl->cmdLineParent->lineNum;
+        return cmdPcCtrlSearch->cmdLineParent->lineNum;
       else if (cmdPcCtrlType == PC_IF_END && searchPcCtrlType != PC_IF &&
           searchPcCtrlType != PC_IF_ELSE_IF && searchPcCtrlType != PC_IF_ELSE)
-        return searchPcCtrl->cmdLineParent->lineNum;
+        return cmdPcCtrlSearch->cmdLineParent->lineNum;
 
       // There's a valid match between the control block types of the current
       // command and the last open control block. Make a cross link between the
       // two.
-      cmdLine->cmdPcCtrlParent = searchPcCtrl;
-      searchPcCtrl->cmdLineChild = cmdLine;
+      cmdLine->cmdPcCtrlParent = cmdPcCtrlSearch;
+      cmdPcCtrlSearch->cmdLineChild = cmdLine;
       return 0;
     }
     else
     {
       // Search not done yet, go backward
-      searchPcCtrl = searchPcCtrl->prev;
+      cmdPcCtrlSearch = cmdPcCtrlSearch->prev;
     }
   }
 

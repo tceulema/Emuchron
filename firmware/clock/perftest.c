@@ -78,22 +78,22 @@
 // the stability of the defined clock plugin framework. It's your choice.
 //
 
-#include <math.h>
 #ifdef EMULIN
 #include <stdio.h>
-#include "../emulator/stub.h"
-#include "../emulator/controller.h"
-#include "../emulator/mchronutil.h"
-#else
-#include "../util.h"
 #endif
-#include "../monomain.h"
-#include "../buttons.h"
-#include "../ks0108.h"
+#include <math.h>
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
-#include "perftest.h"
+#include "../ks0108.h"
+#include "../ks0108conf.h"
+#include "../monomain.h"
+#include "../buttons.h"
+#ifdef EMULIN
+#include "../emulator/mchronutil.h"
+#endif
 #include "analog.h"
+#include "perftest.h"
 
 // Refer to appendix B in Emuchron_Manual.pdf [support].
 // The test loop numbers below have been recalibrated several times.
@@ -231,32 +231,32 @@ void perfCycle(void)
   // Repeat forever
   while (1)
   {
-    if (perfTestDot() == GLCD_TRUE)
+    if (perfTestDot() == MC_TRUE)
       break;
-    if (perfTestLine() == GLCD_TRUE)
+    if (perfTestLine() == MC_TRUE)
       break;
-    if (perfTestCircle2() == GLCD_TRUE)
+    if (perfTestCircle2() == MC_TRUE)
       break;
-    if (perfTestFillCircle2() == GLCD_TRUE)
+    if (perfTestFillCircle2() == MC_TRUE)
       break;
-    if (perfTestRectangle() == GLCD_TRUE)
+    if (perfTestRectangle() == MC_TRUE)
       break;
-    if (perfTestFillRectangle2() == GLCD_TRUE)
+    if (perfTestFillRectangle2() == MC_TRUE)
       break;
-    if (perfTestPutStr3() == GLCD_TRUE)
+    if (perfTestPutStr3() == MC_TRUE)
       break;
-    if (perfTestPutStr3v() == GLCD_TRUE)
+    if (perfTestPutStr3v() == MC_TRUE)
       break;
-    if (perfTestPutStr() == GLCD_TRUE)
+    if (perfTestPutStr() == MC_TRUE)
       break;
-    if (perfTestBitmap() == GLCD_TRUE)
+    if (perfTestBitmap() == MC_TRUE)
       break;
   }
 
 #ifdef EMULIN
   // This only happens in the emulator
-  glcdClearScreen(mcBgColor);
-  glcdPutStr2(1, 58, FONT_5X5P, "quit performance test", mcFgColor);
+  glcdClearScreen();
+  glcdPutStr2(1, 58, FONT_5X5P, "quit performance test");
 
   // Return to line mode if needed
   if (myKbMode == KB_MODE_LINE)
@@ -274,7 +274,7 @@ void perfInit(u08 mode)
   DEBUGP("Init Perftest");
 
   // Give welcome screen
-  glcdPutStr2(1, 1, FONT_5X5P, "monochron glcd performance test", mcFgColor);
+  glcdPutStr2(1, 1, FONT_5X5P, "monochron glcd performance test");
 #ifdef EMULIN
   printf("\nTo exit performance test clock press 'q' on any main test suite prompt\n\n");
 #endif
@@ -295,14 +295,13 @@ static u08 perfTestBitmap(void)
   int i,j;
   u08 x;
   u08 y;
-  u08 color;
 
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdBitmap");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Move around a 32x32 bitmap around the display, triggering both
   // glcdBuffer y-line reads and full lcd byte y-line writes, by mapping image
@@ -313,22 +312,18 @@ static u08 perfTestBitmap(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint bitmaps with varying x and y location, and color
     x = 2;
     y = 0;
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_BITMAP_1; i++)
     {
       // Do the actual bitmap paint starting on (x,y)
-      if ((y & 0x1) == 0)
-        color = mcFgColor;
-      else
-        color = mcBgColor;
-      glcdBitmap(x, y, 0, 0, 32, 32, ELM_DWORD, DATA_PMEM, (void *)image,
-        color);
+      glcdColorSet(y & 0x1);
+      glcdBitmap(x, y, 0, 0, 32, 32, ELM_DWORD, DATA_PMEM, (void *)image);
 #ifdef EMULIN
       ctrlLcdFlush();
 #endif
@@ -351,10 +346,11 @@ static u08 perfTestBitmap(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
@@ -369,22 +365,19 @@ static u08 perfTestBitmap(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint bitmaps with varying x and y location, and color
     y = 0;
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_BITMAP_2; i++)
     {
       // Do the actual bitmap paint starting on (x,y)
-      if ((y & 0x1) == 0)
-        color = mcFgColor;
-      else
-        color = mcBgColor;
+      glcdColorSet(y & 0x1);
       for (j = 0; j < 32; j++)
-        glcdBitmap(15, y + j, 0, j, 32, 1, ELM_DWORD, DATA_PMEM, (void *)image,
-          color);
+        glcdBitmap(15, y + j, 0, j, 32, 1, ELM_DWORD, DATA_PMEM,
+          (void *)image);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -402,16 +395,17 @@ static u08 perfTestBitmap(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -430,26 +424,26 @@ static u08 perfTestCircle2(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdCircle2");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Non-overlapping circles, each with different draw types.
   button = perfTestInit("glcdCircle2", 1);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint circles with various radius values and paint options
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_CIRCLE2_1; i++)
     {
       // Do the actual paint
       for (j = 0; j < 32; j++)
       {
-        glcdCircle2(64, 32, j, counter % 3, mcFgColor);
+        glcdCircle2(64, 32, j, counter % 3);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -458,14 +452,16 @@ static u08 perfTestCircle2(void)
 
       // Undo paint
       counter = counter - 32;
+      glcdColorSetBg();
       for (j = 0; j < 32; j++)
       {
-        glcdCircle2(64, 32, j, counter % 3, mcBgColor);
+        glcdCircle2(64, 32, j, counter % 3);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
         counter++;
       }
+      glcdColorSetFg();
 
       // Do statistics
       testStats.loopsDone++;
@@ -475,7 +471,7 @@ static u08 perfTestCircle2(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -491,10 +487,10 @@ static u08 perfTestCircle2(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint full circles with same radius values at different locations
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_CIRCLE2_2; i++)
     {
@@ -502,21 +498,23 @@ static u08 perfTestCircle2(void)
       {
         // Paint small circles
         for (y = 8; y < 58; y = y + 12)
-          glcdCircle2(x, y, 5, 0, mcFgColor);
+          glcdCircle2(x, y, 5, 0);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
       }
 
+      glcdColorSetBg();
       for (x = 9; x < 120; x = x + 12)
       {
         // Clear small circles
         for (y = 8; y < 58; y = y + 12)
-          glcdCircle2(x, y, 5, 0, mcBgColor);
+          glcdCircle2(x, y, 5, 0);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
       }
+      glcdColorSetFg();
 
       // Do statistics
       testStats.loopsDone++;
@@ -526,7 +524,7 @@ static u08 perfTestCircle2(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -535,7 +533,7 @@ static u08 perfTestCircle2(void)
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -553,9 +551,9 @@ static u08 perfTestDot(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdDot");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Paint dots where each dot inverts the current color.
   // Will have a 100% lcd byte efficiency.
@@ -563,10 +561,10 @@ static u08 perfTestDot(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen with dots with a 100% replace rate
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_DOT_1; i++)
     {
@@ -576,7 +574,7 @@ static u08 perfTestDot(void)
         for (x = 0; x < GLCD_XPIXELS; x++)
         {
           for (y = j; y < GLCD_YPIXELS; y = y + 8)
-            glcdDot(x, y, mcFgColor);
+            glcdDot(x, y);
 #ifdef EMULIN
           ctrlLcdFlush();
 #endif
@@ -584,17 +582,19 @@ static u08 perfTestDot(void)
       }
 
       // Clear the dots
+      glcdColorSetBg();
       for (j = 0; j < 8; j++)
       {
         for (x = 0; x < GLCD_XPIXELS; x++)
         {
           for (y = j; y < GLCD_YPIXELS; y = y + 8)
-            glcdDot(x, y, mcBgColor);
+            glcdDot(x, y);
 #ifdef EMULIN
           ctrlLcdFlush();
 #endif
         }
       }
+      glcdColorSetFg();
 
       // Do statistics
       testStats.loopsDone++;
@@ -605,7 +605,7 @@ static u08 perfTestDot(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -620,20 +620,22 @@ static u08 perfTestDot(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen with dots with a 50% replace rate
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_DOT_2; i++)
     {
+      glcdColorSet((i + 1) & 0x1);
+
       // Paint the dots
       for (j = 0; j < 8; j++)
       {
         for (x = 0; x < GLCD_XPIXELS; x++)
         {
           for (y = j; y < GLCD_YPIXELS; y = y + 8)
-            glcdDot(x, y, (i + 1) & 0x1);
+            glcdDot(x, y);
 #ifdef EMULIN
           ctrlLcdFlush();
 #endif
@@ -646,7 +648,7 @@ static u08 perfTestDot(void)
         for (x = 0; x < GLCD_XPIXELS; x++)
         {
           for (y = j; y < GLCD_YPIXELS; y = y + 8)
-            glcdDot(x, y, (i + 1) & 0x1);
+            glcdDot(x, y);
 #ifdef EMULIN
           ctrlLcdFlush();
 #endif
@@ -662,16 +664,17 @@ static u08 perfTestDot(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -689,9 +692,9 @@ static u08 perfTestLine(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdLine");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Draw analog clock updates. This gives a real-life measurement of
   // draw optimizations.
@@ -699,14 +702,14 @@ static u08 perfTestLine(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
     perfTestTimeInit();
     analogHmsInit(DRAW_INIT_FULL);
-    mcUpdAlarmSwitch = GLCD_TRUE;
-    mcAlarmSwitch = GLCD_TRUE;
+    mcUpdAlarmSwitch = MC_TRUE;
+    mcAlarmSwitch = MC_TRUE;
 
     // Draw lines using the analog clock layout
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     do
     {
@@ -722,15 +725,15 @@ static u08 perfTestLine(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
-      mcClockInit = GLCD_FALSE;
-      mcUpdAlarmSwitch = GLCD_FALSE;
+      mcClockInit = MC_FALSE;
+      mcUpdAlarmSwitch = MC_FALSE;
 
       // Do statistics
       testStats.loopsDone++;
-    } while (perfTestTimeNext() == GLCD_FALSE);
+    } while (perfTestTimeNext() == MC_FALSE);
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
@@ -741,10 +744,10 @@ static u08 perfTestLine(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint lines of varying length and draw angle
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_LINE_2; i++)
     {
@@ -757,11 +760,13 @@ static u08 perfTestLine(void)
         yB = (u08)(-cos(2 * M_PI / 29 * (j % 29)) * 30 + 32);
 
         // Draw and remove the line
-        glcdLine(xA, yA, xB, yB, mcFgColor);
+        glcdLine(xA, yA, xB, yB);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
-        glcdLine(xA, yA, xB, yB, mcBgColor);
+        glcdColorSetBg();
+        glcdLine(xA, yA, xB, yB);
+        glcdColorSetFg();
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -775,7 +780,7 @@ static u08 perfTestLine(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -784,7 +789,7 @@ static u08 perfTestLine(void)
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -805,19 +810,19 @@ static u08 perfTestFillCircle2(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdFillCircle2");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Overlapping filled circles, each with different fill types.
   button = perfTestInit("glcdFillCircle2", 1);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint circles with various radius values and paint options
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_FILLCIRCLE2_1; i++)
     {
@@ -827,7 +832,8 @@ static u08 perfTestFillCircle2(void)
         // Filltype inverse is not supported so skip that one
         if (counter % 6 == 4)
           counter++;
-        glcdFillCircle2(64, 32, j, counter % 6, (j + counter) % 2);
+        glcdColorSet((j + counter) % 2);
+        glcdFillCircle2(64, 32, j, counter % 6);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -842,10 +848,11 @@ static u08 perfTestFillCircle2(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
@@ -858,12 +865,13 @@ static u08 perfTestFillCircle2(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint filled circles with same radius values at different locations
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     pattern = 0;
     color = mcFgColor;
+    glcdColorSet(color);
     perfTestBegin();
     for (i = 0; i < PERF_FILLCIRCLE2_2; i++)
     {
@@ -871,7 +879,7 @@ static u08 perfTestFillCircle2(void)
       {
         // Paint small circles
         for (y = 8; y < 58; y = y + 12)
-          glcdFillCircle2(x, y, 5, pattern, color);
+          glcdFillCircle2(x, y, 5, pattern);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -884,13 +892,14 @@ static u08 perfTestFillCircle2(void)
       // Set draw parameters for next iteration
       if (pattern == 3)
       {
-        // Skip pattern inverse (as it is not supported) and pattern clear and
-        // restart. However, at restarting swap draw color.
+        // Skip pattern inverse and pattern clear and restart. However, at
+        // restarting swap draw color.
         pattern = 0;
         if (color == mcFgColor)
           color = mcBgColor;
         else
           color = mcFgColor;
+        glcdColorSet(color);
       }
       else
       {
@@ -901,16 +910,17 @@ static u08 perfTestFillCircle2(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -928,9 +938,9 @@ static u08 perfTestFillRectangle2(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdFillRectangle2");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Replacing filled rectangles of varying small size, each with
   // different fill types.
@@ -940,15 +950,17 @@ static u08 perfTestFillRectangle2(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
-    glcdRectangle(3, 6, 122, 57, mcFgColor);
+    glcdClearScreen();
+    glcdRectangle(3, 6, 122, 57);
 
     // Paint rectangles of varying size and fill options
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_FILLRECTANGLE2_1; i++)
     {
+      glcdColorSet(i % 2);
       dx = 1;
+
       // Vary on x axis
       for (x = 0; x < 14; x++)
       {
@@ -957,7 +969,7 @@ static u08 perfTestFillRectangle2(void)
         for (y = 0; y < 9; y++)
         {
           glcdFillRectangle2(x + dx + 4, y + dy + 7, x + 1, y + 1, (x + y) % 3,
-            (x + y + i) % 6, i % 2);
+            (x + y + i) % 6);
           dy = y + dy + 1;
 #ifdef EMULIN
           ctrlLcdFlush();
@@ -974,10 +986,11 @@ static u08 perfTestFillRectangle2(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
@@ -989,15 +1002,16 @@ static u08 perfTestFillRectangle2(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint overlapping filled rectangles of varying fill options
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     x = 0;
     y = 0;
     for (i = 0; i < PERF_FILLRECTANGLE2_2; i++)
     {
+      glcdColorSet(((i / 5) + 1) & 0x1);
       // Swap fill values 3 and 5 and ignore 4
       if (x % 6 == 3)
       {
@@ -1012,8 +1026,8 @@ static u08 perfTestFillRectangle2(void)
       {
         y = x % 6;
       }
-      glcdFillRectangle2(4, 4, 50, 35, ALIGN_AUTO, y, ((i / 5) + 1) & 0x1);
-      glcdFillRectangle2(27, 17, 50, 45, ALIGN_AUTO, y, ((i / 5) + 1) & 0x1);
+      glcdFillRectangle2(4, 4, 50, 35, ALIGN_AUTO, y);
+      glcdFillRectangle2(27, 17, 50, 45, ALIGN_AUTO, y);
 #ifdef EMULIN
       ctrlLcdFlush();
 #endif
@@ -1027,10 +1041,11 @@ static u08 perfTestFillRectangle2(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
@@ -1041,15 +1056,16 @@ static u08 perfTestFillRectangle2(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint overlapping filled rectangles of varying fill options
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     x = 0;
     y = 0;
     for (i = 0; i < PERF_FILLRECTANGLE2_3; i++)
     {
+      glcdColorSet(((i / 5) + 1) & 0x1);
       // Swap fill values 3 and 5 and ignore 4
       if (x % 6 == 3)
       {
@@ -1064,7 +1080,7 @@ static u08 perfTestFillRectangle2(void)
       {
         y = x % 6;
       }
-      glcdFillRectangle2(1, 1, 126, 60, i % 3, y, ((i / 5) + 1) & 0x1);
+      glcdFillRectangle2(1, 1, 126, 60, i % 3, y);
 #ifdef EMULIN
       ctrlLcdFlush();
 #endif
@@ -1078,10 +1094,11 @@ static u08 perfTestFillRectangle2(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
@@ -1093,16 +1110,17 @@ static u08 perfTestFillRectangle2(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint overlapping filled rectangles of varying fill options
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     x = 0;
     y = 0;
     for (i = 0; i < PERF_FILLRECTANGLE2_4; i++)
     {
-      glcdFillRectangle2(1, 1, 126, 60, (i * 5) % 3, i % 3 + 1, i & 0x1);
+      glcdColorSet(i & 0x1);
+      glcdFillRectangle2(1, 1, 126, 60, (i * 5) % 3, i % 3 + 1);
 #ifdef EMULIN
       ctrlLcdFlush();
 #endif
@@ -1115,16 +1133,17 @@ static u08 perfTestFillRectangle2(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -1142,20 +1161,20 @@ static u08 perfTestPutStr3(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdPutStr3");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Draw text lines crossing a y-pixel byte. This is the most common
-  // use for this function. Use the 5x7n font.
+  // use for this function. Use the 5x7m font.
   button = perfTestInit("glcdPutStr3", 1);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings crossing y-pixel bytes
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(21);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_1; i++)
@@ -1163,7 +1182,7 @@ static u08 perfTestPutStr3(void)
       // Paint strings
       for (y = 3; y < GLCD_YPIXELS - 8; y = y + 8)
       {
-        glcdPutStr3(1, y, FONT_5X7M, textLine, 1, 1, mcFgColor);
+        glcdPutStr3(1, y, FONT_5X7M, textLine, 1, 1);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1180,7 +1199,7 @@ static u08 perfTestPutStr3(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1190,15 +1209,15 @@ static u08 perfTestPutStr3(void)
   }
 
   // Test 2: Draw text lines with font scaling, causing y-pixel byte crossings
-  // and full lcd bytes to be written. Use the 5x7n font.
+  // and full lcd bytes to be written. Use the 5x7m font.
   button = perfTestInit("glcdPutStr3", 2);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings crossing y-pixel bytes
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(7);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_2; i++)
@@ -1206,7 +1225,7 @@ static u08 perfTestPutStr3(void)
       // Paint strings
       for (y = 0; y < GLCD_YPIXELS - 21; y = y + 21)
       {
-        glcdPutStr3(2, y, FONT_5X7M, textLine, 3, 3, mcFgColor);
+        glcdPutStr3(2, y, FONT_5X7M, textLine, 3, 3);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1223,7 +1242,7 @@ static u08 perfTestPutStr3(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1237,10 +1256,10 @@ static u08 perfTestPutStr3(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings crossing y-pixel bytes
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(31);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_3; i++)
@@ -1248,7 +1267,7 @@ static u08 perfTestPutStr3(void)
       // Paint strings
       for (y = 1; y < GLCD_YPIXELS - 6; y = y + 6)
       {
-        glcdPutStr3(2, y, FONT_5X5P, textLine, 1, 1, mcFgColor);
+        glcdPutStr3(2, y, FONT_5X5P, textLine, 1, 1);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1265,7 +1284,7 @@ static u08 perfTestPutStr3(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1280,10 +1299,10 @@ static u08 perfTestPutStr3(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings crossing y-pixel bytes
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(10);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_4; i++)
@@ -1291,7 +1310,7 @@ static u08 perfTestPutStr3(void)
       // Paint strings
       for (y = 1; y < GLCD_YPIXELS - 15; y = y + 15)
       {
-        glcdPutStr3(4, y, FONT_5X5P, textLine, 3, 3, mcFgColor);
+        glcdPutStr3(4, y, FONT_5X5P, textLine, 3, 3);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1308,7 +1327,7 @@ static u08 perfTestPutStr3(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1318,15 +1337,15 @@ static u08 perfTestPutStr3(void)
   }
 
   // Test 5: Draw text lines fitting in a single y-pixel byte.
-  // Use the 5x7n font.
+  // Use the 5x7m font.
   button = perfTestInit("glcdPutStr3", 5);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings that fit in a y-pixel byte
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(21);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3_5; i++)
@@ -1334,7 +1353,7 @@ static u08 perfTestPutStr3(void)
       // Paint strings
       for (y = 0; y <= GLCD_YPIXELS - 8; y = y + 8)
       {
-        glcdPutStr3(1, y, FONT_5X7M, textLine, 1, 1, mcFgColor);
+        glcdPutStr3(1, y, FONT_5X7M, textLine, 1, 1);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1351,7 +1370,7 @@ static u08 perfTestPutStr3(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1360,7 +1379,7 @@ static u08 perfTestPutStr3(void)
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -1378,9 +1397,9 @@ static u08 perfTestPutStr3v(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdPutStr3v");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Draw text lines bottom-up without font scaling.
   // This is the most common use for this function. Use font 5x5p.
@@ -1388,10 +1407,10 @@ static u08 perfTestPutStr3v(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings crossing y-pixel bytes
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(15);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3V_1; i++)
@@ -1399,8 +1418,7 @@ static u08 perfTestPutStr3v(void)
       // Paint strings
       for (x = 1; x < GLCD_XPIXELS - 6; x = x + 6)
       {
-        glcdPutStr3v(x, 61, FONT_5X5P, ORI_VERTICAL_BU, textLine, 1, 1,
-          mcFgColor);
+        glcdPutStr3v(x, 61, FONT_5X5P, ORI_VERTICAL_BU, textLine, 1, 1);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1417,7 +1435,7 @@ static u08 perfTestPutStr3v(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1427,15 +1445,15 @@ static u08 perfTestPutStr3v(void)
   }
 
   // Test 2: Draw text lines bottom-up with font scaling.
-  // Use font 5x7n.
+  // Use font 5x7m.
   button = perfTestInit("glcdPutStr3v", 2);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings crossing y-pixel bytes
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(5);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3V_2; i++)
@@ -1443,8 +1461,7 @@ static u08 perfTestPutStr3v(void)
       // Paint strings
       for (x = 1; x < GLCD_XPIXELS - 21; x = x + 21)
       {
-        glcdPutStr3v(x, 60, FONT_5X7M, ORI_VERTICAL_BU, textLine, 3, 2,
-          mcFgColor);
+        glcdPutStr3v(x, 60, FONT_5X7M, ORI_VERTICAL_BU, textLine, 3, 2);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1461,7 +1478,7 @@ static u08 perfTestPutStr3v(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1471,15 +1488,15 @@ static u08 perfTestPutStr3v(void)
   }
 
   // Test 3: Draw text lines top-down without font scaling.
-  // This is the most common use for this function. Use font 5x7n.
+  // This is the most common use for this function. Use font 5x7m.
   button = perfTestInit("glcdPutStr3v", 3);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings crossing y-pixel bytes
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(10);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3V_3; i++)
@@ -1487,8 +1504,7 @@ static u08 perfTestPutStr3v(void)
       // Paint strings
       for (x = 7; x < GLCD_XPIXELS; x = x + 9)
       {
-        glcdPutStr3v(x, 2, FONT_5X7M, ORI_VERTICAL_TD, textLine, 1, 1,
-          mcFgColor);
+        glcdPutStr3v(x, 2, FONT_5X7M, ORI_VERTICAL_TD, textLine, 1, 1);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1505,7 +1521,7 @@ static u08 perfTestPutStr3v(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1520,10 +1536,10 @@ static u08 perfTestPutStr3v(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen with text strings crossing y-pixel bytes
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(7);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR3V_4; i++)
@@ -1531,8 +1547,7 @@ static u08 perfTestPutStr3v(void)
       // Paint strings
       for (x = 17; x < GLCD_XPIXELS; x = x + 18)
       {
-        glcdPutStr3v(x, 4, FONT_5X5P, ORI_VERTICAL_TD, textLine, 3, 2,
-          mcFgColor);
+        glcdPutStr3v(x, 4, FONT_5X5P, ORI_VERTICAL_TD, textLine, 3, 2);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1549,7 +1564,7 @@ static u08 perfTestPutStr3v(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1558,7 +1573,7 @@ static u08 perfTestPutStr3v(void)
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -1576,19 +1591,19 @@ static u08 perfTestPutStr(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdPutStr");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Draw text lines, being the most common use for this function.
   button = perfTestInit("glcdPutStr", 1);
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Fill screen text strings
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTextInit(21);
     perfTestBegin();
     for (i = 0; i < PERF_PUTSTR_1; i++)
@@ -1597,7 +1612,7 @@ static u08 perfTestPutStr(void)
       for (y = 0; y < GLCD_CONTROLLER_YPAGES; y++)
       {
         glcdSetAddress(1, y);
-        glcdPutStr(textLine, mcFgColor);
+        glcdPutStr(textLine);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1614,7 +1629,7 @@ static u08 perfTestPutStr(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
@@ -1623,7 +1638,7 @@ static u08 perfTestPutStr(void)
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -1641,9 +1656,9 @@ static u08 perfTestRectangle(void)
   // Give test suite welcome screen
   button = perfSuiteWelcome("glcdRectangle");
   if (button == 'q')
-    return GLCD_TRUE;
+    return MC_TRUE;
   else if (button != BTN_PLUS)
-    return GLCD_FALSE;
+    return MC_FALSE;
 
   // Test 1: Painting small rectangles of varying size.
   // It is the 'c' implementation of the rectangle1.txt test script.
@@ -1651,14 +1666,15 @@ static u08 perfTestRectangle(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
-    glcdRectangle(3, 6, 122, 57, mcFgColor);
+    glcdClearScreen();
+    glcdRectangle(3, 6, 122, 57);
 
     // Paint rectangles of varying size and fill options
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     for (i = 0; i < PERF_RECTANGLE2_1; i++)
     {
+      glcdColorSet(i % 2);
       dx = 1;
       // Vary on x axis
       for (x = 0; x < 14; x++)
@@ -1667,7 +1683,7 @@ static u08 perfTestRectangle(void)
         // Vary on y axis
         for (y = 0; y < 9; y++)
         {
-          glcdRectangle(x + dx + 4, y + dy + 7, x + 1, y + 1, i % 2);
+          glcdRectangle(x + dx + 4, y + dy + 7, x + 1, y + 1);
           dy = y + dy + 1;
 #ifdef EMULIN
           ctrlLcdFlush();
@@ -1684,10 +1700,11 @@ static u08 perfTestRectangle(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
@@ -1698,18 +1715,19 @@ static u08 perfTestRectangle(void)
   while (button == BTN_PLUS)
   {
     // Prepare display for test
-    glcdClearScreen(mcBgColor);
+    glcdClearScreen();
 
     // Paint rectangles of varying fill options
-    interruptTest = GLCD_FALSE;
+    interruptTest = MC_FALSE;
     perfTestBegin();
     x = 0;
     y = 0;
     for (i = 0; i < PERF_RECTANGLE2_2; i++)
     {
+      glcdColorSet(i & 0x1);
       for (y = 1; y < 64; y = y + 2)
       {
-        glcdRectangle(64 - y, 32 - y / 2, y * 2, y, i & 0x1);
+        glcdRectangle(64 - y, 32 - y / 2, y * 2, y);
 #ifdef EMULIN
         ctrlLcdFlush();
 #endif
@@ -1723,16 +1741,17 @@ static u08 perfTestRectangle(void)
       button = perfButtonGet();
       if (button != 0)
       {
-        interruptTest = GLCD_TRUE;
+        interruptTest = MC_TRUE;
         break;
       }
     }
+    glcdColorSetFg();
 
     // End test and report statistics
     button = perfTestEnd(interruptTest);
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -1751,7 +1770,7 @@ static u08 perfButtonGet(void)
   return button;
 #else
   // Accept any keypress when pressed
-  return (u08)kbKeypressScan(GLCD_FALSE);
+  return (u08)kbKeypressScan(MC_FALSE);
 #endif
 }
 
@@ -1765,15 +1784,15 @@ static u08 perfButtonWait(u08 type)
   u08 button = 0;
 
   // Give wait message
-  glcdFillRectangle2(0, 58, 127, 5, ALIGN_TOP, FILL_BLANK, mcFgColor);
+  glcdFillRectangle2(0, 58, 127, 5, ALIGN_TOP, FILL_BLANK);
   if (type == PERF_WAIT_CONTINUE)
-    glcdPutStr2(1, 58, FONT_5X5P, "press button to continue", mcFgColor);
+    glcdPutStr2(1, 58, FONT_5X5P, "press button to continue");
   else if (type == PERF_WAIT_ENTER_SKIP)
-    glcdPutStr2(1, 58, FONT_5X5P, "+ = enter, set/menu = skip", mcFgColor);
+    glcdPutStr2(1, 58, FONT_5X5P, "+ = enter, set/menu = skip");
   else if (type == PERF_WAIT_START_SKIP)
-    glcdPutStr2(1, 58, FONT_5X5P, "+ = start, set/menu = skip", mcFgColor);
+    glcdPutStr2(1, 58, FONT_5X5P, "+ = start, set/menu = skip");
   else // type == PERF_WAIT_RESTART_END
-    glcdPutStr2(1, 58, FONT_5X5P, "+ = restart, set/menu = end", mcFgColor);
+    glcdPutStr2(1, 58, FONT_5X5P, "+ = restart, set/menu = end");
 #ifdef EMULIN
   ctrlLcdFlush();
 #endif
@@ -1788,7 +1807,7 @@ static u08 perfButtonWait(u08 type)
   btnPressed = BTN_NONE;
 #else
   // Get +,s,m,q, others default to MENU button
-  char ch = waitKeypress(GLCD_FALSE);
+  char ch = waitKeypress(MC_FALSE);
   if (ch >= 'A' && ch <= 'Z')
     ch = ch - 'A' + 'a';
   if (ch == '+')
@@ -1846,9 +1865,9 @@ static u08 perfSuiteWelcome(char *label)
   u08 length;
 
   // Give test suite welcome screen
-  glcdClearScreen(mcBgColor);
-  length = glcdPutStr2(1, 1, FONT_5X5P, "Test suite: ", mcFgColor);
-  glcdPutStr2(length + 1, 1, FONT_5X5P, label, mcFgColor);
+  glcdClearScreen();
+  length = glcdPutStr2(1, 1, FONT_5X5P, "Test suite: ");
+  glcdPutStr2(length + 1, 1, FONT_5X5P, label);
 
   // Wait for button press: continue or skip all tests
   // + = continue
@@ -1881,13 +1900,13 @@ static void perfTestBegin(void)
   // Resync time after which we'll wait for the next second to occur
   // for a more consistent duration measurement
   rtcMchronTimeInit();
-  rtcTimeEvent = GLCD_FALSE;
+  rtcTimeEvent = MC_FALSE;
 #ifndef EMULIN
-  while (rtcTimeEvent == GLCD_FALSE);
+  while (rtcTimeEvent == MC_FALSE);
 #else
-  while (rtcTimeEvent == GLCD_FALSE)
+  while (rtcTimeEvent == MC_FALSE)
   {
-    stubDelay(25);
+    _delay_ms(25);
     monoTimer();
   }
 #endif
@@ -1907,6 +1926,7 @@ static u08 perfTestEnd(u08 interruptTest)
 {
   char number[20];
   u08 length;
+  u16 duration;
 
   // Clear any button press
   btnPressed = BTN_NONE;
@@ -1923,7 +1943,7 @@ static u08 perfTestEnd(u08 interruptTest)
 
   // Give test end result and glcd/controller statistics
   printf("test   : %s - %02d\n", testStats.text, testStats.testId);
-  if (interruptTest == GLCD_FALSE)
+  if (interruptTest == MC_FALSE)
     printf("status : %s\n", "completed");
   else
     printf("status : %s\n", "aborted");
@@ -1931,49 +1951,40 @@ static u08 perfTestEnd(u08 interruptTest)
 #endif
 
   // Give test statistics screen
-  glcdClearScreen(mcBgColor);
-  glcdPutStr2(1, 1, FONT_5X5P, "test:", mcFgColor);
-  length = glcdPutStr2(29, 1, FONT_5X5P, testStats.text, mcFgColor);
-  length = length + glcdPutStr2(length + 29, 1, FONT_5X5P, " - ", mcFgColor);
+  glcdClearScreen();
+  glcdColorSetFg();
+  glcdPutStr2(1, 1, FONT_5X5P, "test:");
+  length = glcdPutStr2(29, 1, FONT_5X5P, testStats.text);
+  length = length + glcdPutStr2(length + 29, 1, FONT_5X5P, " - ");
   animValToStr(testStats.testId, number);
-  glcdPutStr2(length + 29, 1, FONT_5X5P, number, mcFgColor);
-  glcdPutStr2(1, 7, FONT_5X5P, "status:", mcFgColor);
-  if (interruptTest == GLCD_FALSE)
-    glcdPutStr2(29, 7, FONT_5X5P, "completed", mcFgColor);
+  glcdPutStr2(length + 29, 1, FONT_5X5P, number);
+  glcdPutStr2(1, 7, FONT_5X5P, "status:");
+  if (interruptTest == MC_FALSE)
+    glcdPutStr2(29, 7, FONT_5X5P, "completed");
   else
-    glcdPutStr2(29, 7, FONT_5X5P, "aborted", mcFgColor);
+    glcdPutStr2(29, 7, FONT_5X5P, "aborted");
 
-  // Start time
-  glcdPutStr2(1, 13, FONT_5X5P, "start:", mcFgColor);
-  animValToStr(testStats.startHour, number);
-  glcdPutStr2(29, 13, FONT_5X5P, number, mcFgColor);
-  glcdPutStr2(37, 13, FONT_5X5P, ":", mcFgColor);
-  animValToStr(testStats.startMin, number);
-  glcdPutStr2(39, 13, FONT_5X5P, number, mcFgColor);
-  glcdPutStr2(47, 13, FONT_5X5P, ":", mcFgColor);
-  animValToStr(testStats.startSec, number);
-  glcdPutStr2(49, 13, FONT_5X5P, number, mcFgColor);
-
-  // End time
-  glcdPutStr2(1, 19, FONT_5X5P, "end:", mcFgColor);
-  animValToStr(testStats.endHour, number);
-  glcdPutStr2(29, 19, FONT_5X5P, number, mcFgColor);
-  glcdPutStr2(37, 19, FONT_5X5P, ":", mcFgColor);
-  animValToStr(testStats.endMin, number);
-  glcdPutStr2(39, 19, FONT_5X5P, number, mcFgColor);
-  glcdPutStr2(47, 19, FONT_5X5P, ":", mcFgColor);
-  animValToStr(testStats.endSec, number);
-  glcdPutStr2(49, 19, FONT_5X5P, number, mcFgColor);
+  // Test duration
+  if (testStats.endMin < testStats.startMin)
+    testStats.endMin = testStats.endMin + 60;
+  duration = (u16)(testStats.endMin) * 60 + testStats.endSec -
+    ((u16)(testStats.startMin) * 60 + testStats.startSec);
+  glcdPutStr2(1, 13, FONT_5X5P, "time:");
+  animValToStr(duration / 60, number);
+  glcdPutStr2(29, 13, FONT_5X5P, number);
+  glcdPutStr2(37, 13, FONT_5X5P, ":");
+  animValToStr(duration % 60, number);
+  glcdPutStr2(39, 13, FONT_5X5P, number);
 
   // Cycles
-  glcdPutStr2(1, 25, FONT_5X5P, "cycles:", mcFgColor);
+  glcdPutStr2(1, 19, FONT_5X5P, "cycles:");
   perfLongValToStr(testStats.loopsDone, number);
-  glcdPutStr2(29, 25, FONT_5X5P, number, mcFgColor);
+  glcdPutStr2(29, 19, FONT_5X5P, number);
 
   // Elements drawn
-  glcdPutStr2(1, 31, FONT_5X5P, "draws:", mcFgColor);
+  glcdPutStr2(1, 25, FONT_5X5P, "draws:");
   perfLongValToStr(testStats.elementsDrawn, number);
-  glcdPutStr2(29, 31, FONT_5X5P, number, mcFgColor);
+  glcdPutStr2(29, 25, FONT_5X5P, number);
 
   // Wait for button press
   return perfButtonWait(PERF_WAIT_RESTART_END);
@@ -1994,11 +2005,11 @@ static u08 perfTestInit(char *label, u08 testId)
   testStats.testId = testId;
 
   // Provide prompt to run or skip test
-  glcdClearScreen(mcBgColor);
-  length = glcdPutStr2(1, 1, FONT_5X5P, label, mcFgColor);
-  length = length + glcdPutStr2(length + 1, 1, FONT_5X5P, " - ", mcFgColor);
+  glcdClearScreen();
+  length = glcdPutStr2(1, 1, FONT_5X5P, label);
+  length = length + glcdPutStr2(length + 1, 1, FONT_5X5P, " - ");
   animValToStr(testId, strTestId);
-  glcdPutStr2(length + 1, 1, FONT_5X5P, strTestId, mcFgColor);
+  glcdPutStr2(length + 1, 1, FONT_5X5P, strTestId);
 
   return perfButtonWait(PERF_WAIT_START_SKIP);
 }
@@ -2015,7 +2026,7 @@ static void perfTestTimeInit(void)
   mcClockOldDD = mcClockNewDD = mcClockOldDM = mcClockNewDM = 1;
   mcClockOldDY = mcClockNewDY = 15;
   secCount = PERF_LINE_1;
-  mcAlarming = GLCD_FALSE;
+  mcAlarming = MC_FALSE;
 }
 
 //
@@ -2034,7 +2045,7 @@ static u08 perfTestTimeNext(void)
 
   secCount--;
   if (secCount == 0)
-    return GLCD_TRUE;
+    return MC_TRUE;
 
   if (mcClockNewTS != 59)
   {
@@ -2055,7 +2066,7 @@ static u08 perfTestTimeNext(void)
     mcClockNewTH++;
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //

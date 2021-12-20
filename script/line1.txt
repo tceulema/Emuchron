@@ -6,19 +6,20 @@
 
 # Erase lcd display
 le
+psf
 
 # Paint mirrored horizontal lines
 rf ver=1 ver<=61 ver=ver+3
-  pl f 1 ver 64 31
-  pl f 62 31 125 ver
+  pl 1 ver 64 31
+  pl 62 31 125 ver
 rn
 
 # Paint mirrored vertical lines
 rf hor=3 hor<=123 hor=hor+5
-  pl f hor 0 63 31
-  pl f hor 62 63 31
+  pl hor 0 63 31
+  pl hor 62 63 31
 rn
 
 # Paint the function name in a cleared rectangle
-prf f 49 28 29 7 0 5
-pa f 50 29 5x5p h 1 1 glcdline
+prf 49 28 29 7 0 5
+pa 50 29 5x5p h 1 1 glcdline

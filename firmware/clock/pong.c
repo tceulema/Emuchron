@@ -4,29 +4,28 @@
 //*****************************************************************************
 
 #include <math.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../ks0108.h"
+#include "../ks0108conf.h"
+#include "../monomain.h"
 #include "pong.h"
 
-// This is a tradeoff between sluggish and too fast to see
-#define BALL_SPEED_MAX		5	// Note this is in vector arith.
-#define BALL_RADIUS		2	// In pixels
-
-// The angle define reduces the random angle degree range to 0+angle..180-angle
-// per pi rad, preventing too steep ball motion angles. The angle range also
-// influences the length of the calculated ball trajectory; the steeper the
-// angle, the more trajectory steps are needed. So, when reducing the angle
-// you may need to increase the trajectory length. With the angle set to 40 a
-// max total of 36 trajectory steps are needed. However in the define below two
+// The TRAJ_LEN is influenced by both the ball speed and the minimum angle.
+// In short, when decreasing the ball speed or decreasing the minimum angle
+// the number of ball trajectory steps will increase.
+// The ball speed is a trade off between ball sluggishness and the ball moving
+// too fast. Its value is in vector arithmatic.
+// The min angle reduces the random angle degree range to 0+angle..180-angle,
+// preventing too steep ball motion angles. The steeper the angle, the more
+// trajectory steps are needed.
+// Emperically, with the speed set to 5 and the min angle set to 40, a max
+// total of 36 trajectory steps are needed. However in the define below two
 // additional steps are added to be *really* sure we'll never overflow.
+#define BALL_SPEED_MAX		5
 #define BALL_ANGLE_MIN		40
+#define BALL_WIDLEN		2	// Square ball width and length
 #define TRAJ_LEN		38
 
 // Create a new ball motion angle
@@ -42,7 +41,7 @@
 #define SCORE_H1_X		49
 #define SCORE_M10_X		70
 #define SCORE_M1_X		85
-#define SCORE_DIGIT_H		16
+#define SCORE_DIGIT_H		18
 #define SCORE_DIGIT_W		8
 
 // Score mode for time (default), date/year/alarm (few secs when appropriate
@@ -89,7 +88,7 @@ extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
+extern volatile uint8_t mcFgColor;
 // mcU8Util1 = flashing state of the paddles during alarm/snooze
 // mcU8Util2 = new score mode
 // mcU8Util3 = current score mode
@@ -168,39 +167,39 @@ void pongButton(u08 pressedButton)
 void pongCycle(void)
 {
   // Signal a change in minutes or hours if not signalled earlier
-  if (mcClockTimeEvent == GLCD_TRUE && minuteChanged == GLCD_FALSE &&
-      hourChanged == GLCD_FALSE)
+  if (mcClockTimeEvent == MC_TRUE && minuteChanged == MC_FALSE &&
+      hourChanged == MC_FALSE)
   {
     // A change in hours has priority over change in minutes
     if (mcClockOldTH != mcClockNewTH)
     {
       DEBUGP("TIME hour");
-      hourChanged = GLCD_TRUE;
+      hourChanged = MC_TRUE;
     }
     else if (mcClockOldTM != mcClockNewTM)
     {
       DEBUGP("TIME min");
-      minuteChanged = GLCD_TRUE;
+      minuteChanged = MC_TRUE;
     }
   }
-  //DEBUG(uart_putw_dec(mcClockTimeEvent); putstring(", "));
-  //DEBUG(uart_putw_dec(minuteChanged); putstring(", "));
-  //DEBUG(uart_putw_dec(hourChanged); putstring_nl(""));
+  //DEBUG(uart_put_dec(mcClockTimeEvent); putstring(", "));
+  //DEBUG(uart_put_dec(minuteChanged); putstring(", "));
+  //DEBUG(uart_put_dec(hourChanged); putstring_nl(""));
 
   // Set the flashing state of the paddles in case of alarming
-  if (mcAlarming == GLCD_TRUE && (mcCycleCounter & 0x08) == 8)
-    almDisplayState = GLCD_TRUE;
+  if (mcAlarming == MC_TRUE && (mcCycleCounter & 0x08) == 8)
+    almDisplayState = MC_TRUE;
   else
-    almDisplayState = GLCD_FALSE;
+    almDisplayState = MC_FALSE;
 
   // Do we need to change the score
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
+  if (mcUpdAlarmSwitch == MC_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {
       // We're switched on so we may have to show the alarm time. Only do so if
       // we're not initializing pong.
-      if (mcClockInit == GLCD_FALSE)
+      if (mcClockInit == MC_FALSE)
       {
         DEBUGP("SCOR alarm");
         mcU8Util2 = SCORE_MODE_ALARM;
@@ -227,7 +226,7 @@ void pongCycle(void)
   {
     // Regular game play so the ball moved from a to b. Draw ball and redraw
     // middle line when intersected by the old ball.
-    pongDrawBall(GLCD_TRUE);
+    pongDrawBall(MC_TRUE);
     if (pongBallIntersect(trajX[tickNow - 1], trajY[tickNow - 1],
         GLCD_XPIXELS / 2 - MIDLINE_W, 0, MIDLINE_W, GLCD_YPIXELS))
       pongDrawMidLine();
@@ -249,7 +248,7 @@ void pongCycle(void)
   u08 i;
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
     glcdControlWrite(i, GLCD_START_LINE |
-      (trajY[tickNow] + GLCD_YPIXELS / 2 + BALL_RADIUS) % GLCD_YPIXELS);
+      (trajY[tickNow] + GLCD_YPIXELS / 2 + BALL_WIDLEN) % GLCD_YPIXELS);
 #endif
 
   // Move the paddles and save paddle alarm state for next cycle
@@ -259,7 +258,7 @@ void pongCycle(void)
 
   // Draw score and redraw ball in case it got removed by the score draw
   pongDrawScore();
-  pongDrawBall(GLCD_FALSE);
+  pongDrawBall(MC_FALSE);
 }
 
 //
@@ -270,15 +269,15 @@ void pongCycle(void)
 void pongInit(u08 mode)
 {
   // Draw top+bottom bar and dotted vertical line in middle
-  glcdFillRectangle(0, 0, GLCD_XPIXELS, BAR_H, mcFgColor);
-  glcdFillRectangle(0, GLCD_YPIXELS - BAR_H, GLCD_XPIXELS, BAR_H, mcFgColor);
+  glcdFillRectangle(0, 0, GLCD_XPIXELS, BAR_H);
+  glcdFillRectangle(0, GLCD_YPIXELS - BAR_H, GLCD_XPIXELS, BAR_H);
   pongDrawMidLine();
 
   // Init pong score and paddle positions
   mcU8Util2 = SCORE_MODE_TIME;
   mcU8Util3 = SCORE_MODE_INIT;
   mcU8Util4 = 0;
-  minuteChanged = hourChanged = GLCD_FALSE;
+  minuteChanged = hourChanged = MC_FALSE;
   oldLeftPaddleY = oldRightPaddleY = leftPaddleY = rightPaddleY = 25;
 
   // Init calculating first ball trajectory
@@ -291,25 +290,24 @@ void pongInit(u08 mode)
   if (ballDirY == 0)
     ballDirY = -1;
   ballAngle = ANGLE_NEW;
-  trajX[0] = GLCD_XPIXELS / 2 - BALL_RADIUS;
-  trajY[0] = GLCD_YPIXELS / 2 - BALL_RADIUS;
+  trajX[0] = GLCD_XPIXELS / 2 - BALL_WIDLEN;
+  trajY[0] = GLCD_YPIXELS / 2 - BALL_WIDLEN;
 }
 
 //
 // Function: pongBallIntersect
 //
 // Determine whether the ball rectangle overlaps with another rectangle.
-// If so, return GLCD_TRUE.
+// If so, return MC_TRUE.
 //
 static u08 pongBallIntersect(u08 x1, u08 y1, u08 x2, u08 y2, u08 w2, u08 h2)
 {
-  // First check the x coord, then the y coord
-  if (x1 + BALL_RADIUS * 2 < x2 || x2 + w2 < x1 ||
-      y1 + BALL_RADIUS * 2 < y2 || y2 + h2 < y1)
-    return GLCD_FALSE;
-  //DEBUG(putstring("INTS pos=["); uart_putw_dec(x1); putstring(","));
-  //DEBUG(uart_putw_dec(y1); putstring_nl("]"));
-  return GLCD_TRUE;
+  if (x1 + BALL_WIDLEN * 2 <= x2 || x2 + w2 <= x1 ||
+      y1 + BALL_WIDLEN * 2 <= y2 || y2 + h2 <= y1)
+    return MC_FALSE;
+  //DEBUG(putstring("INTS pos=["); uart_put_dec(x1); putstring(","));
+  //DEBUG(uart_put_dec(y1); putstring_nl("]"));
+  return MC_TRUE;
 }
 
 //
@@ -351,15 +349,15 @@ static void pongBallTraject(void)
 
   // Add trajectory positions until we leave the play field or hit a paddle
   ballEndY = bounceY = 0;
-  while ((s08)ballX >= 0 && (u08)ballX + BALL_RADIUS * 2 < GLCD_XPIXELS)
+  while ((s08)ballX >= 0 && (u08)ballX + BALL_WIDLEN * 2 < GLCD_XPIXELS)
   {
-    //DEBUG(putstring("SIM  ball=["); uart_putw_dec(trajX[tix]));
-    //DEBUG(putstring(","); uart_putw_dec(trajY[tix]); putstring("], tix="));
-    //DEBUG(uart_putw_dec(tix); putstring_nl(""));
+    //DEBUG(putstring("SIM  ball=["); uart_put_dec(trajX[tix]));
+    //DEBUG(putstring(","); uart_put_dec(trajY[tix]); putstring("], tix="));
+    //DEBUG(uart_put_dec(tix); putstring_nl(""));
 
     // To determine the callout area get first ball position behind paddle
     if (paddleColl == COLL_CONF && oldBallX < PADDLE_RIGHT_X + PADDLE_W &&
-        oldBallX + BALL_RADIUS * 2 > PADDLE_LEFT_X)
+        oldBallX + BALL_WIDLEN * 2 > PADDLE_LEFT_X)
       ballEndY = ballY;
 
     // Base position for next ball trajectory entry
@@ -370,12 +368,12 @@ static void pongBallTraject(void)
     ballY = ballY + ballDy;
 
     // Check collision with right or left paddle
-    if ((s08)ballX + BALL_RADIUS * 2 >= PADDLE_RIGHT_X &&
+    if ((s08)ballX + BALL_WIDLEN * 2 >= PADDLE_RIGHT_X &&
         paddleColl == COLL_NONE)
     {
       // Prepare to determine exact collision position with right paddle
       paddleColl = COLL_REQ;
-      dx = PADDLE_RIGHT_X - (oldBallX + BALL_RADIUS * 2);
+      dx = PADDLE_RIGHT_X - (oldBallX + BALL_WIDLEN * 2);
     }
     else if ((s08)ballX <= PADDLE_LEFT_X + PADDLE_W && paddleColl == COLL_NONE)
     {
@@ -390,7 +388,7 @@ static void pongBallTraject(void)
       dy = (dx / ballDx) * ballDy;
       bounceY = pongBarBounce(oldBallY + dy, 0);
       paddleTick = tix;
-      if (avoidPaddle == GLCD_FALSE)
+      if (avoidPaddle == MC_FALSE)
       {
         // Set final ball position in bounce trajectory and bounce the ball x
         // direction in preparation for the next trajectory calculation
@@ -413,32 +411,32 @@ static void pongBallTraject(void)
   // Determine the ball presence area when it intersects with the paddle and
   // immediately right after that (in case we need to miss the ball)
   keepoutTop = keepoutBot = 0;
-  if (avoidPaddle == GLCD_TRUE)
+  if (avoidPaddle == MC_TRUE)
   {
     // We left the play field so set final trajectory ball to start position
-    trajX[tix] = GLCD_XPIXELS / 2 - BALL_RADIUS;
-    trajY[tix] = GLCD_YPIXELS / 2 - BALL_RADIUS;
+    trajX[tix] = GLCD_XPIXELS / 2 - BALL_WIDLEN;
+    trajY[tix] = GLCD_YPIXELS / 2 - BALL_WIDLEN;
     if (bounceY > ballEndY)
     {
       keepoutTop = ballEndY;
-      keepoutBot = bounceY + BALL_RADIUS * 2;
+      keepoutBot = bounceY + BALL_WIDLEN * 2;
     }
     else
     {
       keepoutTop = bounceY;
-      keepoutBot = ballEndY + BALL_RADIUS * 2;
+      keepoutBot = ballEndY + BALL_WIDLEN * 2;
     }
   }
-  DEBUG(putstring("TRAJ ball=["); uart_putw_dec(trajX[tix]));
-  DEBUG(putstring(","); uart_putw_dec(trajY[tix]); putstring("], tix="));
-  DEBUG(uart_putw_dec(tix); putstring_nl(""));
+  DEBUG(putstring("TRAJ ball=["); uart_put_dec(trajX[tix]));
+  DEBUG(putstring(","); uart_put_dec(trajY[tix]); putstring("], tix="));
+  DEBUG(uart_put_dec(tix); putstring_nl(""));
 
   // Now we can calculate where the paddle should go
-  DEBUG(putstring("TRAJ bounce="); uart_putw_dec(bounceY));
-  if (avoidPaddle == GLCD_FALSE)
+  DEBUG(putstring("TRAJ bounce="); uart_put_dec(bounceY));
+  if (avoidPaddle == MC_FALSE)
   {
     // We want to hit the ball, so make it centered
-    paddleY = bounceY + BALL_RADIUS - PADDLE_H / 2;
+    paddleY = bounceY + BALL_WIDLEN - PADDLE_H / 2;
   }
   else
   {
@@ -472,15 +470,15 @@ static void pongBallTraject(void)
   if (paddleY > GLCD_YPIXELS - PADDLE_H - BAR_H - 1)
     paddleY = GLCD_YPIXELS - PADDLE_H - BAR_H - 1;
 
-  if (avoidPaddle == GLCD_TRUE)
+  if (avoidPaddle == MC_TRUE)
   {
-    DEBUG(putstring(", endpos="); uart_putw_dec(ballEndY));
-    DEBUG(putstring(", keepout="); uart_putw_dec(keepoutTop));
-    DEBUG(putstring(":"); uart_putw_dec(keepoutBot));
+    DEBUG(putstring(", endpos="); uart_put_dec(ballEndY));
+    DEBUG(putstring(", keepout="); uart_put_dec(keepoutTop));
+    DEBUG(putstring(":"); uart_put_dec(keepoutBot));
   }
-  DEBUG(putstring(", paddle="); uart_putw_dec(paddleY));
-  DEBUG(putstring(", bouncetix="); uart_putw_dec(paddleTick));
-  DEBUG(putstring(", playtix="); uart_putw_dec(tix));
+  DEBUG(putstring(", paddle="); uart_put_dec(paddleY));
+  DEBUG(putstring(", bouncetix="); uart_put_dec(paddleTick));
+  DEBUG(putstring(", playtix="); uart_put_dec(tix));
   DEBUG(putstring_nl(""));
 
   // Useful visual debugging in clock:
@@ -490,11 +488,13 @@ static void pongBallTraject(void)
     x = PADDLE_RIGHT_X + PADDLE_W + 1;
   else
     x = PADDLE_LEFT_X - 3;
-  glcdFillRectangle(x, BAR_H, 2, GLCD_YPIXELS - BAR_H - BAR_H, mcBgColor);
-  glcdDot(x + 1, paddleY, mcFgColor);
-  glcdDot(x + 1, bounceY, mcFgColor);
-  if (avoidPaddle == GLCD_TRUE)
-    glcdRectangle(x, keepoutTop, 1, keepoutBot - keepoutTop, mcFgColor);*/
+  glcdColorSetBg();
+  glcdFillRectangle(x, BAR_H, 2, GLCD_YPIXELS - BAR_H - BAR_H);
+  glcdColorSetFg();
+  glcdDot(x + 1, paddleY);
+  glcdDot(x + 1, bounceY);
+  if (avoidPaddle == MC_TRUE)
+    glcdRectangle(x, keepoutTop, 1, keepoutBot - keepoutTop);*/
 }
 
 //
@@ -518,7 +518,7 @@ static void pongBallVector(float *ballDx, float *ballDy)
   *ballDy = BALL_SPEED_MAX * cos(angleRad);
   if (*ballDy * ballDirY < 0)
     *ballDy = -*ballDy;
-  //DEBUG(putstring("VECT angle=");uart_putw_dec(ballAngle));
+  //DEBUG(putstring("VECT angle=");uart_put_dec(ballAngle));
   //DEBUG(putstring_nl(""));
 }
 
@@ -533,7 +533,7 @@ static float pongBarBounce(float y, float *ballDy)
   if (ballDy != 0)
   {
     // When bouncing at bottom or top bar flip y direction
-    if (((s08)y + BALL_RADIUS * 2 >= GLCD_YPIXELS - BAR_H && ballDirY == 1) ||
+    if (((s08)y + BALL_WIDLEN * 2 >= GLCD_YPIXELS - BAR_H && ballDirY == 1) ||
         ((s08)y <= BAR_H && ballDirY == -1))
     {
       *ballDy = -*ballDy;
@@ -542,8 +542,8 @@ static float pongBarBounce(float y, float *ballDy)
   }
 
   // When ball is out of the vertical playfield correct y position
-  if ((s08)y + BALL_RADIUS * 2 > GLCD_YPIXELS - BAR_H)
-    return GLCD_YPIXELS - BAR_H - BALL_RADIUS * 2;
+  if ((s08)y + BALL_WIDLEN * 2 > GLCD_YPIXELS - BAR_H)
+    return GLCD_YPIXELS - BAR_H - BALL_WIDLEN * 2;
   else if ((s08)y < BAR_H)
     return BAR_H;
   else
@@ -558,28 +558,35 @@ static float pongBarBounce(float y, float *ballDy)
 //
 static void pongDrawBall(u08 remove)
 {
-  if (remove == GLCD_TRUE)
-    glcdFillRectangle(trajX[tickNow - 1], trajY[tickNow - 1], BALL_RADIUS * 2,
-       BALL_RADIUS * 2, mcBgColor);
-  glcdFillRectangle(trajX[tickNow], trajY[tickNow], BALL_RADIUS * 2,
-    BALL_RADIUS * 2, mcFgColor);
+  if (remove == MC_TRUE)
+  {
+    glcdColorSetBg();
+    glcdFillRectangle(trajX[tickNow - 1], trajY[tickNow - 1], BALL_WIDLEN * 2,
+       BALL_WIDLEN * 2);
+    glcdColorSetFg();
+  }
+  glcdFillRectangle(trajX[tickNow], trajY[tickNow], BALL_WIDLEN * 2,
+    BALL_WIDLEN * 2);
 }
 
 //
 // Function: pongDrawBigDigit
 //
-// Draw a big digit by force or when intersected by the old ball location
+// Draw a big digit by force or when intersected by the old ball location. Note
+// that the bottom segment of a digit is two pixels taller, similar to the
+// digits in the original Atari Pong.
 //
 static void pongDrawBigDigit(u08 x, u08 value, u08 high)
 {
   u08 i, j;
   u08 segment;
+  u08 extra = 0;
 
   if (scoreRedraw || pongBallIntersect(trajX[tickNow - 1], trajY[tickNow - 1],
       x, SCORE_TIME_Y, SCORE_DIGIT_W, SCORE_DIGIT_H))
   {
     // Determine to draw high or low digit of number and get digit fontbyte
-    if (high == GLCD_TRUE)
+    if (high == MC_TRUE)
       value = value / 10;
     else
       value = value % 10;
@@ -591,9 +598,10 @@ static void pongDrawBigDigit(u08 x, u08 value, u08 high)
       for (j = 0; j < 2; j++)
       {
         if (segment & 0x1)
-          glcdFillRectangle(x + i * 6, SCORE_TIME_Y + j * 7, 2, 9, mcFgColor);
+          glcdColorSetFg();
         else
-          glcdFillRectangle(x + i * 6, SCORE_TIME_Y + j * 7, 2, 9, mcBgColor);
+          glcdColorSetBg();
+        glcdFillRectangle(x + i * 6, SCORE_TIME_Y + j * 7, 2, 9 + 2 * j);
         segment = segment >> 1;
       }
     }
@@ -601,13 +609,22 @@ static void pongDrawBigDigit(u08 x, u08 value, u08 high)
     // Draw three horizontal segments
     for (i = 0; i < 3; i++)
     {
+      if (i == 2)
+        extra = 2;
       if (segment & 0x1)
-        glcdFillRectangle(x, SCORE_TIME_Y + i * 7, 8, 2, mcFgColor);
+      {
+        glcdColorSetFg();
+        glcdFillRectangle(x, SCORE_TIME_Y + i * 7 + extra, 8, 2);
+      }
       else
-        glcdFillRectangle(x + 2, SCORE_TIME_Y + i * 7, 4, 2, mcBgColor);
+      {
+        glcdColorSetBg();
+        glcdFillRectangle(x + 2, SCORE_TIME_Y + i * 7 + extra, 4, 2);
+      }
       segment = segment >> 1;
     }
   }
+  glcdColorSetFg();
 }
 
 //
@@ -622,16 +639,16 @@ static void pongDrawMidLine(void)
   for (i = 0; i < GLCD_YPIXELS / 8 - 1; i++)
   {
     glcdSetAddress((GLCD_XPIXELS - MIDLINE_W) / 2, i);
-    if (mcBgColor)
-      glcdDataWrite(0xf0);
-    else
+    if (mcFgColor)
       glcdDataWrite(0x0f);
+    else
+      glcdDataWrite(0xf0);
   }
   glcdSetAddress((GLCD_XPIXELS - MIDLINE_W) / 2, i);
-  if (mcBgColor)
-    glcdDataWrite(0x30);
-  else
+  if (mcFgColor)
     glcdDataWrite(0xcf);
+  else
+    glcdDataWrite(0x30);
 }
 
 //
@@ -642,20 +659,22 @@ static void pongDrawMidLine(void)
 static void pongDrawPaddle(s08 x, s08 oldY, s08 newY)
 {
   // There are several options on redrawing a paddle (if needed anyway)
-  if (oldY != newY || mcClockInit == GLCD_TRUE)
+  if (oldY != newY || mcClockInit == MC_TRUE)
   {
     // Clear old paddle and draw new open or filled new paddle
-    glcdFillRectangle(x, oldY, PADDLE_W, PADDLE_H, mcBgColor);
-    if (almDisplayState == GLCD_TRUE)
-      glcdRectangle(x, newY, PADDLE_W, PADDLE_H, mcFgColor);
+    glcdColorSetBg();
+    glcdFillRectangle(x, oldY, PADDLE_W, PADDLE_H);
+    glcdColorSetFg();
+    if (almDisplayState == MC_TRUE)
+      glcdRectangle(x, newY, PADDLE_W, PADDLE_H);
     else
-      glcdFillRectangle(x, newY, PADDLE_W, PADDLE_H, mcFgColor);
+      glcdFillRectangle(x, newY, PADDLE_W, PADDLE_H);
   }
   else if (almDisplayState != mcU8Util1)
   {
     // Inverse centre of static paddle while alarming or end of alarm
     glcdFillRectangle2(x + 1, newY + 1, 1, PADDLE_H - 2, ALIGN_AUTO,
-      FILL_INVERSE, mcFgColor);
+      FILL_INVERSE);
   }
 }
 
@@ -709,11 +728,11 @@ static void pongDrawScore(void)
   if (mcU8Util2 != mcU8Util3)
   {
     mcU8Util3 = mcU8Util2;
-    scoreRedraw = GLCD_TRUE;
+    scoreRedraw = MC_TRUE;
   }
 
   // Depending on the score mode set the left and right values
-  if (scoreRedraw == GLCD_TRUE)
+  if (scoreRedraw == MC_TRUE)
   {
     switch (mcU8Util2)
     {
@@ -741,13 +760,13 @@ static void pongDrawScore(void)
   }
 
   // If needed draw left score two digits and right score two digits
-  pongDrawBigDigit(SCORE_H10_X, scoreLeft, GLCD_TRUE);
-  pongDrawBigDigit(SCORE_H1_X, scoreLeft, GLCD_FALSE);
-  pongDrawBigDigit(SCORE_M10_X, scoreRight, GLCD_TRUE);
-  pongDrawBigDigit(SCORE_M1_X, scoreRight, GLCD_FALSE);
+  pongDrawBigDigit(SCORE_H10_X, scoreLeft, MC_TRUE);
+  pongDrawBigDigit(SCORE_H1_X, scoreLeft, MC_FALSE);
+  pongDrawBigDigit(SCORE_M10_X, scoreRight, MC_TRUE);
+  pongDrawBigDigit(SCORE_M1_X, scoreRight, MC_FALSE);
 
   // Clear a redraw request
-  scoreRedraw = GLCD_FALSE;
+  scoreRedraw = MC_FALSE;
 }
 
 //
@@ -763,8 +782,8 @@ static void pongGameStep(void)
     if (ticksPlay != paddleTick)
     {
       // Ball moved out of the play field and is reset to its start position
-      minuteChanged = hourChanged = GLCD_FALSE;
-      scoreRedraw = GLCD_TRUE;
+      minuteChanged = hourChanged = MC_FALSE;
+      scoreRedraw = MC_TRUE;
       countdown = COUNTDOWN_GAME;
     }
     pongBallTraject();
@@ -815,10 +834,10 @@ static s08 pongPaddleMove(s08 y)
       else
         delta = -PADDLE_SPEED_MAX;
     }
-    /*DEBUG(putstring("PADL dist="); uart_putw_dec(distance));
-    DEBUG(putstring(", travel="); uart_putw_dec(delta));
-    DEBUG(putstring(", pos="); uart_putw_dec(y + delta));
-    DEBUG(putstring(", tix="); uart_putw_dec(playticks); putstring_nl(""));*/
+    /*DEBUG(putstring("PADL dist="); uart_put_sdec(distance));
+    DEBUG(putstring(", travel="); uart_put_sdec(delta));
+    DEBUG(putstring(", pos="); uart_put_dec(y + delta));
+    DEBUG(putstring(", tix="); uart_put_dec(tickNow); putstring_nl(""));*/
     return y + delta;
   }
   return y;

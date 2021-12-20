@@ -1,17 +1,14 @@
 //*****************************************************************************
 // Filename : 'glcd.c'
-// Title    : Graphic lcd API functions
+// Title    : High-level graphics lcd api for hd61202/ks0108 displays
 //*****************************************************************************
 
-#ifndef EMULIN
-#include "util.h"
-#else
-#include <stdlib.h>
-#include "emulator/stub.h"
+#include "global.h"
+#include "ks0108.h"
+#include "ks0108conf.h"
+#ifdef EMULIN
 #include "emulator/mchronutil.h"
 #endif
-#include "monomain.h"
-#include "ks0108.h"
 #include "glcd.h"
 
 // Include 5x7 monospace and 5x5 proportional fonts
@@ -20,6 +17,11 @@
 
 // External data
 extern volatile uint8_t mcBgColor, mcFgColor;
+
+// The draw color to be used in every graphics function below, except
+// glcdClearScreen().
+// Use glcdColorSet*() to set its value and glcdColorGet() to get its value.
+static u08 glcdColor;
 
 // To optimize lcd access, all relevant data from a single lcd line can be read
 // in first, then processed and then written back to the lcd. The glcdBuffer[]
@@ -60,7 +62,7 @@ static u16 fontCharIdx;
 // Local function prototypes
 static void glcdBufferBitSet(u08 x, u08 y);
 static void glcdBufferRead(u08 x, u08 yByte, u08 len);
-static u08 glcdFontByteGet(u08 color);
+static u08 glcdFontByteGet(void);
 static u16 glcdFontIdxGet(unsigned char c);
 static u08 glcdFontInfoGet(char c);
 
@@ -78,7 +80,7 @@ static u08 glcdFontInfoGet(char c);
 // bitmap element data, thus providing support for many image/sprite use cases.
 //
 void glcdBitmap(u08 x, u08 y, u16 xo, u08 yo, u08 w, u08 h, u08 elmType,
-  u08 origin, void *bitmap, u08 color)
+  u08 origin, void *bitmap)
 {
   u08 i, j;
   u08 yByte = y / 8;
@@ -132,7 +134,7 @@ void glcdBitmap(u08 x, u08 y, u16 xo, u08 yo, u08 w, u08 h, u08 elmType,
           template = ((uint32_t *)bitmap)[xo + j] >> i;
       }
       merge = (u08)((template >> yo) << startBit);
-      if (color == GLCD_OFF)
+      if (glcdColor == GLCD_OFF)
         merge = ~merge;
 
       // Merge the lcd byte with merge template and write it to lcd
@@ -150,75 +152,69 @@ void glcdBitmap(u08 x, u08 y, u16 xo, u08 yo, u08 w, u08 h, u08 elmType,
 }
 
 //
-// Function: glcdBitmap8PmFg
+// Function: glcdBitmap8Pm
 //
-// Draw a bitmap up to 8 pixels high using a bitmap data array in foreground
-// color. The bitmap data resides in program space.
+// Draw a bitmap up to 8 pixels high using a bitmap data array. The bitmap
+// data resides in program space.
 //
-void glcdBitmap8PmFg(u08 x, u08 y, u08 w, u08 h, const uint8_t *bitmap)
+void glcdBitmap8Pm(u08 x, u08 y, u08 w, u08 h, const uint8_t *bitmap)
 {
-  glcdBitmap(x, y, 0, 0, w, h, ELM_BYTE, DATA_PMEM, (void *)bitmap,
-    mcFgColor);
+  glcdBitmap(x, y, 0, 0, w, h, ELM_BYTE, DATA_PMEM, (void *)bitmap);
 }
 
 //
-// Function: glcdBitmap8RaFg
+// Function: glcdBitmap8Ra
 //
-// Draw a bitmap up to 8 pixels high using a bitmap data array in foreground
-// color. The bitmap data resides in ram.
+// Draw a bitmap up to 8 pixels high using a bitmap data array. The bitmap
+// data resides in ram.
 //
-void glcdBitmap8RaFg(u08 x, u08 y, u08 w, u08 h, uint8_t *bitmap)
+void glcdBitmap8Ra(u08 x, u08 y, u08 w, u08 h, uint8_t *bitmap)
 {
-  glcdBitmap(x, y, 0, 0, w, h, ELM_BYTE, DATA_RAM, (void *)bitmap,
-    mcFgColor);
+  glcdBitmap(x, y, 0, 0, w, h, ELM_BYTE, DATA_RAM, (void *)bitmap);
 }
 
 //
-// Function: glcdBitmap16PmFg
+// Function: glcdBitmap16Pm
 //
-// Draw a bitmap up to 16 pixels high using a bitmap data array in foreground
-// color. The bitmap data resides in program space.
+// Draw a bitmap up to 16 pixels high using a bitmap data array. The bitmap
+// data resides in program space.
 //
-void glcdBitmap16PmFg(u08 x, u08 y, u08 w, u08 h, const uint16_t *bitmap)
+void glcdBitmap16Pm(u08 x, u08 y, u08 w, u08 h, const uint16_t *bitmap)
 {
-  glcdBitmap(x, y, 0, 0, w, h, ELM_WORD, DATA_PMEM, (void *)bitmap,
-    mcFgColor);
+  glcdBitmap(x, y, 0, 0, w, h, ELM_WORD, DATA_PMEM, (void *)bitmap);
 }
 
 //
-// Function: glcdBitmap16RaFg
+// Function: glcdBitmap16Ra
 //
-// Draw a bitmap up to 16 pixels high using a bitmap data array in foreground
-// color. The bitmap data resides in ram.
+// Draw a bitmap up to 16 pixels high using a bitmap data array. The bitmap
+// data resides in ram.
 //
-void glcdBitmap16RaFg(u08 x, u08 y, u08 w, u08 h, uint16_t *bitmap)
+void glcdBitmap16Ra(u08 x, u08 y, u08 w, u08 h, uint16_t *bitmap)
 {
-  glcdBitmap(x, y, 0, 0, w, h, ELM_WORD, DATA_RAM, (void *)bitmap,
-    mcFgColor);
+  glcdBitmap(x, y, 0, 0, w, h, ELM_WORD, DATA_RAM, (void *)bitmap);
 }
 
 //
-// Function: glcdBitmap32PmFg
+// Function: glcdBitmap32Pm
 //
-// Draw a bitmap up to 32 pixels high using a bitmap data array in foreground
-// color. The bitmap data resides in program space.
+// Draw a bitmap up to 32 pixels high using a bitmap data array. The bitmap
+// data resides in program space.
 //
 void glcdBitmap32PmFg(u08 x, u08 y, u08 w, u08 h, const uint32_t *bitmap)
 {
-  glcdBitmap(x, y, 0, 0, w, h, ELM_DWORD, DATA_PMEM, (void *)bitmap,
-    mcFgColor);
+  glcdBitmap(x, y, 0, 0, w, h, ELM_DWORD, DATA_PMEM, (void *)bitmap);
 }
 
 //
-// Function: glcdBitmap32RaFg
+// Function: glcdBitmap32Ra
 //
-// Draw a bitmap to 32 pixels high using a bitmap data array in foreground
-// color. The bitmap data resides in ram.
+// Draw a bitmap up to 32 pixels high using a bitmap data array. The bitmap
+// data resides in ram.
 //
 void glcdBitmap32RaFg(u08 x, u08 y, u08 w, u08 h, uint32_t *bitmap)
 {
-  glcdBitmap(x, y, 0, 0, w, h, ELM_DWORD, DATA_RAM, (void *)bitmap,
-    mcFgColor);
+  glcdBitmap(x, y, 0, 0, w, h, ELM_DWORD, DATA_RAM, (void *)bitmap);
 }
 
 //
@@ -226,10 +222,10 @@ void glcdBitmap32RaFg(u08 x, u08 y, u08 w, u08 h, uint32_t *bitmap)
 //
 // Draw a (dotted) circle centered at px[xCenter,yCenter] with radius in px.
 //
-void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
+void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType)
 {
   u08 i;
-  u08 j = GLCD_FALSE;
+  u08 j = MC_FALSE;
   s08 x = 0;
   s08 y = radius;
   s08 tswitch = 3 - 2 * (s08)radius;
@@ -255,7 +251,7 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
     y = radius;
     third = 0;
     tswitch = 3 - 2 * (s08)radius;
-    xStart = 255;
+    xStart = MAX_U08;
     xEnd = 0;
 
     // Generate template pixels using the right side of the circle y-line
@@ -265,22 +261,22 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
           (lineType == CIRCLE_THIRD && third == 0) ||
           (lineType != CIRCLE_THIRD && (x & 0x1) == half))
       {
-        j = GLCD_FALSE;
+        j = MC_FALSE;
         i = yCenter + y;
         if ((i >> 3) == yLine)
         {
           // Mark bottom-right pixel in template
-          j = GLCD_TRUE;
+          j = MC_TRUE;
           glcdBufferBitSet(GLCD_CONTROLLER_XPIXELS + x, i);
         }
         i = yCenter - y;
         if ((i >> 3) == yLine)
         {
           // Mark top-right pixel in template
-          j = GLCD_TRUE;
+          j = MC_TRUE;
           glcdBufferBitSet(GLCD_CONTROLLER_XPIXELS + x, i);
         }
-        if (j == GLCD_TRUE)
+        if (j == MC_TRUE)
         {
           // Sync x range scope to process
           i = xCenter + x;
@@ -288,23 +284,23 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
             xStart = i;
           if (i > xEnd)
             xEnd = i;
-          j = GLCD_FALSE;
+          j = MC_FALSE;
         }
         i = yCenter + x;
         if ((i >> 3) == yLine)
         {
           // Mark bottom-right pixel in template
-          j = GLCD_TRUE;
+          j = MC_TRUE;
           glcdBufferBitSet(GLCD_CONTROLLER_XPIXELS + y, i);
         }
         i = yCenter - x;
         if ((i >> 3) == yLine)
         {
           // Mark top-right pixel in template
-          j = GLCD_TRUE;
+          j = MC_TRUE;
           glcdBufferBitSet(GLCD_CONTROLLER_XPIXELS + y, i);
         }
-        if (j == GLCD_TRUE)
+        if (j == MC_TRUE)
         {
           // Sync x range scope to process
           i = xCenter + y;
@@ -336,7 +332,7 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
     // At this point the circle section template for the y-line is generated.
     // In case the template is empty, which is possible when using the two HALF
     // draw types, then quit this y-line
-    if (xStart == 255)
+    if (xStart == MAX_U08)
       continue;
 
     // Load line section for right side of circle y-line
@@ -348,7 +344,7 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
     j = GLCD_CONTROLLER_XPIXELS + (xStart - xCenter);
     for (i = 0; i <= xEnd - xStart; i++)
     {
-      if (color == GLCD_ON)
+      if (glcdColor == GLCD_ON)
         glcdDataWrite(glcdBuffer[i] | glcdBuffer[j]);
       else
         glcdDataWrite(glcdBuffer[i] & ~glcdBuffer[j]);
@@ -378,7 +374,7 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
     {
       if (j != GLCD_CONTROLLER_XPIXELS)
       {
-        if (color == GLCD_ON)
+        if (glcdColor == GLCD_ON)
           glcdDataWrite(glcdBuffer[i] | glcdBuffer[j]);
         else
           glcdDataWrite(glcdBuffer[i] & ~glcdBuffer[j]);
@@ -391,11 +387,84 @@ void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType, u08 color)
 }
 
 //
+// Function: glcdClearScreen
+//
+// Fill the lcd contents with the background color, and reset the controller
+// display and startline settings that may have been modified by functional
+// clock code
+//
+void glcdClearScreen(void)
+{
+  u08 i;
+  u08 j;
+  u08 data;
+
+  if (mcBgColor == GLCD_OFF)
+    data = 0x00;
+  else
+    data = 0xff;
+
+  // Clear lcd by looping through all pages
+  for (i = 0; i < GLCD_CONTROLLER_YPAGES; i++)
+  {
+    // Set page address
+    glcdSetAddress(0, i);
+
+    // Clear all lines of this page of display memory
+    for (j = 0; j < GLCD_XPIXELS; j++)
+      glcdDataWrite(data);
+  }
+
+  // Enable all controller displays and reset startline to 0
+  glcdResetScreen();
+}
+
+//
+// Function: glcdColorGet
+//
+// Get the draw color
+//
+u08 glcdColorGet(void)
+{
+  return glcdColor;
+}
+
+//
+// Function: glcdColorSet
+//
+// Set the draw color to GLCD_OFF or GLCD_ON
+//
+void glcdColorSet(u08 color)
+{
+  glcdColor = color;
+}
+
+//
+// Function: glcdColorSetBg
+//
+// Set the draw color to the current background color
+//
+void glcdColorSetBg(void)
+{
+  glcdColor = mcBgColor;
+}
+
+//
+// Function: glcdColorSetFg
+//
+// Set the draw color to the current foreground color
+//
+void glcdColorSetFg(void)
+{
+  glcdColor = mcFgColor;
+}
+
+//
 // Function: glcdDot
 //
-// Paint a dot in a particular color
+// Paint a dot
 //
-void glcdDot(u08 x, u08 y, u08 color)
+void glcdDot(u08 x, u08 y)
 {
   u08 oldByte;
   u08 newByte;
@@ -407,7 +476,7 @@ void glcdDot(u08 x, u08 y, u08 color)
   oldByte = glcdDataRead();	// Read back current value
 
   // Set/clear dot in new lcd byte
-  if (color == GLCD_ON)
+  if (glcdColor == GLCD_ON)
     newByte = (oldByte | mask);
   else
     newByte = (oldByte & ~mask);
@@ -426,13 +495,12 @@ void glcdDot(u08 x, u08 y, u08 color)
 //
 // Draw a filled circle centered at px[xCenter,yCenter] with radius in px
 //
-void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
-  u08 color)
+void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType)
 {
   s08 x;
   s08 y = radius;
   s08 tswitch = 3 - 2 * (u08)radius;
-  u08 firstDraw = GLCD_TRUE;
+  u08 firstDraw = MC_TRUE;
   u08 drawSize = 0;
 
   // The code below still has the basic logic structure of the well known
@@ -449,26 +517,26 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
     {
       if (tswitch >= 0)
       {
-        if (firstDraw == GLCD_TRUE)
+        if (firstDraw == MC_TRUE)
           drawSize = 2 * drawSize;
         glcdFillRectangle2(xCenter - x, yCenter - y, drawSize + 1, y * 2 + 1,
-          ALIGN_AUTO, fillType, color);
+          ALIGN_AUTO, fillType);
         if (x != 0)
           glcdFillRectangle2(xCenter + y, yCenter - x, 1, x * 2 + 1,
-            ALIGN_AUTO, fillType, color);
+            ALIGN_AUTO, fillType);
       }
     }
     if (x != 0)
     {
-      if (tswitch >= 0 && firstDraw == GLCD_FALSE)
+      if (tswitch >= 0 && firstDraw == MC_FALSE)
         glcdFillRectangle2(xCenter + x - drawSize, yCenter - y, drawSize + 1,
-          y * 2 + 1, ALIGN_AUTO, fillType, color);
+          y * 2 + 1, ALIGN_AUTO, fillType);
       if (tswitch >= 0)
       {
         if (x != y)
           drawSize = 0;
         glcdFillRectangle2(xCenter - y, yCenter - x, drawSize + 1, x * 2 + 1,
-          ALIGN_AUTO, fillType, color);
+          ALIGN_AUTO, fillType);
       }
     }
 
@@ -480,7 +548,7 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
     else
     {
       tswitch = tswitch + 4 * (x - y) + 10;
-      firstDraw = GLCD_FALSE;
+      firstDraw = MC_FALSE;
       drawSize = 0;
       y--;
     }
@@ -492,9 +560,9 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
 //
 // Fill a rectangle
 //
-void glcdFillRectangle(u08 x, u08 y, u08 w, u08 h, u08 color)
+void glcdFillRectangle(u08 x, u08 y, u08 w, u08 h)
 {
-  glcdFillRectangle2(x, y, w, h, ALIGN_AUTO, FILL_FULL, color);
+  glcdFillRectangle2(x, y, w, h, ALIGN_AUTO, FILL_FULL);
 }
 
 //
@@ -513,15 +581,14 @@ void glcdFillRectangle(u08 x, u08 y, u08 w, u08 h, u08 color)
 // FILL_HALF      - Half filled
 // FILL_THIRDUP   - Third filled, creating an upward illusion
 // FILL_THIRDDOWN - Third filled, creating a downward illusion
-// FILL_INVERSE   - Inverse (ignore color)
+// FILL_INVERSE   - Inverse
 // FILL_BLANK     - Clear
 //
 // Note: For optimization purposes we're using datatype s08, supporting a
-// display width up to 128 pixels. Our Monochron display happens to be 128
-// pixels wide.
+// display width max 128 pixels. Our Monochron display happens to be 128 pixels
+// wide.
 //
-void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType,
-  u08 color)
+void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType)
 {
   u08 i, j;
   s08 virX = 0;
@@ -581,13 +648,13 @@ void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType,
     {
       // Read all the required lcd bytes for this y-byte in the line buffer and
       // update them byte by byte
-      useBuffer = GLCD_TRUE;
+      useBuffer = MC_TRUE;
       glcdBufferRead(x, yByte, w);
     }
     else
     {
       // We're going to write full lcd bytes
-      useBuffer = GLCD_FALSE;
+      useBuffer = MC_FALSE;
     }
 
     // As of now on we're going to write consecutive lcd bytes
@@ -618,7 +685,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType,
     for (j = 0; j < w; j++)
     {
       // Get lcd source byte when needed
-      if (useBuffer == GLCD_TRUE)
+      if (useBuffer == MC_TRUE)
         lcdByte = glcdBuffer[j];
 
       // Set template that we have to apply to the lcd byte
@@ -628,7 +695,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType,
         template = 0x00;
       else if (fillType == FILL_HALF)
       {
-        if (color == GLCD_ON || j == 0)
+        if (glcdColor == GLCD_ON || j == 0)
           template = ~template;
       }
       else if (fillType == FILL_THIRDUP)
@@ -639,7 +706,7 @@ void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType,
         template = ~lcdByte;
 
       // Depending on the draw color invert the template
-      if (color == GLCD_OFF && fillType != FILL_INVERSE)
+      if (glcdColor == GLCD_OFF && fillType != FILL_INVERSE)
         template = ~template;
 
       // Merge the lcd byte and the template we just made
@@ -697,34 +764,11 @@ u08 glcdGetWidthStr(u08 font, char *data)
 }
 
 //
-// Function: glcdInverseDisplay
-//
-// Optimized function to invert the contents of the lcd display.
-// Can also be achieved via glcdFillRectangle2().
-//
-/*void glcdInverseDisplay(void)
-{
-  u08 x,y;
-
-  // We have a number of y byte pixel rows
-  for (y = 0; y < GLCD_CONTROLLER_YPAGES; y++)
-  {
-    // Buffer all 128 (GLCD_XPIXELS) bytes for the y-byte pixel row
-    glcdBufferRead(0, y, GLCD_XPIXELS);
-
-    // Go back to the beginning of the row and write the inverted pixel bytes
-    glcdSetAddress(0, y);
-    for (x = 0; x < GLCD_XPIXELS; x++)
-      glcdDataWrite(~(glcdBuffer[x]));
-  }
-}*/
-
-//
 // Function: glcdLine
 //
 // Draw a line from px[x1,y1] to px[x2,y2]
 //
-void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
+void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2)
 {
   u08 n = 0;
   u08 i;
@@ -780,6 +824,7 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
     // Add points until we find the end of a line or line section
     while (n < endValue)
     {
+      n++;
       // Set x and y draw points for line section pixel
       if (mode == 0)
       {
@@ -814,19 +859,21 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
 
       // Update the line section pixel in the line buffer
       glcdBufferBitSet(drawX, drawY);
-      n++;
     }
 
     // At this point a linebuffer contains the pixel template for the line
     // section. Now read all affected lcd pixel bytes and apply template.
-    glcdSetAddress(startX, yLine);
     for (i = startX; i <= endX; i++)
     {
-      // Do dummy read when needed and apply template
+      // Set cursor and do a dummy read on the first read and the first read
+      // upon switching between controllers
       if (i == startX || (i & GLCD_CONTROLLER_XPIXMASK) == 0)
+      {
+        glcdSetAddress(i, yLine);
         glcdDataRead();
+      }
       readByte = glcdDataRead();
-      if (color == GLCD_ON)
+      if (glcdColor == GLCD_ON)
         finalByte = readByte | glcdBuffer[i];
       else
         finalByte = readByte & ~glcdBuffer[i];
@@ -835,7 +882,6 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
       if (firstWrite == -1 && readByte != finalByte)
         firstWrite = i;
       glcdBuffer[i] = finalByte;
-      glcdNextAddress();
     }
 
     // At this point the linebuffer contains the bytes to write to the lcd.
@@ -851,7 +897,6 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
 
     // Starting points for next iteration
     yLine = yLine + sgnDeltaY;
-    n++;
   }
 }
 
@@ -860,30 +905,23 @@ void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color)
 //
 // Print a number in two digits at current cursor location
 //
-void glcdPrintNumber(u08 n, u08 color)
+void glcdPrintNumber(u08 n)
 {
-  glcdWriteChar(n / 10 + '0', color);
-  glcdWriteChar(n % 10 + '0', color);
+  glcdWriteChar(n / 10 + '0');
+  glcdWriteChar(n % 10 + '0');
 }
 
 //
 // Function: glcdPrintNumberBg
 //
 // Print a number in two digits at current cursor location in background color
+// and (re)sets the draw color to foreground.
 //
 void glcdPrintNumberBg(u08 n)
 {
-  glcdPrintNumber(n, mcBgColor);
-}
-
-//
-// Function: glcdPrintNumberFg
-//
-// Print a number in two digits at current cursor location in foreground color
-//
-void glcdPrintNumberFg(u08 n)
-{
-  glcdPrintNumber(n, mcFgColor);
+  glcdColorSetBg();
+  glcdPrintNumber(n);
+  glcdColorSetFg();
 }
 
 //
@@ -891,24 +929,13 @@ void glcdPrintNumberFg(u08 n)
 //
 // Write a character string starting at current cursor location
 //
-void glcdPutStr(char *data, u08 color)
+void glcdPutStr(char *data)
 {
   while (*data)
   {
-    glcdWriteChar(*data, color);
+    glcdWriteChar(*data);
     data++;
   }
-}
-
-//
-// Function: glcdPutStrFg
-//
-// Write a character string starting at current cursor location in foreground
-// color
-//
-void glcdPutStrFg(char *data)
-{
-  glcdPutStr(data, mcFgColor);
 }
 
 //
@@ -916,9 +943,9 @@ void glcdPutStrFg(char *data)
 //
 // Write a character string starting at the px[x,y] position
 //
-u08 glcdPutStr2(u08 x, u08 y, u08 font, char *data, u08 color)
+u08 glcdPutStr2(u08 x, u08 y, u08 font, char *data)
 {
-  return glcdPutStr3(x, y, font, data, 1, 1, color);
+  return glcdPutStr3(x, y, font, data, 1, 1);
 }
 
 //
@@ -926,8 +953,7 @@ u08 glcdPutStr2(u08 x, u08 y, u08 font, char *data, u08 color)
 //
 // Write a character string starting at px[x,y] position with font scaling
 //
-u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
-  u08 color)
+u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale)
 {
   u08 h;
   u08 i;
@@ -1002,7 +1028,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
       if (currXScale == xScale || i == 0)
       {
         currXScale = 0;
-        fontByte = glcdFontByteGet(color);
+        fontByte = glcdFontByteGet();
 
         // Prepare for next font byte
         fontByteIdx++;
@@ -1086,7 +1112,7 @@ u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
 // either bottom-up or top-down orientation with font scaling
 //
 u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
-  u08 xScale, u08 yScale, u08 color)
+  u08 xScale, u08 yScale)
 {
   u08 h;
   u08 i;
@@ -1186,7 +1212,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
       fontCharIdx = glcdFontIdxGet(*c) + fontByteIdx;
 
       // Start at the proper font byte
-      fontByte = glcdFontByteGet(color);
+      fontByte = glcdFontByteGet();
 
       // Build the lcd byte template bit by bit
       template = 0;
@@ -1229,7 +1255,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
           }
 
           // Get the font byte
-          fontByte = glcdFontByteGet(color);
+          fontByte = glcdFontByteGet();
         }
       }
 
@@ -1267,7 +1293,7 @@ u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
 //
 // Draw a rectangle
 //
-void glcdRectangle(u08 x, u08 y, u08 w, u08 h, u08 color)
+void glcdRectangle(u08 x, u08 y, u08 w, u08 h)
 {
   // When there's nothing to paint we're done
   if (w == 0 || h == 0)
@@ -1275,14 +1301,30 @@ void glcdRectangle(u08 x, u08 y, u08 w, u08 h, u08 color)
 
   if (w > 2)
   {
-    glcdFillRectangle2(x + 1, y, w - 2, 1, ALIGN_AUTO, FILL_FULL, color);
+    glcdFillRectangle2(x + 1, y, w - 2, 1, ALIGN_AUTO, FILL_FULL);
     if (h > 1)
-      glcdFillRectangle2(x + 1, y + h - 1, w - 2, 1, ALIGN_AUTO, FILL_FULL,
-        color);
+      glcdFillRectangle2(x + 1, y + h - 1, w - 2, 1, ALIGN_AUTO, FILL_FULL);
   }
-  glcdFillRectangle2(x, y, 1, h, ALIGN_AUTO, FILL_FULL, color);
+  glcdFillRectangle2(x, y, 1, h, ALIGN_AUTO, FILL_FULL);
   if (w > 1)
-    glcdFillRectangle2(x + w - 1, y, 1, h, ALIGN_AUTO, FILL_FULL, color);
+    glcdFillRectangle2(x + w - 1, y, 1, h, ALIGN_AUTO, FILL_FULL);
+}
+
+//
+// Function: glcdResetScreen
+//
+// Reset the lcd display by enabling display and setting startline to 0
+//
+void glcdResetScreen(void)
+{
+  u08 i;
+
+  // Switch on display and reset startline
+  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+  {
+    glcdControlWrite(i, GLCD_START_LINE | 0);
+    glcdControlWrite(i, GLCD_ON_CTRL | GLCD_ON_DISPLAY);
+  }
 }
 
 //
@@ -1290,7 +1332,7 @@ void glcdRectangle(u08 x, u08 y, u08 w, u08 h, u08 color)
 //
 // Write a character at the current cursor position
 //
-void glcdWriteChar(unsigned char c, u08 color)
+void glcdWriteChar(unsigned char c)
 {
   u08 i = 0;
   u08 fontByte = 0;
@@ -1299,27 +1341,17 @@ void glcdWriteChar(unsigned char c, u08 color)
   for (i = 0; i < 5; i++)
   {
     fontByte = pgm_read_byte(&Font5x7[(c - 0x20) * 5 + i]);
-    if (color == GLCD_OFF)
+    if (glcdColor == GLCD_OFF)
       glcdDataWrite(~fontByte);
     else
       glcdDataWrite(fontByte);
   }
 
   // Write a spacer line
-  if (color == GLCD_OFF)
+  if (glcdColor == GLCD_OFF)
     glcdDataWrite(0xff);
   else
     glcdDataWrite(0x00);
-}
-
-//
-// Function: glcdWriteCharFg
-//
-// Write a character at the current cursor position in foreground color
-//
-void glcdWriteCharFg(unsigned char c)
-{
-  glcdWriteChar(c, mcFgColor);
 }
 
 //
@@ -1348,19 +1380,19 @@ static void glcdBufferRead(u08 x, u08 yByte, u08 len)
     emuCoreDump(CD_GLCD, __func__, 0, x, yByte, len);
 #endif
 
-  // Set cursor on first byte to read
-  glcdSetAddress(x, yByte);
-
   for (i = 0; i < len; i++)
   {
-    // Do a dummy read on the first read and the first read after switching
-    // between controllers. For this refer to the controller specs.
-    if (i == 0 || ((x + i) & GLCD_CONTROLLER_XPIXMASK) == 0)
+    // Set cursor and do a dummy read on the first read and the first read
+    // upon switching between controllers. For this refer to the controller
+    // specs.
+    if (i == 0 || ((i + x) & GLCD_CONTROLLER_XPIXMASK) == 0)
+    {
+      glcdSetAddress(i + x, yByte);
       glcdDataRead();
+    }
 
-    // Read the lcd byte and move to next cursor address
+    // Read the lcd byte
     glcdBuffer[i] = glcdDataRead();
-    glcdNextAddress();
   }
 }
 
@@ -1369,7 +1401,7 @@ static void glcdBufferRead(u08 x, u08 yByte, u08 len)
 //
 // Get a font byte
 //
-static u08 glcdFontByteGet(u08 color)
+static u08 glcdFontByteGet(void)
 {
   u08 fontByte;
 
@@ -1388,7 +1420,7 @@ static u08 glcdFontByteGet(u08 color)
   }
 
   // In case of reverse color invert font byte
-  if (color == GLCD_OFF)
+  if (glcdColor == GLCD_OFF)
     fontByte = ~fontByte;
 
   return fontByte;

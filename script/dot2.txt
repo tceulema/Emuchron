@@ -23,10 +23,12 @@ rf null true null
       # Clear previous spiral ribbon dot as best as we can
       # but we cannot prevent gaps at all times
       iif radius>=2
-        pd b 64+sin(dotradial-raddelta)*radius 32+cos(dotradial-raddelta)*radius
+        psb
+        pd 64+sin(dotradial-raddelta)*radius 32+cos(dotradial-raddelta)*radius
       ien
       # Paint new spiral ribbon dot
-      pd f 64+sin(dotradial)*radius 32+cos(dotradial)*radius
+      psf
+      pd 64+sin(dotradial)*radius 32+cos(dotradial)*radius
     rn
   rn
   wte 40

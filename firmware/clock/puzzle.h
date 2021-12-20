@@ -6,6 +6,8 @@
 #ifndef PUZZLE_H
 #define PUZZLE_H
 
+#include "../avrlibtypes.h"
+
 // Puzzle clock
 void puzzleButton(u08 pressedButton);
 void puzzleCycle(void);

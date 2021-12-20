@@ -10,8 +10,7 @@
 #include <time.h>
 
 // Monochron and emuchron defines
-#include "../ks0108.h"
-#include "interpreter.h"
+#include "../global.h"
 #include "varutil.h"
 #include "expr.h"
 
@@ -33,7 +32,7 @@
 // Global variables containing evaluator results upon successful evaluation:
 // extern double exprValue;	- The resulting expression value
 // extern u08 exprAssign;	- The expression is an assignment
-//				  (GLCD_FALSE or GLCD_TRUE)
+//				  (MC_FALSE or MC_TRUE)
 //
 u08 exprEvaluate(char *argName, char *exprString)
 {
@@ -49,7 +48,7 @@ u08 exprEvaluate(char *argName, char *exprString)
 
   // Reset previous error and assignment expression indicator
   varStatus = VAR_OK;
-  exprAssign = GLCD_FALSE;
+  exprAssign = MC_FALSE;
 
   // Scan and parse the expression and cleanup flex/bison
   buf = yy_scan_string(exprString);

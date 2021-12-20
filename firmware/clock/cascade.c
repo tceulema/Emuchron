@@ -3,13 +3,7 @@
 // Title    : Animation code for MONOCHRON cascade clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -29,7 +23,6 @@
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
 static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
@@ -43,7 +36,7 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
 void spotCascadeCycle(void)
 {
   // Update common Spotfire clock elements and check if clock requires update
-  if (spotCommonUpdate() == GLCD_FALSE)
+  if (spotCommonUpdate() == MC_FALSE)
     return;
 
   DEBUGP("Update Cascade");
@@ -110,7 +103,7 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
 
   // See if there's any need to update a delta bar
   if (oldValLeft == newValLeft && oldValRight == newValRight &&
-      mcClockInit == GLCD_FALSE)
+      mcClockInit == MC_FALSE)
     return;
 
   // Get height of old and new bar height on left and right side
@@ -155,7 +148,7 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
 
   // If there are no changes in barheights there's no need to repaint the bar
   if (oldLeftHeight != newLeftHeight || oldRightHeight != newRightHeight ||
-      mcClockInit == GLCD_TRUE)
+      mcClockInit == MC_TRUE)
   {
     u08 fillType;
     u08 align;
@@ -175,7 +168,7 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
 
     // Draw the delta bar
     glcdFillRectangle2(x, newDeltaYStart, CASC_DELTA_WIDTH, newDeltaHeight,
-      align, fillType, mcFgColor);
+      align, fillType);
   }
 
   // Paint the new bar value
@@ -197,24 +190,24 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
   barValLen = barValLen * 4 - 1; // Width in pixels
   alignWidth = CASC_DELTA_WIDTH - barValLen;
   glcdPutStr2(x + alignWidth / 2 + (CASC_DELTA_WIDTH % 2 == 0 ? 1 : 0),
-    newDeltaYStart + CASC_DELTA_VALUE_Y_OFFSET, FONT_5X5P, barValue,
-    mcFgColor);
+    newDeltaYStart + CASC_DELTA_VALUE_Y_OFFSET, FONT_5X5P, barValue);
 
   // Clear the left side of the bar value
+  glcdColorSetBg();
   glcdFillRectangle(x, newDeltaYStart + CASC_DELTA_VALUE_Y_OFFSET,
     alignWidth / 2 + (CASC_DELTA_WIDTH % 2 == 0 ? 1 : 0),
-    -CASC_DELTA_VALUE_Y_OFFSET, mcBgColor);
+    -CASC_DELTA_VALUE_Y_OFFSET);
 
   // Clear the right side of the bar value
   glcdFillRectangle(x + alignWidth / 2 + barValLen,
     newDeltaYStart + CASC_DELTA_VALUE_Y_OFFSET, alignWidth / 2,
-    -CASC_DELTA_VALUE_Y_OFFSET, mcBgColor);
+    -CASC_DELTA_VALUE_Y_OFFSET);
 
   // If there are no changes in barheights there's no need to clear anything
   if (oldLeftHeight != newLeftHeight || oldRightHeight != newRightHeight)
   {
     // Clear the first line between the bar and the bar value
-    glcdFillRectangle(x, newDeltaYStart - 1, CASC_DELTA_WIDTH, 1, mcBgColor);
+    glcdFillRectangle(x, newDeltaYStart - 1, CASC_DELTA_WIDTH, 1);
 
     // Clear what was above it (if any)
     if (oldDeltaYStart < newDeltaYStart)
@@ -225,14 +218,14 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
         clearHeight = newDeltaYStart - oldDeltaYStart;
       if (clearHeight != 0)
         glcdFillRectangle2(x, oldDeltaYStart + CASC_DELTA_VALUE_Y_OFFSET,
-          CASC_DELTA_WIDTH, clearHeight, ALIGN_AUTO, FILL_BLANK, mcFgColor);
+          CASC_DELTA_WIDTH, clearHeight, ALIGN_AUTO, FILL_FULL);
     }
 
     // Clear a single line if the bars were equally high and we're moving up
     if (oldLeftHeight == oldRightHeight && newLeftHeight < newRightHeight &&
          oldLeftHeight == newLeftHeight)
       glcdFillRectangle2(x, oldDeltaYStart, CASC_DELTA_WIDTH, 1, ALIGN_AUTO,
-        FILL_BLANK, mcFgColor);
+        FILL_FULL);
 
     // Clear what was below it (if any)
     if (oldDeltaYStart + oldDeltaHeight > newDeltaYStart + newDeltaHeight)
@@ -250,7 +243,8 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
       }
       if (clearHeight != 0)
         glcdFillRectangle2(x, clearStart, CASC_DELTA_WIDTH, clearHeight,
-          ALIGN_AUTO, FILL_BLANK, mcFgColor);
+          ALIGN_AUTO, FILL_FULL);
     }
   }
+  glcdColorSetFg();
 }

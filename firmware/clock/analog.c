@@ -4,15 +4,10 @@
 //*****************************************************************************
 
 #include <math.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../monomain.h"
 #include "analog.h"
 
 // Specifics for analog clock main dial
@@ -20,7 +15,7 @@
 #define ANA_Y_START			31
 #define ANA_RADIUS			30
 #define ANA_DOT_RADIUS			(ANA_RADIUS - 1.9L)
-#define ANA_SEC_RADIUS_LINE		(ANA_RADIUS - 4.9L)
+#define ANA_SEC_RADIUS_LINE		(ANA_RADIUS - 3.9L)
 #define ANA_SEC_RADIUS_ARROW		(ANA_RADIUS - 2.3L)
 #define ANA_MIN_RADIUS			(ANA_RADIUS - 2.9L)
 #define ANA_HOUR_RADIUS			(ANA_RADIUS - 9.9L)
@@ -69,7 +64,6 @@ extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcUpdAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Holds the current normal/inverted state of the alarm area
 extern volatile uint8_t mcU8Util1;
@@ -83,7 +77,7 @@ extern volatile uint8_t mcU8Util3;
 static void analogAlarmAreaUpdate(void);
 static u08 analogElementCalc(s08 position[], s08 positionNew[], float radial,
   float radialOffset, u08 arrowRadius, u08 legRadius, u08 legsCheck);
-static void analogElementDraw(s08 position[], u08 color);
+static void analogElementDraw(s08 position[]);
 static void analogElementSync(s08 position[], s08 positionNew[]);
 static void analogInit(u08 mode);
 
@@ -109,14 +103,14 @@ void analogCycle(void)
   if (ANA_SEC_MOVE == 0)
   {
     // Only if a time event or init is flagged we need to update the clock
-    if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+    if (mcClockTimeEvent == MC_FALSE && mcClockInit == MC_FALSE)
       return;
     DEBUGP("Update Analog");
   }
   else
   {
     // Smooth second indicator so we may update every clock cycle
-    if (mcClockTimeEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+    if (mcClockTimeEvent == MC_TRUE || mcClockInit == MC_TRUE)
     {
       DEBUGP("Update Analog");
       mcU8Util2 = 0;
@@ -130,15 +124,15 @@ void analogCycle(void)
   // Local data
   float radElement;
   s08 posSecNew[6], posMinNew[6], posHourNew[6];
-  u08 secElementChanged = GLCD_FALSE;
-  u08 minElementChanged = GLCD_FALSE;
-  u08 hourElementChanged = GLCD_FALSE;
+  u08 secElementChanged = MC_FALSE;
+  u08 minElementChanged = MC_FALSE;
+  u08 hourElementChanged = MC_FALSE;
 
   // Verify changes in date
   animADAreaUpdate(ANA_DATE_X_START, ANA_DATE_Y_START, AD_AREA_DATE_ONLY);
 
   // Calculate (potential) changes in seconds needle
-  if (mcU8Util3 == GLCD_TRUE)
+  if (mcU8Util3 == MC_TRUE)
   {
     if (ANA_SEC_MOVE == 0)
     {
@@ -167,7 +161,7 @@ void analogCycle(void)
     }
   }
 
-  if (mcClockTimeEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+  if (mcClockTimeEvent == MC_TRUE || mcClockInit == MC_TRUE)
   {
     // Calculate (potential) changes in minute arrow
     if (ANA_MIN_MOVE == 0)
@@ -187,8 +181,8 @@ void analogCycle(void)
     // Calculate (potential) changes in hour arrow. In normal operation only
     // change the hour arrow if the minute arrow moves as well.
     // Note: Include progress in minutes during the hour.
-    if (minElementChanged == GLCD_TRUE || mcClockOldTH != mcClockNewTH ||
-        mcClockInit == GLCD_TRUE)
+    if (minElementChanged == MC_TRUE || mcClockOldTH != mcClockNewTH ||
+        mcClockInit == MC_TRUE)
     {
       radElement = (2L * M_PI / ANA_HOUR_STEPS) * (float)(mcClockNewTH % 12) +
         (2L * M_PI / ANA_MIN_STEPS / ANA_HOUR_STEPS) * (float)mcClockNewTM;
@@ -198,54 +192,60 @@ void analogCycle(void)
   }
 
   // Redraw seconds needle if needed
-  if (mcU8Util3 == GLCD_TRUE &&
-      (secElementChanged == GLCD_TRUE || mcClockInit == GLCD_TRUE))
+  if (mcU8Util3 == MC_TRUE &&
+      (secElementChanged == MC_TRUE || mcClockInit == MC_TRUE))
   {
     // Remove the old seconds needle, sync with new position and redraw
-    analogElementDraw(posSec, mcBgColor);
+    glcdColorSetBg();
+    analogElementDraw(posSec);
     analogElementSync(posSec, posSecNew);
-    analogElementDraw(posSec, mcFgColor);
+    glcdColorSetFg();
+    analogElementDraw(posSec);
   }
 
   // Redraw minute arrow if needed
-  if (minElementChanged == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+  if (minElementChanged == MC_TRUE || mcClockInit == MC_TRUE)
   {
     // Remove the old minute arrow, sync with new position and redraw
-    analogElementDraw(posMin, mcBgColor);
+    glcdColorSetBg();
+    analogElementDraw(posMin);
     analogElementSync(posMin, posMinNew);
-    analogElementDraw(posMin, mcFgColor);
+    glcdColorSetFg();
+    analogElementDraw(posMin);
 
     // Redraw the seconds needle as it got distorted by the minute arrow draw
-    if (mcU8Util3 == GLCD_TRUE)
-      analogElementDraw(posSec, mcFgColor);
+    if (mcU8Util3 == MC_TRUE)
+      analogElementDraw(posSec);
   }
-  else if (secElementChanged == GLCD_TRUE)
+  else if (secElementChanged == MC_TRUE)
   {
     // The minute arrow has not changed but the sec needle has.
     // Redraw the minute arrow as it got distorted by the seconds needle draw.
-    analogElementDraw(posMin, mcFgColor);
+    analogElementDraw(posMin);
   }
 
   // Redraw hour arrow only if needed
-  if (hourElementChanged == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+  if (hourElementChanged == MC_TRUE || mcClockInit == MC_TRUE)
   {
     // Remove the old hour arrow, sync with new position and redraw
-    analogElementDraw(posHour, mcBgColor);
+    glcdColorSetBg();
+    analogElementDraw(posHour);
     analogElementSync(posHour, posHourNew);
-    analogElementDraw(posHour, mcFgColor);
+    glcdColorSetFg();
+    analogElementDraw(posHour);
 
     // Redraw the seconds needle and minute arrow as they get distorted by the
     // arrow redraw
-    if (mcU8Util3 == GLCD_TRUE)
-      analogElementDraw(posSec, mcFgColor);
-    analogElementDraw(posMin, mcFgColor);
+    if (mcU8Util3 == MC_TRUE)
+      analogElementDraw(posSec);
+    analogElementDraw(posMin);
   }
-  else if (secElementChanged == GLCD_TRUE || minElementChanged == GLCD_TRUE)
+  else if (secElementChanged == MC_TRUE || minElementChanged == MC_TRUE)
   {
     // The hour arrow has not changed but the seconds needle and/or minute
     // arrow has.
     // Redraw the hour arrow as it got distorted by the other draws.
-    analogElementDraw(posHour, mcFgColor);
+    analogElementDraw(posHour);
   }
 }
 
@@ -257,7 +257,7 @@ void analogCycle(void)
 //
 void analogHmInit(u08 mode)
 {
-  mcU8Util3 = GLCD_FALSE;
+  mcU8Util3 = MC_FALSE;
   analogInit(mode);
 }
 
@@ -269,7 +269,7 @@ void analogHmInit(u08 mode)
 //
 void analogHmsInit(u08 mode)
 {
-  mcU8Util3 = GLCD_TRUE;
+  mcU8Util3 = MC_TRUE;
   analogInit(mode);
 }
 
@@ -280,10 +280,10 @@ void analogHmsInit(u08 mode)
 //
 static void analogAlarmAreaUpdate(void)
 {
-  u08 newAlmDisplayState = GLCD_FALSE;
+  u08 newAlmDisplayState = MC_FALSE;
 
   // Detect change in displaying alarm
-  if (mcUpdAlarmSwitch == GLCD_TRUE)
+  if (mcUpdAlarmSwitch == MC_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {
@@ -302,25 +302,27 @@ static void analogAlarmAreaUpdate(void)
 
       // Show the alarm time
       glcdCircle2(ANA_ALARM_X_START, ANA_ALARM_Y_START, ANA_ALARM_RADIUS,
-        CIRCLE_FULL, mcFgColor);
+        CIRCLE_FULL);
       glcdLine(ANA_ALARM_X_START, ANA_ALARM_Y_START, ANA_ALARM_X_START + dxM,
-        ANA_ALARM_Y_START + dyM, mcFgColor);
+        ANA_ALARM_Y_START + dyM);
       glcdLine(ANA_ALARM_X_START, ANA_ALARM_Y_START, ANA_ALARM_X_START + dxH,
-        ANA_ALARM_Y_START + dyH, mcFgColor);
+        ANA_ALARM_Y_START + dyH);
     }
     else
     {
       // Clear alarm area
+      glcdColorSetBg();
       glcdFillRectangle(ANA_ALARM_X_START - ANA_ALARM_RADIUS - 1,
         ANA_ALARM_Y_START - ANA_ALARM_RADIUS - 1, ANA_ALARM_RADIUS * 2 + 3,
-        ANA_ALARM_RADIUS * 2 + 3, mcBgColor);
-      mcU8Util1 = GLCD_FALSE;
+        ANA_ALARM_RADIUS * 2 + 3);
+      glcdColorSetFg();
+      mcU8Util1 = MC_FALSE;
     }
   }
 
   // Set alarm blinking state in case we're alarming
-  if (mcAlarming == GLCD_TRUE && (mcCycleCounter & 0x08) == 8)
-    newAlmDisplayState = GLCD_TRUE;
+  if (mcAlarming == MC_TRUE && (mcCycleCounter & 0x08) == 8)
+    newAlmDisplayState = MC_TRUE;
 
   // Make alarm area blink during alarm or cleanup after end of alarm
   if (newAlmDisplayState != mcU8Util1)
@@ -329,7 +331,7 @@ static void analogAlarmAreaUpdate(void)
     mcU8Util1 = newAlmDisplayState;
     glcdFillRectangle2(ANA_ALARM_X_START - ANA_ALARM_RADIUS - 1,
       ANA_ALARM_Y_START - ANA_ALARM_RADIUS - 1, ANA_ALARM_RADIUS * 2 + 3,
-      ANA_ALARM_RADIUS * 2 + 3, ALIGN_AUTO, FILL_INVERSE, mcBgColor);
+      ANA_ALARM_RADIUS * 2 + 3, ALIGN_AUTO, FILL_INVERSE);
   }
 }
 
@@ -355,27 +357,28 @@ static u08 analogElementCalc(s08 position[], s08 positionNew[], float radial,
   for (i = 0; i < legsCheck; i++)
   {
     if (position[i] != positionNew[i])
-      return GLCD_TRUE;
+      return MC_TRUE;
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
 // Function: analogElementDraw
 //
-// Draw an arrow or needle in the analog clock
+// Draw an arrow or needle in the analog clock. Depending on the active draw
+// color it is drawn or removed.
 //
-static void analogElementDraw(s08 position[], u08 color)
+static void analogElementDraw(s08 position[])
 {
   // An arrow consists of three points, so draw lines between each of them. If
   // it turns out to be a needle only draw the first line.
-  glcdLine(position[0], position[1], position[2], position[3], color);
+  glcdLine(position[0], position[1], position[2], position[3]);
   if (position[2] != ANA_X_START || position[3] != ANA_Y_START)
   {
     // We're dealing with an arrow so draw the other two lines
-    glcdLine(position[0], position[1], position[4], position[5], color);
-    glcdLine(position[2], position[3], position[4], position[5], color);
+    glcdLine(position[0], position[1], position[4], position[5]);
+    glcdLine(position[2], position[3], position[4], position[5]);
   }
 }
 
@@ -413,8 +416,8 @@ static void analogInit(u08 mode)
   if (mode == DRAW_INIT_FULL)
   {
     // Draw static clock layout
-    glcdCircle2(ANA_X_START, ANA_Y_START, ANA_RADIUS, CIRCLE_FULL, mcFgColor);
-    glcdDot(ANA_X_START, ANA_Y_START, mcFgColor);
+    glcdCircle2(ANA_X_START, ANA_Y_START, ANA_RADIUS, CIRCLE_FULL);
+    glcdDot(ANA_X_START, ANA_Y_START);
 
     // Paint 5-minute and 15 minute markers in clock
     for (i = 0; i < 12; i++)
@@ -422,7 +425,7 @@ static void analogInit(u08 mode)
       // The 5-minute markers
       dxDot = (s08)(sin(2L * M_PI / 12L * i) * ANA_DOT_RADIUS);
       dyDot = (s08)(-cos(2L * M_PI / 12L * i) * ANA_DOT_RADIUS);
-      glcdDot(ANA_X_START + dxDot, ANA_Y_START + dyDot, mcFgColor);
+      glcdDot(ANA_X_START + dxDot, ANA_Y_START + dyDot);
 
       // The additional 15-minute markers
       if (i % 3 == 0)
@@ -435,7 +438,7 @@ static void analogInit(u08 mode)
           dyDot++;
         else
           dxDot--;
-        glcdDot(ANA_X_START + dxDot, ANA_Y_START + dyDot, mcFgColor);
+        glcdDot(ANA_X_START + dxDot, ANA_Y_START + dyDot);
       }
     }
 
@@ -456,15 +459,17 @@ static void analogInit(u08 mode)
     }
 
     // Init alarm blink state
-    mcU8Util1 = GLCD_FALSE;
+    mcU8Util1 = MC_FALSE;
   }
-  else if (mcU8Util3 == GLCD_FALSE)
+  else if (mcU8Util3 == MC_FALSE)
   {
     // Assume this is a partial init from an analog HMS clock to an analog HM
     // clock. So, we should remove the seconds needle.
-    analogElementDraw(posSec, mcBgColor);
+    glcdColorSetBg();
+    analogElementDraw(posSec);
+    glcdColorSetFg();
 
     // Restore dot at center of clock
-    glcdDot(ANA_X_START, ANA_Y_START, mcFgColor);
+    glcdDot(ANA_X_START, ANA_Y_START);
   }
 }

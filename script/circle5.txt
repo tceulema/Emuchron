@@ -13,6 +13,7 @@
 #
 
 le
+psf
 
 # Set location and radius of filled circle to draw
 vs xCenter=64
@@ -36,10 +37,10 @@ rf true x<=y true
         vs drawSize=2*drawSize
       ien
       hm draw type 1
-      prf f xCenter-x yCenter-y drawSize+1 y*2+1 2 0
+      prf xCenter-x yCenter-y drawSize+1 y*2+1 2 0
       iif x!=0
         hm draw type 2
-        prf f xCenter+y yCenter-x 1 x*2+1 2 0
+        prf xCenter+y yCenter-x 1 x*2+1 2 0
       ien
     ien
   ien
@@ -47,14 +48,14 @@ rf true x<=y true
   iif x!=0
     iif tswitch>=0&&firstDraw==false
       hm draw type 3
-      prf f xCenter+x-drawSize yCenter-y drawSize+1 y*2+1 2 0
+      prf xCenter+x-drawSize yCenter-y drawSize+1 y*2+1 2 0
     ien
     iif tswitch>=0
       iif x!=y
         vs drawSize=0
       ien
       hm draw type 4
-      prf f xCenter-y yCenter-x drawSize+1 x*2+1 2 0
+      prf xCenter-y yCenter-x drawSize+1 x*2+1 2 0
     ien
   ien
 
@@ -74,5 +75,5 @@ rf true x<=y true
   w 0
 rn
 
-prf f 0 yCenter 128 1 2 2
-prf f xCenter 0 1 64 2 2
+prf 0 yCenter 128 1 2 2
+prf xCenter 0 1 64 2 2

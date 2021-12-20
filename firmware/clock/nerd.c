@@ -3,13 +3,7 @@
 // Title    : Animation code for MONOCHRON nerd clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "nerd.h"
@@ -49,7 +43,6 @@ extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcFgColor;
 
 // Display definitions for the binary, octal and hex clock elements
 static const unsigned char __attribute__ ((progmem)) nerdFormat[] =
@@ -87,7 +80,7 @@ void nerdCycle(void)
   animADAreaUpdate(NERD_ALARM_X_START, NERD_ALARM_Y_START, AD_AREA_ALM_ONLY);
 
   // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
+  if (mcClockTimeEvent == MC_FALSE && mcClockInit == MC_FALSE)
     return;
 
   DEBUGP("Update Nerd");
@@ -108,14 +101,14 @@ void nerdInit(u08 mode)
   DEBUGP("Init Nerd");
 
   // Draw clock header and fixed elements for the individual nerd clocks
-  glcdPutStr2(9,   1, FONT_5X5P, "*** binary/octal/hex clock ***", mcFgColor);
-  glcdPutStr2(37,  8, FONT_5X5P, "(h:m:s - d/m/y)", mcFgColor);
-  glcdPutStr2(48, 17, FONT_5X5P, ":            :", mcFgColor);
-  glcdPutStr2(38, 24, FONT_5X5P, "/        /", mcFgColor);
-  glcdPutStr2(44, 33, FONT_5X5P, "o    :o    :o", mcFgColor);
-  glcdPutStr2(38, 40, FONT_5X5P, "o    /o    /o", mcFgColor);
-  glcdPutStr2(38, 49, FONT_5X5P, "o\\    :o\\    :o\\", mcFgColor);
-  glcdPutStr2(36, 56, FONT_5X5P, "o\\    /o\\  /o\\", mcFgColor);
+  glcdPutStr2(9,   1, FONT_5X5P, "*** binary/octal/hex clock ***");
+  glcdPutStr2(37,  8, FONT_5X5P, "(h:m:s - d/m/y)");
+  glcdPutStr2(48, 17, FONT_5X5P, ":            :");
+  glcdPutStr2(38, 24, FONT_5X5P, "/        /");
+  glcdPutStr2(44, 33, FONT_5X5P, "o    :o    :o");
+  glcdPutStr2(38, 40, FONT_5X5P, "o    /o    /o");
+  glcdPutStr2(38, 49, FONT_5X5P, "o\\    :o\\    :o\\");
+  glcdPutStr2(36, 56, FONT_5X5P, "o\\    /o\\  /o\\");
 }
 
 //
@@ -163,7 +156,7 @@ static void nerdPrintNumber(u08 maskLen, u08 digits, u16 oldVal, u16 newVal,
   u08 idx = NERD_ITEM_LEN - 2;		// Index in numberStr
 
   // First check if we need to do anything
-  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+  if (oldVal == newVal && mcClockInit == MC_FALSE)
     return;
 
   // Get the clock display metadata
@@ -203,5 +196,5 @@ static void nerdPrintNumber(u08 maskLen, u08 digits, u16 oldVal, u16 newVal,
   }
 
   // Print the generated string
-  glcdPutStr2(x, y, FONT_5X5P, &numberStr[idx], mcFgColor);
+  glcdPutStr2(x, y, FONT_5X5P, &numberStr[idx]);
 }

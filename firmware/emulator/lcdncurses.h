@@ -6,7 +6,7 @@
 #ifndef LCDNCURSES_H
 #define LCDNCURSES_H
 
-// Max length ncurses tty and the file in $HOME holding the default tty
+// Max length ncurses tty and the file in MCHRON_CONFIG holding the default tty
 #define NCURSES_TTYLEN		100
 #define NCURSES_TTYFILE		"/tty"
 

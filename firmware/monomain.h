@@ -8,46 +8,10 @@
 
 #include "avrlibtypes.h"
 
-// Version of our emuchron code base
-#define EMUCHRON_VERSION	"v6.2"
-
-// Debugging macros.
-// Note that DEBUGGING is the master switch for generating debug output.
-// 0 = Off, 1 = On
-#define DEBUGGING	0
-#define DEBUG(x)	if (DEBUGGING) { x; }
-#define DEBUGP(x)	DEBUG(putstring_nl(x))
-// Select to report debug entries for time change events
-#define DEBUGTIME	1
-#define DEBUGT(x)	if (DEBUGGING && DEBUGTIME) { x; }
-#define DEBUGTP(x)	DEBUGT(putstring_nl(x))
-
-// Display backlight. Allows software control of backlight, assuming you
-// mounted your 100ohm resistor in R2.
-// 0 = Off, 1 = On
-#define BACKLIGHT_ADJUST	1
-
 // Define application clock cycle msec timer value for animation and keypress
 // handling. Note that redrawing takes some time too so you don't want this too
 // small or your clock will 'hiccup' and appear jittery.
 #define ANIM_TICK_CYCLE_MS	75
-
-// Lcd backlight brightness related constants
-#define OCR2B_BITSHIFT	0
-#define OCR2B_PLUS	1
-#define OCR2A_VALUE	16
-
-// Pin definitions for alarm switch and piezo speaker.
-// Note: There's more in ks0108.h [firmware] for the display.
-#define ALARM_PORT	PORTB
-#define ALARM_PIN	PINB
-#define ALARM_DDR	DDRB
-#define ALARM		6
-
-#define PIEZO_PORT	PORTC
-#define PIEZO_PIN	PINC
-#define PIEZO_DDR	DDRC
-#define PIEZO		3
 
 // Constants for how to display time & date. Those commented out are no longer
 // supported, and related code has been removed from the code base.
@@ -118,8 +82,6 @@ void almTimeGet(uint8_t alarmId, volatile uint8_t *hour,
 void almTimeSet(uint8_t alarmId, volatile uint8_t hour, volatile uint8_t min);
 
 // Function prototypes for the real time clock
-uint8_t rtcDotw(uint8_t mon, uint8_t day, uint8_t year);
-uint8_t rtcLeapYear(uint16_t year);
 void rtcMchronTimeInit(void);
 void rtcTimeInit(void);
 uint8_t rtcTimeRead(void);
@@ -134,5 +96,6 @@ void monoTimer(void);
 // Miscellaneous
 void eepInit(void);
 void beep(uint16_t freq, uint8_t duration);
+uint8_t bcdDecode(uint8_t x, uint8_t nibbleMask);
 uint8_t bcdEncode(uint8_t x);
 #endif

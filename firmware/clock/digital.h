@@ -6,6 +6,8 @@
 #ifndef DIGITAL_H
 #define DIGITAL_H
 
+#include "../avrlibtypes.h"
+
 // Basic digital clock
 void digitalCycle(void);
 void digitalHmInit(u08 mode);

@@ -6,6 +6,8 @@
 #ifndef ANIM_H
 #define ANIM_H
 
+#include "avrlibtypes.h"
+
 // Define the supported clocks
 #define CHRON_NONE		0
 #define CHRON_ANALOG_HMS	1
@@ -46,11 +48,11 @@
 #define ALARM_SWITCH_ON		1
 #define ALARM_SWITCH_OFF	2
 
-// Define what is present in a default alarm/date area
-#define AD_AREA_ALM_ONLY	0
-#define AD_AREA_ALM_DATE	1
-#define AD_AREA_DATE_ONLY	2
-#define AD_AREA_AD_WIDTH	23
+// Define content in a default alarm/date area, depending on alarm switch
+#define AD_AREA_ALM_ONLY	0	// Alarm (on) or blank (off)
+#define AD_AREA_ALM_DATE	1	// Alarm (on) or Date (off)
+#define AD_AREA_DATE_ONLY	2	// Date (on/off)
+#define AD_AREA_AD_WIDTH	23	// Witdh of area (do NOT change)
 
 // Structure defining the clock_init/clock_cycle/pressed_button methods
 // for a single clock. For a clock the init and cycle methods are required
@@ -73,4 +75,8 @@ u08 animClockNext(void);
 void animADAreaUpdate(u08 x, u08 y, u08 type);
 void animValToStr(u08 value, char valString[]);
 void animWelcome(void);
+
+// Generic calendar utility functions
+uint8_t calDotw(uint8_t mon, uint8_t day, uint8_t year);
+uint8_t calLeapYear(uint16_t year);
 #endif

@@ -6,6 +6,8 @@
 #ifndef BIGDIG_H
 #define BIGDIG_H
 
+#include "../avrlibtypes.h"
+
 // Puzzle clock
 void bigDigButton(u08 pressedButton);
 void bigDigCycle(void);

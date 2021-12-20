@@ -5,8 +5,8 @@
 #
 
 # Set max clock value and exclude performance test clock id
-vs maxClock=24
-vs perfTest=24
+vs maxClock=26
+vs perfTest=26
 
 # Run all clocks
 rf clock=1 clock<=maxClock clock=clock+1

@@ -13,7 +13,8 @@
 #include "lcdglut.h"
 
 // This is ugly:
-// Why can't we include the GLCD_* defs below from ks0108conf.h and ks0108.h?
+// Why can't we include the GLCD_*/MC_* defs below from ks0108conf.h, glcd.h
+// and global.h?
 // The reason for this is that headers in glut and avr define identical
 // typedefs like uint32_t, making it impossible to compile glut code in an avr
 // environment.
@@ -31,10 +32,10 @@
   ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
 #define GLCD_CONTROLLER_XPIXBITS 6
 #define GLCD_CONTROLLER_YPIXMASK 0x3f
-#define GLCD_FALSE		0
-#define GLCD_TRUE		1
 #define GLCD_OFF		0
 #define GLCD_ON			1
+#define MC_FALSE		0
+#define MC_TRUE			1
 
 // Get time diff between two timestamps in usec
 #define TIMEDIFF_USEC(a,b)	\
@@ -80,8 +81,8 @@
 #define GLUT_DBLCLICK_MS	250
 
 // The number of glut messages per message buffer malloc (= 2^bits)
-#define GLUT_MSGS_BUFFER_BITS	6
-#define GLUT_MSGS_PER_BUFFER	(0x1 << (GLUT_MSGS_BUFFER_BITS - 1))
+#define GLUT_MSGS_BUFFER_BITS	5
+#define GLUT_MSGS_PER_BUFFER	(0x1 << GLUT_MSGS_BUFFER_BITS)
 #define GLUT_MSGS_MASK		(GLUT_MSGS_PER_BUFFER - 1)
 
 // The lcd message queue commands
@@ -149,7 +150,7 @@ static unsigned char lcdGlutImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 // The glut window thread we create that opens and manages the OpenGL/Glut
 // window and processes messages in the lcd message queue
 static pthread_t threadGlut;
-static unsigned char deviceActive = GLCD_FALSE;
+static unsigned char deviceActive = MC_FALSE;
 static int winGlutWin;
 
 // Start and end of lcd message queue and length
@@ -164,28 +165,28 @@ static pthread_mutex_t mutexQueue = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mutexStats = PTHREAD_MUTEX_INITIALIZER;
 
 // Identifiers to signal certain glut tasks
-static unsigned char winExit = GLCD_FALSE;
-static unsigned char winRedraw = GLCD_TRUE;
+static unsigned char winExit = MC_FALSE;
+static unsigned char winRedraw = MC_TRUE;
 
 // Identifiers controlling temporary display of window pixel size
 // info after a window resize
-static unsigned char winRedrawFirst = GLCD_FALSE;
-static unsigned char winResize = GLCD_FALSE;
-static unsigned char winShowWinSize = GLCD_FALSE;
+static unsigned char winRedrawFirst = MC_FALSE;
+static unsigned char winResize = MC_FALSE;
+static unsigned char winShowWinSize = MC_FALSE;
 static struct timeval tvWinReshapeLast;
 
 // Identifiers right-button down event and pixel highlight location
-static unsigned char winRButtonEvent = GLCD_FALSE;
+static unsigned char winRButtonEvent = MC_FALSE;
 static int winRButtonX = 0;
 static int winRButtonY = 0;
-static unsigned char winPixHighlight = GLCD_FALSE;
+static unsigned char winPixHighlight = MC_FALSE;
 static int winPixGlcdX = 0;
 static int winPixGlcdY = 0;
 
 // Identifiers left-button double-click event
 lcdGlutGlcdPix_t lcdGlutGlcdPix;
 static struct timeval tvWinLeftMouseLastHit;
-static unsigned char winLButtonEvent = GLCD_TRUE;
+static unsigned char winLButtonEvent = MC_TRUE;
 static int winLButtonX = 0;
 static int winLButtonY = 0;
 
@@ -206,8 +207,8 @@ static struct timeval tvWinKbLastHit;
 static unsigned char winKbKeyCount;
 
 // Indicator to draw window pixel bezels and gridlines
-static unsigned char winGridLines = GLCD_FALSE;
-static unsigned char winPixelBezel = GLCD_FALSE;
+static unsigned char winGridLines = MC_FALSE;
+static unsigned char winPixelBezel = MC_FALSE;
 
 // Local function prototypes
 static void lcdGlutClose(void);
@@ -252,7 +253,7 @@ void lcdGlutBacklightSet(unsigned char backlight)
 void lcdGlutCleanup(void)
 {
   // Nothing to do if the glut environment is not initialized
-  if (deviceActive == GLCD_FALSE)
+  if (deviceActive == MC_FALSE)
     return;
 
   // Add msg to queue to exit glut thread
@@ -260,7 +261,7 @@ void lcdGlutCleanup(void)
 
   // Wait for glut thread to exit
   pthread_join(threadGlut, NULL);
-  deviceActive = GLCD_FALSE;
+  deviceActive = MC_FALSE;
 }
 
 //
@@ -273,7 +274,7 @@ static void lcdGlutClose(void)
   // Attempt to shutdown gracefully
   glutCloseFunc(NULL);
   glutDestroyWindow(winGlutWin);
-  deviceActive = GLCD_FALSE;
+  deviceActive = MC_FALSE;
   lcdGlutInitArgs.winClose();
 }
 
@@ -340,8 +341,8 @@ void lcdGlutHighlightSet(unsigned char highlight, unsigned char x,
 unsigned char lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
 {
   // Nothing to do if the glut environment is already initialized
-  if (deviceActive == GLCD_TRUE)
-    return GLCD_TRUE;
+  if (deviceActive == MC_TRUE)
+    return MC_TRUE;
 
   // Reset the glut statistics
   lcdGlutStatsReset();
@@ -349,14 +350,11 @@ unsigned char lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
   // Copy initial glut window geometry and position
   lcdGlutInitArgs = *lcdGlutInitArgsSet;
 
-  // Set initial timestamp for double left-click
-  gettimeofday(&tvWinLeftMouseLastHit, NULL);
-
   // Create the glut thread with lcdGlutMain() as main event loop
   (void)pthread_create(&threadGlut, NULL, lcdGlutMain, (void *)createMsg);
-  deviceActive = GLCD_TRUE;
+  deviceActive = MC_TRUE;
 
-  return GLCD_TRUE;
+  return MC_TRUE;
 }
 
 //
@@ -403,7 +401,7 @@ static void lcdGlutKeyboard(unsigned char key, int x, int y)
   for (k = 0; k < GLCD_XPIXELS; k++)
     for (l = 0; l < GLCD_YPIXELS / 8; l++)
       lcdGlutImage[k][l] = ~(lcdGlutImage[k][l]);
-  winRedraw = GLCD_TRUE;
+  winRedraw = MC_TRUE;
   lcdGlutRender();
 
   // Wait 0.1 sec (this will lower the fps statistic)
@@ -416,7 +414,7 @@ static void lcdGlutKeyboard(unsigned char key, int x, int y)
   for (k = 0; k < GLCD_XPIXELS; k++)
     for (l = 0; l < GLCD_YPIXELS / 8; l++)
       lcdGlutImage[k][l] = ~(lcdGlutImage[k][l]);
-  winRedraw = GLCD_TRUE;
+  winRedraw = MC_TRUE;
   lcdGlutRender();
 
   // Set time offset for next blink
@@ -438,12 +436,15 @@ static void *lcdGlutMain(void *ptr)
   memset(lcdGlutImage, 0, sizeof(lcdGlutImage));
   for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
   {
-    lcdGlutCtrl[controller].display = GLCD_FALSE;
+    lcdGlutCtrl[controller].display = MC_FALSE;
     lcdGlutCtrl[controller].startLine = 0;
     lcdGlutCtrl[controller].winPixMajority =
       -GLCD_CONTROLLER_XPIXELS * GLCD_CONTROLLER_YPIXELS / 2;
-    lcdGlutCtrl[controller].drawInit = GLCD_FALSE;
+    lcdGlutCtrl[controller].drawInit = MC_FALSE;
   }
+
+  // Set initial timestamp for double left-click event
+  gettimeofday(&tvWinLeftMouseLastHit, NULL);
 
   // Init our glut environment
   myArgv[0] = (char *)ptr;
@@ -467,7 +468,7 @@ static void *lcdGlutMain(void *ptr)
   winKbKeyCount = 0;
 
   // Main glut process loop until we signal shutdown
-  while (winExit == GLCD_FALSE)
+  while (winExit == MC_FALSE)
   {
     // Statistics
     pthread_mutex_lock(&mutexStats);
@@ -510,8 +511,8 @@ static void lcdGlutMouse(int button, int state, int x, int y)
 {
   if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN)
   {
-    winRedraw = GLCD_TRUE;
-    winRButtonEvent = GLCD_TRUE;
+    winRedraw = MC_TRUE;
+    winRButtonEvent = MC_TRUE;
     winRButtonX = x;
     winRButtonY = y;
   }
@@ -528,8 +529,7 @@ static void lcdGlutMouse(int button, int state, int x, int y)
     if (timeDiff / 1000 < GLUT_DBLCLICK_MS)
     {
       // Registered a double-click
-      winRedraw = GLCD_TRUE;
-      winLButtonEvent = GLCD_TRUE;
+      winLButtonEvent = MC_TRUE;
       winLButtonX = x;
       winLButtonY = y;
     }
@@ -638,7 +638,7 @@ static void lcdGlutMsgQueueProcess(void)
       // Draw monochron pixels in window. The controller has decided that the
       // new data differs from the current lcd data.
       controller = lcdGlutMsg->arg2 >> GLCD_CONTROLLER_XPIXBITS;
-      winRedraw = GLCD_TRUE;
+      winRedraw = MC_TRUE;
       msgByte = lcdGlutMsg->arg1;
       lcdByte = lcdGlutImage[lcdGlutMsg->arg2][lcdGlutMsg->arg3];
 
@@ -667,7 +667,7 @@ static void lcdGlutMsgQueueProcess(void)
       if (winBrightness != GLUT_BRIGHTNESS(lcdGlutMsg->arg1))
       {
         winBrightness = GLUT_BRIGHTNESS(lcdGlutMsg->arg1);
-        winRedraw = GLCD_TRUE;
+        winRedraw = MC_TRUE;
       }
     }
     else if (lcdGlutMsg->cmd == GLUT_CMD_DISPLAY)
@@ -676,7 +676,7 @@ static void lcdGlutMsgQueueProcess(void)
       if (lcdGlutCtrl[lcdGlutMsg->arg1].display != lcdGlutMsg->arg2)
       {
         lcdGlutCtrl[lcdGlutMsg->arg1].display = lcdGlutMsg->arg2;
-        winRedraw = GLCD_TRUE;
+        winRedraw = MC_TRUE;
       }
     }
     else if (lcdGlutMsg->cmd == GLUT_CMD_STARTLINE)
@@ -685,7 +685,7 @@ static void lcdGlutMsgQueueProcess(void)
       if (lcdGlutCtrl[lcdGlutMsg->arg1].startLine != lcdGlutMsg->arg2)
       {
         lcdGlutCtrl[lcdGlutMsg->arg1].startLine = lcdGlutMsg->arg2;
-        winRedraw = GLCD_TRUE;
+        winRedraw = MC_TRUE;
       }
     }
     else if (lcdGlutMsg->cmd == GLUT_CMD_OPTIONS)
@@ -694,13 +694,13 @@ static void lcdGlutMsgQueueProcess(void)
       if (winPixelBezel != lcdGlutMsg->arg1)
       {
         winPixelBezel = lcdGlutMsg->arg1;
-        winRedraw = GLCD_TRUE;
+        winRedraw = MC_TRUE;
       }
       // Enable/disable gridlines and force redraw
       if (winGridLines != lcdGlutMsg->arg2)
       {
         winGridLines = lcdGlutMsg->arg2;
-        winRedraw = GLCD_TRUE;
+        winRedraw = MC_TRUE;
       }
     }
     else if (lcdGlutMsg->cmd == GLUT_CMD_HIGHLIGHT)
@@ -712,13 +712,13 @@ static void lcdGlutMsgQueueProcess(void)
         winPixHighlight = lcdGlutMsg->arg1;
         winPixGlcdX = lcdGlutMsg->arg2;
         winPixGlcdY = lcdGlutMsg->arg3;
-        winRedraw = GLCD_TRUE;
+        winRedraw = MC_TRUE;
       }
     }
     else if (lcdGlutMsg->cmd == GLUT_CMD_EXIT)
     {
       // Signal to exit glut thread (when queue is processed)
-      winExit = GLCD_TRUE;
+      winExit = MC_TRUE;
     }
 
     // If at end of buffer go to next buffer, or get next message in buffer
@@ -763,8 +763,7 @@ static void lcdGlutPixelExtract(float arX, float arY, int winWidth,
   int winX, winY;
 
   // Only let it pass when feature is active and is unlocked
-  if (lcdGlutGlcdPix.active == GLCD_TRUE &&
-      lcdGlutGlcdPix.pixelLock == GLCD_FALSE)
+  if (lcdGlutGlcdPix.active == MC_TRUE && lcdGlutGlcdPix.pixelLock == MC_FALSE)
   {
     // Obtain window position in draw pixels
     winX = (int)((float) winLButtonX / winWidth * arX * GLUT_XPIXELS -
@@ -780,7 +779,7 @@ static void lcdGlutPixelExtract(float arX, float arY, int winWidth,
       controller = winPixGlcdX / GLCD_CONTROLLER_XPIXELS;
       lcdGlutGlcdPix.glcdY = (winY - 1 + lcdGlutCtrl[controller].startLine) %
         GLCD_CONTROLLER_YPIXELS;
-      lcdGlutGlcdPix.pixelLock = GLCD_TRUE;
+      lcdGlutGlcdPix.pixelLock = MC_TRUE;
     }
   }
 }
@@ -822,14 +821,14 @@ static void lcdGlutRender(void)
   }
 
   // Get data for a left double-click event
-  if (winLButtonEvent == GLCD_TRUE)
+  if (winLButtonEvent == MC_TRUE)
   {
     lcdGlutPixelExtract(arX, arY, winWidth, winHeight);
-    winLButtonEvent = GLCD_FALSE;
+    winLButtonEvent = MC_FALSE;
   }
 
   // Only do a redraw when requested
-  if (winRedraw == GLCD_FALSE)
+  if (winRedraw == MC_FALSE)
     return;
 
   // Statistics
@@ -857,8 +856,8 @@ static void lcdGlutRender(void)
   glutSwapBuffers();
 
   // Clear events
-  winRedraw = GLCD_FALSE;
-  winRButtonEvent = GLCD_FALSE;
+  winRedraw = MC_FALSE;
+  winRButtonEvent = MC_FALSE;
 }
 
 //
@@ -876,7 +875,7 @@ static void lcdGlutRenderBezel(float arX, int winWidth)
   // Draw pixel bezel lines only when requested and when a certain minimum
   // Monochron window pixel width has been reached, or else the bezel lines
   // will blur the actual pixels
-  if (winPixelBezel == GLCD_TRUE &&
+  if (winPixelBezel == MC_TRUE &&
       (float)winWidth * GLCD_XPIXELS / GLUT_XPIXELS / arX > GLUT_PIXBEZEL_WIDTH_PX)
   {
     // Draw from top to bottom
@@ -887,7 +886,7 @@ static void lcdGlutRenderBezel(float arX, int winWidth)
       {
         // Skip controller draw area when the controller is switched off as
         // there is nothing to draw
-        if (lcdGlutCtrl[controller].display == GLCD_FALSE)
+        if (lcdGlutCtrl[controller].display == MC_FALSE)
         {
           posX = posX + GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
           continue;
@@ -904,16 +903,16 @@ static void lcdGlutRenderBezel(float arX, int winWidth)
 
       // For drawing left to right first check if at least one controller is
       // enabled
-      if (lcdGlutCtrl[0].display == GLCD_TRUE ||
-          lcdGlutCtrl[1].display == GLCD_TRUE)
+      if (lcdGlutCtrl[0].display == MC_TRUE ||
+          lcdGlutCtrl[1].display == MC_TRUE)
       {
         // Skip controller draw area when it is switched off as there is
         // nothing to draw
         minX = -1L + GLUT_PIX_X_SIZE;
         maxX = 1L - GLUT_PIX_X_SIZE;
-        if (lcdGlutCtrl[0].display == GLCD_FALSE)
+        if (lcdGlutCtrl[0].display == MC_FALSE)
           minX = minX + GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
-        if (lcdGlutCtrl[1].display == GLCD_FALSE)
+        if (lcdGlutCtrl[1].display == MC_FALSE)
           maxX = maxX - GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
 
         // Draw horizontal lines
@@ -939,7 +938,7 @@ static void lcdGlutRenderGrid(void)
   unsigned char i;
 
   // Draw gridlines for testing purposes
-  if (winGridLines == GLCD_TRUE)
+  if (winGridLines == MC_TRUE)
   {
     glColor3f(GLUT_GRID_BRIGHTNESS, GLUT_GRID_BRIGHTNESS,
       GLUT_GRID_BRIGHTNESS);
@@ -992,12 +991,12 @@ static void lcdGlutRenderHighlight(float arX, float arY, int winWidth,
   char *c;
 
   // See if a pixel highlight on/off toggle event occurred
-  if (winRButtonEvent == GLCD_TRUE && winPixHighlight == GLCD_TRUE)
+  if (winRButtonEvent == MC_TRUE && winPixHighlight == MC_TRUE)
   {
     // Disable pixel highlight
-    winPixHighlight = GLCD_FALSE;
+    winPixHighlight = MC_FALSE;
   }
-  else if (winRButtonEvent == GLCD_TRUE && winPixHighlight == GLCD_FALSE)
+  else if (winRButtonEvent == MC_TRUE && winPixHighlight == MC_FALSE)
   {
     // Obtain window position in draw pixels
     winX = (int)((float) winRButtonX / winWidth * arX * GLUT_XPIXELS -
@@ -1009,7 +1008,7 @@ static void lcdGlutRenderHighlight(float arX, float arY, int winWidth,
     if (winX >= 1 && winX <= GLCD_XPIXELS && winY >= 1 && winY <= GLCD_YPIXELS)
     {
       // Enable pixel highlight and determine its location in glcd terms
-      winPixHighlight = GLCD_TRUE;
+      winPixHighlight = MC_TRUE;
       winPixGlcdX = winX - 1;
       controller = winPixGlcdX / GLCD_CONTROLLER_XPIXELS;
       winPixGlcdY = (winY - 1 + lcdGlutCtrl[controller].startLine) %
@@ -1018,7 +1017,7 @@ static void lcdGlutRenderHighlight(float arX, float arY, int winWidth,
   }
 
   // Draw highlighted glcd pixel when active
-  if (winPixHighlight == GLCD_TRUE)
+  if (winPixHighlight == MC_TRUE)
   {
     // Highlight the glcd pixel in red at 1.5 pixel size
     controller = winPixGlcdX / GLCD_CONTROLLER_XPIXELS;
@@ -1102,29 +1101,28 @@ static void lcdGlutRenderInit(void)
   // Find out which controllers have a majority of white pixels to draw
   for (controller = 0; controller < GLCD_NUM_CONTROLLERS; controller++)
   {
-    if (lcdGlutCtrl[controller].display == GLCD_TRUE &&
+    if (lcdGlutCtrl[controller].display == MC_TRUE &&
         lcdGlutCtrl[controller].winPixMajority >= 0)
-      lcdGlutCtrl[controller].drawInit = GLCD_TRUE;
+      lcdGlutCtrl[controller].drawInit = MC_TRUE;
     else
-      lcdGlutCtrl[controller].drawInit = GLCD_FALSE;
+      lcdGlutCtrl[controller].drawInit = MC_FALSE;
   }
 
   // Check the controller areas that must be initialized as white (with a
   // minority black pixels)
-  if (lcdGlutCtrl[0].drawInit == GLCD_TRUE &&
-      lcdGlutCtrl[1].drawInit == GLCD_TRUE)
+  if (lcdGlutCtrl[0].drawInit == MC_TRUE && lcdGlutCtrl[1].drawInit == MC_TRUE)
   {
     // Both controller areas must be initialized white
     minX = -1 + GLUT_PIX_X_SIZE;
     maxX = 1 - GLUT_PIX_X_SIZE;
   }
-  else if (lcdGlutCtrl[0].drawInit == GLCD_TRUE)
+  else if (lcdGlutCtrl[0].drawInit == MC_TRUE)
   {
     // Only controller 0 area must be initialized white
     minX = -1 + GLUT_PIX_X_SIZE;
     maxX = 0;
   }
-  else if (lcdGlutCtrl[1].drawInit == GLCD_TRUE)
+  else if (lcdGlutCtrl[1].drawInit == MC_TRUE)
   {
     // Only controller 1 area must be initialized white
     minX = 0;
@@ -1132,8 +1130,7 @@ static void lcdGlutRenderInit(void)
   }
 
   // Init the controller area(s) with a minority black pixels as white
-  if (lcdGlutCtrl[0].drawInit == GLCD_TRUE ||
-      lcdGlutCtrl[1].drawInit == GLCD_TRUE)
+  if (lcdGlutCtrl[0].drawInit == MC_TRUE || lcdGlutCtrl[1].drawInit == MC_TRUE)
   {
     glBegin(GL_QUADS);
       glColor3f(winBrightness, winBrightness, winBrightness);
@@ -1182,14 +1179,14 @@ static void lcdGlutRenderPixels(void)
     {
       // Skip controller draw area when the controller is switched off as there
       // is nothing to draw
-      if (lcdGlutCtrl[controller].display == GLCD_FALSE)
+      if (lcdGlutCtrl[controller].display == MC_FALSE)
       {
         posX = posX + GLCD_CONTROLLER_XPIXELS * GLUT_PIX_X_SIZE;
         continue;
       }
 
       // Set draw parameters based on area background color
-      if (lcdGlutCtrl[controller].drawInit == GLCD_TRUE)
+      if (lcdGlutCtrl[controller].drawInit == MC_TRUE)
       {
         // Draw black pixels in a white background
         pixValDraw = GLCD_OFF;
@@ -1281,7 +1278,7 @@ static void lcdGlutRenderPixels(void)
 //
 static void lcdGlutRenderSchedule(void)
 {
-  winRedraw = GLCD_TRUE;
+  winRedraw = MC_TRUE;
 }
 
 //
@@ -1300,7 +1297,7 @@ static void lcdGlutRenderSize(float arX, float arY, int winWidth,
   char *c;
 
   // Draw window pixel size info after resizing the window
-  if (winShowWinSize == GLCD_TRUE)
+  if (winShowWinSize == MC_TRUE)
   {
     // Get strings for window pixel size and Monochron draw area pixel size
     // and determine window pixel size in relation to the projection
@@ -1349,16 +1346,16 @@ static void lcdGlutRenderSize(float arX, float arY, int winWidth,
 //
 void lcdGlutReshape(int x, int y)
 {
-  if (winRedrawFirst == GLCD_FALSE)
+  if (winRedrawFirst == MC_FALSE)
   {
     // At startup ignore the first resize event
-    winRedrawFirst = GLCD_TRUE;
+    winRedrawFirst = MC_TRUE;
   }
   else
   {
     // Signal a resize event to show window pixel size info
     gettimeofday(&tvWinReshapeLast, NULL);
-    winResize = GLCD_TRUE;
+    winResize = MC_TRUE;
   }
 
   // Default glut behavior for dealing with window resize by end-user
@@ -1376,15 +1373,15 @@ void lcdGlutReshapeProcess(void)
   struct timeval tvNow;
   suseconds_t timeDiff;
 
-  if (winResize == GLCD_TRUE)
+  if (winResize == MC_TRUE)
   {
     // There has been a glut resize event. Clear it and begin showing
     // window pixel size info.
-    winResize = GLCD_FALSE;
-    winShowWinSize = GLCD_TRUE;
-    winRedraw = GLCD_TRUE;
+    winResize = MC_FALSE;
+    winShowWinSize = MC_TRUE;
+    winRedraw = MC_TRUE;
   }
-  else if (winShowWinSize == GLCD_TRUE)
+  else if (winShowWinSize == MC_TRUE)
   {
     // We are currently showing window pixel size info.
     // Stop doing so after a timeout.
@@ -1393,8 +1390,8 @@ void lcdGlutReshapeProcess(void)
     if (timeDiff / 1000 > GLUT_SHOW_PIXSIZE_MS)
     {
       // Timeout on showing the info so we must remove it
-      winShowWinSize = GLCD_FALSE;
-      winRedraw = GLCD_TRUE;
+      winShowWinSize = MC_FALSE;
+      winRedraw = MC_TRUE;
     }
   }
 }
@@ -1442,15 +1439,15 @@ void lcdGlutStatsPrint(void)
   if (lcdGlutStats.byteReq == 0)
     printf("bitEff=-%%\n");
   else
-    printf("bitEff=%d%%\n",
-      (int)(lcdGlutStats.bitCnf * 100 / (lcdGlutStats.byteReq * 8)));
+    printf("bitEff=%.0f%%\n",
+      lcdGlutStats.bitCnf * 100 / ((double)lcdGlutStats.byteReq * 8));
   printf("         msgTx=%llu, msgRx=%llu, maxQLen=%llu, ",
     lcdGlutStats.msgSend, lcdGlutStats.msgRcv, lcdGlutStats.queueMax);
   if (lcdGlutStats.queueEvents == 0)
     printf("avgQLen=-\n");
   else
-    printf("avgQLen=%llu\n",
-      lcdGlutStats.msgSend / lcdGlutStats.queueEvents);
+    printf("avgQLen=%.0f\n",
+      lcdGlutStats.msgSend / (double)lcdGlutStats.queueEvents);
   printf("         redraws=%llu, cycles=%llu, updates=%llu, ",
     lcdGlutStats.redraws, lcdGlutStats.ticks, lcdGlutStats.queueEvents);
   if (lcdGlutStats.ticks == 0)
@@ -1462,7 +1459,7 @@ void lcdGlutStatsPrint(void)
     // Get time elapsed since interface start time
     gettimeofday(&tvNow, NULL);
     diffDivider = (double)(TIMEDIFF_USEC(tvNow, lcdGlutStats.timeStart) / 1E6);
-    printf("fps=%3.1f\n", (double)lcdGlutStats.ticks / diffDivider);
+    printf("fps=%.1f\n", lcdGlutStats.ticks / diffDivider);
   }
 
   pthread_mutex_unlock(&mutexStats);

@@ -3,13 +3,7 @@
 // Title    : Animation code for MONOCHRON bar chart clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -34,7 +28,7 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 void spotBarChartCycle(void)
 {
   // Update common Spotfire clock elements and check if clock requires update
-  if (spotCommonUpdate() == GLCD_FALSE)
+  if (spotCommonUpdate() == MC_FALSE)
     return;
 
   DEBUGP("Update BarChart");

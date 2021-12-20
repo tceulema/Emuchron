@@ -6,15 +6,13 @@
 #ifndef EMULIN
 #include <util/delay.h>
 #include <avr/eeprom.h>
-#include "util.h"
-#else
-#include "emulator/stub.h"
-#include "emulator/stubrefs.h"
 #endif
+#include "global.h"
+#include "glcd.h"
+#include "anim.h"
+#include "ks0108.h"
 #include "monomain.h"
 #include "buttons.h"
-#include "ks0108.h"
-#include "glcd.h"
 #include "config.h"
 
 // Config display modes to navigate the menu and modify values
@@ -134,7 +132,7 @@ static void cfgEventPost(void)
 static uint8_t cfgEventPre(void)
 {
 #ifdef EMULIN
-  if (stubEventGet(GLCD_FALSE) == 'q')
+  if (stubEventGet(MC_FALSE) == 'q')
     cfgTickerActivity = 0;
 #endif
   // Copy current button and clear for next background button press
@@ -144,7 +142,7 @@ static uint8_t cfgEventPre(void)
   if (cfgButtonPressed & BTN_MENU)
   {
     // Menu button: move to next menu item
-    return GLCD_TRUE;
+    return MC_TRUE;
   }
   else if (cfgButtonPressed & BTN_SET)
   {
@@ -160,23 +158,23 @@ static uint8_t cfgEventPre(void)
   else if (cfgTickerActivity == 0)
   {
     // Timed out in menu item: exit config module
-    return GLCD_TRUE;
+    return MC_TRUE;
   }
 
   // Signal if a new time is present
   if (cfgTimeSec != rtcDateTime.timeSec)
   {
-    cfgTimeUpdate = GLCD_TRUE;
+    cfgTimeUpdate = MC_TRUE;
     cfgTimeSec = rtcDateTime.timeSec;
   }
   // Update the time in the menu when allowed and needed
-  if (cfgScreenLock == GLCD_FALSE && cfgTimeUpdate == GLCD_TRUE)
+  if (cfgScreenLock == MC_FALSE && cfgTimeUpdate == MC_TRUE)
   {
-    cfgTimeUpdate = GLCD_FALSE;
+    cfgTimeUpdate = MC_FALSE;
     cfgMenuTimeShow();
   }
 
-  return GLCD_FALSE;
+  return MC_FALSE;
 }
 
 //
@@ -186,33 +184,33 @@ static uint8_t cfgEventPre(void)
 //
 static void cfgMenuAlarm(void)
 {
-  uint8_t line = 255;
+  uint8_t line = MAX_UINT8_T;
 
   // Set parameters for alarm time/selector.
   // Only when all menu items are passed or when a no-press timeout occurs
   // return to caller.
-  cfgScreenLock = GLCD_TRUE;
+  cfgScreenLock = MC_TRUE;
   do
   {
     cfgTickerActivity = CFG_TICK_ACTIVITY_SEC;
     cfgCounterHold = 0;
     switch (line)
     {
-    case 255:
+    case MAX_UINT8_T:
       // Init -> Set Alarm 1
       DEBUGP("Alarm line 0");
-      glcdClearScreen(mcBgColor);
+      glcdClearScreen();
       line = 0;
       break;
     case 4:
       // Switch back to main menu
       DEBUGP("Return to config menu");
-      cfgScreenLock = GLCD_FALSE;
+      cfgScreenLock = MC_FALSE;
       return;
     default:
       // Set Alarm 2..4 and Alarm Id
       line++;
-      DEBUG(putstring("Alarm line "); uart_putw_dec(line); putstring_nl(""));
+      DEBUG(putstring("Alarm line "); uart_put_dec(line); putstring_nl(""));
       break;
     }
 
@@ -235,29 +233,29 @@ static void cfgMenuAlarmShow(void)
 
   DEBUGP("Display alarm menu");
   glcdSetAddress(0, 0);
-  glcdPutStrFg("Alarm Setup Menu");
+  glcdColorSetFg();
+  glcdPutStr("Alarm Setup Menu");
 
   // Print the four alarm times
   for (i = 1; i < 5; i++)
   {
     glcdSetAddress(CFG_MENU_INDENT, i);
-    glcdPutStrFg("Alarm ");
-    glcdPrintNumberFg(i);
-    glcdPutStrFg(":      ");
+    glcdPutStr("Alarm ");
+    glcdPrintNumber(i);
+    glcdPutStr(":      ");
     almTimeGet(i - 1, &alarmH, &alarmM);
-    glcdPrintNumberFg(alarmH);
-    glcdWriteCharFg(':');
-    glcdPrintNumberFg(alarmM);
+    glcdPrintNumber(alarmH);
+    glcdWriteChar(':');
+    glcdPrintNumber(alarmM);
   }
 
   // Print the selected alarm
   glcdSetAddress(CFG_MENU_INDENT, 5);
-  glcdPutStrFg("Select Alarm:     ");
-  glcdPrintNumberFg(almAlarmSelect + 1);
+  glcdPutStr("Select Alarm:     ");
+  glcdPrintNumber(almAlarmSelect + 1);
 
   // Clear the arrow area
-  glcdFillRectangle2(0, 8, CFG_MENU_INDENT - 1, 40, ALIGN_AUTO, FILL_FULL,
-    mcBgColor);
+  glcdFillRectangle2(0, 8, CFG_MENU_INDENT - 1, 40, ALIGN_AUTO, FILL_BLANK);
 }
 
 //
@@ -269,10 +267,10 @@ void cfgMenuMain(void)
 {
   uint8_t mode = SET_NONE;
 
-  glcdClearScreen(mcBgColor);
+  glcdClearScreen();
   cfgTimeSec = rtcDateTime.timeSec;
-  cfgTimeUpdate = GLCD_FALSE;
-  cfgScreenLock = GLCD_FALSE;
+  cfgTimeUpdate = MC_FALSE;
+  cfgScreenLock = MC_FALSE;
 
   // Only when all menu items are passed or when a no-press timeout occurs
   // return to caller
@@ -341,27 +339,27 @@ static void cfgMenuMainShow(char *line1, char *line2)
   DEBUGP("Display menu");
 
   glcdSetAddress(0, 0);
-  glcdPutStrFg("Configuration Menu   ");
-  glcdFillRectangle2(126, 0, 2, 8, ALIGN_AUTO, FILL_FULL, mcBgColor);
+  glcdColorSetFg();
+  glcdPutStr("Configuration Menu   ");
+  glcdFillRectangle2(126, 0, 2, 8, ALIGN_AUTO, FILL_BLANK);
   glcdSetAddress(CFG_MENU_INDENT, 1);
-  glcdPutStrFg("Alarm:         Setup");
+  glcdPutStr("Alarm:         Setup");
   glcdSetAddress(CFG_MENU_INDENT, 2);
-  glcdPutStrFg("Time:       ");
+  glcdPutStr("Time:       ");
   cfgMenuTimeShow();
   cfgPrintDate(rtcDateTime.dateYear, rtcDateTime.dateMon, rtcDateTime.dateDay,
     SET_DATE);
   cfgPrintDisplay(mcFgColor);
 #ifdef BACKLIGHT_ADJUST
   glcdSetAddress(CFG_MENU_INDENT, 5);
-  glcdPutStrFg("Backlight:        ");
-  glcdPrintNumberFg(OCR2B >> OCR2B_BITSHIFT);
+  glcdPutStr("Backlight:        ");
+  glcdPrintNumber(OCR2B >> OCR2B_BITSHIFT);
 #endif
   cfgPrintInstruct1(line1, line2);
-  glcdFillRectangle2(126, 48, 2, 16, ALIGN_AUTO, FILL_FULL, mcBgColor);
+  glcdFillRectangle2(126, 48, 2, 16, ALIGN_AUTO, FILL_BLANK);
 
   // Clear the arrow area
-  glcdFillRectangle2(0, 8, CFG_MENU_INDENT, 40, ALIGN_AUTO, FILL_FULL,
-    mcBgColor);
+  glcdFillRectangle2(0, 8, CFG_MENU_INDENT, 40, ALIGN_AUTO, FILL_BLANK);
 }
 
 //
@@ -372,11 +370,11 @@ static void cfgMenuMainShow(char *line1, char *line2)
 void cfgMenuTimeShow(void)
 {
   glcdSetAddress(CFG_MENU_INDENT + 12 * 6, 2);
-  glcdPrintNumberFg(rtcDateTime.timeHour);
-  glcdWriteCharFg(':');
-  glcdPrintNumberFg(rtcDateTime.timeMin);
-  glcdWriteCharFg(':');
-  glcdPrintNumberFg(rtcDateTime.timeSec);
+  glcdPrintNumber(rtcDateTime.timeHour);
+  glcdWriteChar(':');
+  glcdPrintNumber(rtcDateTime.timeMin);
+  glcdWriteChar(':');
+  glcdPrintNumber(rtcDateTime.timeSec);
 }
 
 //
@@ -396,7 +394,7 @@ static void cfgNextDate(uint8_t *year, uint8_t *month, uint8_t *day,
   {
     // Increment year
     newYear = cfgNextNumber(newYear, 100);
-    if (!rtcLeapYear(newYear) && newMonth == 2 && newDay > 28)
+    if (!calLeapYear(newYear) && newMonth == 2 && newDay > 28)
       newDay = 28;
   }
   else if (mode == EDIT_MONTH)
@@ -411,7 +409,7 @@ static void cfgNextDate(uint8_t *year, uint8_t *month, uint8_t *day,
     {
       if (newDay > 29)
         newDay = 29;
-      if (!rtcLeapYear(newYear) && newDay > 28)
+      if (!calLeapYear(newYear) && newDay > 28)
         newDay = 28;
     }
     else if (newMonth == 4 || newMonth == 6 || newMonth == 9 || newMonth == 11)
@@ -432,7 +430,7 @@ static void cfgNextDate(uint8_t *year, uint8_t *month, uint8_t *day,
     {
       if (newDay > 29)
         newDay = 1;
-      else if (!rtcLeapYear(newYear) && newDay > 28)
+      else if (!calLeapYear(newYear) && newDay > 28)
         newDay = 1;
     }
     else if (newMonth == 4 || newMonth == 6 || newMonth == 9 || newMonth == 11)
@@ -457,12 +455,12 @@ static void cfgNextDate(uint8_t *year, uint8_t *month, uint8_t *day,
 static uint8_t cfgNextNumber(uint8_t value, uint8_t maxVal)
 {
   // Reset fast increase upon hold release confirmation
-  if (btnHoldRelCfm == GLCD_TRUE)
+  if (btnHoldRelCfm == MC_TRUE)
   {
     if (DEBUGGING && cfgCounterHold == CFG_BTN_HOLD_COUNT)
       DEBUGP("+1");
     cfgCounterHold = 0;
-    btnHoldRelCfm = GLCD_FALSE;
+    btnHoldRelCfm = MC_FALSE;
   }
 
   if (btnHold)
@@ -470,9 +468,9 @@ static uint8_t cfgNextNumber(uint8_t value, uint8_t maxVal)
     // Press-hold: normal or fast increase
 
     // Request a confirmation on hold release
-    if (DEBUGGING && btnHoldRelReq == GLCD_FALSE)
+    if (DEBUGGING && btnHoldRelReq == MC_FALSE)
       DEBUGP("rlr");
-    btnHoldRelReq = GLCD_TRUE;
+    btnHoldRelReq = MC_TRUE;
 
     if (cfgCounterHold < CFG_BTN_HOLD_COUNT)
     {
@@ -513,12 +511,12 @@ static void cfgPrintAlarm(uint8_t line, uint8_t hour, uint8_t min,
   if (mode == EDIT_HOUR)
     glcdPrintNumberBg(hour);
   else
-    glcdPrintNumberFg(hour);
-  glcdWriteCharFg(':');
+    glcdPrintNumber(hour);
+  glcdWriteChar(':');
   if (mode == EDIT_MIN)
     glcdPrintNumberBg(min);
   else
-    glcdPrintNumberFg(min);
+    glcdPrintNumber(min);
 }
 
 //
@@ -528,9 +526,9 @@ static void cfgPrintAlarm(uint8_t line, uint8_t hour, uint8_t min,
 //
 static void cfgPrintArrow(u08 y)
 {
-  glcdFillRectangle(0, y, CFG_MENU_INDENT - 1, 1, mcFgColor);
-  glcdRectangle(CFG_MENU_INDENT - 3, y - 1, 1, 3, mcFgColor);
-  glcdRectangle(CFG_MENU_INDENT - 4, y - 2, 1, 5, mcFgColor);
+  glcdFillRectangle(0, y, CFG_MENU_INDENT - 1, 1);
+  glcdRectangle(CFG_MENU_INDENT - 3, y - 1, 1, 3);
+  glcdRectangle(CFG_MENU_INDENT - 4, y - 2, 1, 5);
 }
 
 //
@@ -542,26 +540,23 @@ static void cfgPrintDate(uint8_t year, uint8_t month, uint8_t day,
   uint8_t mode)
 {
   glcdSetAddress(CFG_MENU_INDENT, 3);
-  glcdPutStrFg("Date:");
-  glcdPutStrFg(animDays[rtcDotw(month, day, year)]);
-  glcdPutStr(animMonths[month - 1],
-    (mode == EDIT_MONTH) ? mcBgColor : mcFgColor);
-  glcdWriteCharFg(' ');
+  glcdPutStr("Date:");
+  glcdPutStr(animDays[calDotw(month, day, year)]);
+  if (mode == EDIT_MONTH)
+    glcdColorSetBg();
+  glcdPutStr(animMonths[month - 1]);
+  glcdColorSetFg();
+  glcdWriteChar(' ');
   if (mode == EDIT_DAY)
     glcdPrintNumberBg(day);
   else
-    glcdPrintNumberFg(day);
-  glcdWriteCharFg(',');
+    glcdPrintNumber(day);
+  glcdWriteChar(',');
   if (mode == EDIT_YEAR)
-  {
-    glcdPrintNumberBg(20);
-    glcdPrintNumberBg(year);
-  }
-  else
-  {
-    glcdPrintNumberFg(20);
-    glcdPrintNumberFg(year);
-  }
+    glcdColorSetBg();
+  glcdPrintNumber(20);
+  glcdPrintNumber(year);
+  glcdColorSetFg();
 }
 
 //
@@ -572,16 +567,19 @@ static void cfgPrintDate(uint8_t year, uint8_t month, uint8_t day,
 static void cfgPrintDisplay(uint8_t color)
 {
   glcdSetAddress(CFG_MENU_INDENT, 4);
-  glcdPutStrFg("Display:     ");
+  glcdPutStr("Display:     ");
   if (mcBgColor == GLCD_OFF)
   {
-    glcdPutStrFg(" ");
-    glcdPutStr("Normal", color);
+    glcdPutStr(" ");
+    glcdColorSet(color);
+    glcdPutStr("Normal");
   }
   else
   {
-    glcdPutStr("Inverse", color);
+    glcdColorSet(color);
+    glcdPutStr("Inverse");
   }
+  glcdColorSetFg();
 }
 
 //
@@ -592,11 +590,11 @@ static void cfgPrintDisplay(uint8_t color)
 static void cfgPrintInstruct1(char *line1, char *line2)
 {
   glcdSetAddress(0, 6);
-  glcdPutStrFg(line1);
+  glcdPutStr(line1);
   if (line2 != 0)
   {
     glcdSetAddress(0, 7);
-    glcdPutStrFg(line2);
+    glcdPutStr(line2);
   }
 }
 
@@ -608,13 +606,13 @@ static void cfgPrintInstruct1(char *line1, char *line2)
 static void cfgPrintInstruct2(char *line1b, char *line2b)
 {
   glcdSetAddress(0, 6);
-  glcdPutStrFg(CFG_INSTR_PREFIX_CHANGE);
-  glcdPutStrFg(line1b);
+  glcdPutStr(CFG_INSTR_PREFIX_CHANGE);
+  glcdPutStr(line1b);
   glcdSetAddress(0, 7);
-  glcdPutStrFg(CFG_INSTR_PREFIX_SET);
-  glcdPutStrFg(line2b);
+  glcdPutStr(CFG_INSTR_PREFIX_SET);
+  glcdPutStr(line2b);
   if (line2b[3] == '\0')
-    glcdPutStrFg(" ");
+    glcdPutStr(" ");
 }
 
 //
@@ -628,17 +626,17 @@ static void cfgPrintTime(uint8_t hour, uint8_t min, uint8_t sec, uint8_t mode)
   if (mode == EDIT_HOUR)
     glcdPrintNumberBg(hour);
   else
-    glcdPrintNumberFg(hour);
-  glcdWriteCharFg(':');
+    glcdPrintNumber(hour);
+  glcdWriteChar(':');
   if (mode == EDIT_MIN)
     glcdPrintNumberBg(min);
   else
-    glcdPrintNumberFg(min);
-  glcdWriteCharFg(':');
+    glcdPrintNumber(min);
+  glcdWriteChar(':');
   if (mode == EDIT_SEC)
     glcdPrintNumberBg(sec);
   else
-    glcdPrintNumberFg(sec);
+    glcdPrintNumber(sec);
 }
 
 //
@@ -666,7 +664,7 @@ static void cfgSetAlarm(uint8_t line)
 
   while (1)
   {
-    if (cfgEventPre() == GLCD_TRUE)
+    if (cfgEventPre() == MC_TRUE)
       return;
 
     if (cfgButtonPressed & BTN_SET)
@@ -704,7 +702,7 @@ static void cfgSetAlarm(uint8_t line)
         {
           // Save alarm number item
           glcdSetAddress(CFG_MENU_INDENT + 18 * 6, 5);
-          glcdPrintNumberFg(newAlarmSelect + 1);
+          glcdPrintNumber(newAlarmSelect + 1);
           eeprom_write_byte((uint8_t *)EE_ALARM_SELECT, newAlarmSelect);
           almAlarmSelect = newAlarmSelect;
           cfgPrintInstruct1(CFG_INSTR_EXIT, CFG_INSTR_SET);
@@ -732,7 +730,7 @@ static void cfgSetAlarm(uint8_t line)
         glcdSetAddress(CFG_MENU_INDENT + 18 * 6, 5);
         glcdPrintNumberBg(newAlarmSelect + 1);
         DEBUG(putstring("New alarm Id -> "));
-        DEBUG(uart_putw_dec(newAlarmSelect + 1));
+        DEBUG(uart_put_dec(newAlarmSelect + 1));
         DEBUG(putstring_nl(""));
       }
       else if (mode == EDIT_HOUR)
@@ -742,7 +740,7 @@ static void cfgSetAlarm(uint8_t line)
         if (newHour >= 24)
           newHour = 0;
         DEBUG(putstring("New alarm hour -> "));
-        DEBUG(uart_putw_dec(newHour));
+        DEBUG(uart_put_dec(newHour));
         DEBUG(putstring_nl(""));
       }
       else if (mode == EDIT_MIN)
@@ -750,7 +748,7 @@ static void cfgSetAlarm(uint8_t line)
         // Increment minute item
         newMin = cfgNextNumber(newMin, 60);
         DEBUG(putstring("New alarm min -> "));
-        DEBUG(uart_putw_dec(newMin));
+        DEBUG(uart_put_dec(newMin));
         DEBUG(putstring_nl(""));
       }
     }
@@ -775,7 +773,7 @@ static void cfgSetAlarmMenu(void)
 
   while (1)
   {
-    if (cfgEventPre() == GLCD_TRUE)
+    if (cfgEventPre() == MC_TRUE)
       return;
 
     if (cfgButtonPressed & BTN_SET)
@@ -804,7 +802,7 @@ static void cfgSetBacklight(void)
 
   while (1)
   {
-    if (cfgEventPre() == GLCD_TRUE)
+    if (cfgEventPre() == MC_TRUE)
     {
       eeprom_write_byte((uint8_t *)EE_BRIGHT, OCR2B >> OCR2B_BITSHIFT);
       return;
@@ -845,7 +843,7 @@ static void cfgSetBacklight(void)
       if (mode == EDIT_BRIGHTNESS)
         glcdPrintNumberBg(OCR2B >> OCR2B_BITSHIFT);
       else
-        glcdPrintNumberFg(OCR2B >> OCR2B_BITSHIFT);
+        glcdPrintNumber(OCR2B >> OCR2B_BITSHIFT);
     }
 
     cfgEventPost();
@@ -871,7 +869,7 @@ static void cfgSetDate(void)
 
   while (1)
   {
-    if (cfgEventPre() == GLCD_TRUE)
+    if (cfgEventPre() == MC_TRUE)
       return;
 
     if (cfgButtonPressed & BTN_SET)
@@ -938,7 +936,7 @@ static void cfgSetDisplay(void)
 
   while (1)
   {
-    if (cfgEventPre() == GLCD_TRUE)
+    if (cfgEventPre() == MC_TRUE)
     {
       eeprom_write_byte((uint8_t *)EE_BGCOLOR, mcBgColor);
       return;
@@ -980,7 +978,7 @@ static void cfgSetDisplay(void)
         cfgPrintArrow(35);
         cfgPrintDisplay(mcBgColor);
         DEBUG(putstring("New display type -> "));
-        DEBUG(uart_putw_dec(mcBgColor));
+        DEBUG(uart_put_dec(mcBgColor));
         DEBUG(putstring_nl(""));
       }
     }
@@ -1006,15 +1004,15 @@ static void cfgSetTime(void)
 
   while (1)
   {
-    if (cfgEventPre() == GLCD_TRUE)
+    if (cfgEventPre() == MC_TRUE)
     {
-      cfgScreenLock = GLCD_FALSE;
+      cfgScreenLock = MC_FALSE;
       return;
     }
 
     if (cfgButtonPressed & BTN_SET)
     {
-      cfgScreenLock = GLCD_TRUE;
+      cfgScreenLock = MC_TRUE;
       if (mode == SET_TIME)
       {
         // Fixate time to work on
@@ -1050,7 +1048,7 @@ static void cfgSetTime(void)
         rtcDateTime.timeMin = newMin;
         rtcDateTime.timeSec = newSec;
         rtcTimeWrite();
-        cfgScreenLock = GLCD_FALSE;
+        cfgScreenLock = MC_FALSE;
       }
     }
     if (cfgButtonPressed & BTN_PLUS || btnHold)

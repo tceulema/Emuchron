@@ -35,8 +35,10 @@ vs x=127.999
 vs y=63.999
 rf null true null
   iif rand()<ratio
-    pd b int(rand()*x) int(rand()*y)
+    psb
+    pd int(rand()*x) int(rand()*y)
   iel
-    pd f int(rand()*x) int(rand()*y)
+    psf
+    pd int(rand()*x) int(rand()*y)
   ien
 rn

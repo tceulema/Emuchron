@@ -3,13 +3,7 @@
 // Title    : Animation code for MONOCHRON thermometer clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -29,7 +23,6 @@
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
 static void spotThermUpdate(u08 x, u08 oldVal, u08 newVal);
@@ -42,7 +35,7 @@ static void spotThermUpdate(u08 x, u08 oldVal, u08 newVal);
 void spotThermCycle(void)
 {
   // Update common Spotfire clock elements and check if clock requires update
-  if (spotCommonUpdate() == GLCD_FALSE)
+  if (spotCommonUpdate() == MC_FALSE)
     return;
 
   DEBUGP("Update Thermometer");
@@ -73,14 +66,15 @@ void spotThermInit(u08 mode)
   for (i = 0; i <= 2; i++)
   {
     x = THERM_BOX_X_START + i * THERM_BOX_X_OFFSET_SIZE;
-    glcdRectangle(x, THERM_BOX_Y_START, THERM_BOX_WIDTH, THERM_BOX_LENGTH,
-      mcFgColor);
-    glcdDot(x, THERM_BOX_Y_START, mcBgColor);
-    glcdDot(x + THERM_BOX_WIDTH - 1, THERM_BOX_Y_START, mcBgColor);
+    glcdRectangle(x, THERM_BOX_Y_START, THERM_BOX_WIDTH, THERM_BOX_LENGTH);
+    glcdColorSetBg();
+    glcdDot(x, THERM_BOX_Y_START);
+    glcdDot(x + THERM_BOX_WIDTH - 1, THERM_BOX_Y_START);
+    glcdColorSetFg();
     glcdFillCircle2(x + THERM_BOX_X_OFFSET_MID, THERM_BULB_Y_START,
-      THERM_BULB_RADIUS, FILL_FULL, mcFgColor);
+      THERM_BULB_RADIUS, FILL_FULL);
     glcdCircle2(x + THERM_BOX_X_OFFSET_MID, THERM_BULB_Y_START,
-      THERM_BULB_RADIUS, CIRCLE_FULL, mcFgColor);
+      THERM_BULB_RADIUS, CIRCLE_FULL);
   }
 
   // Draw static axis part of thermometer
@@ -97,30 +91,31 @@ static void spotThermUpdate(u08 x, u08 oldVal, u08 newVal)
   u08 segmentOld, segmentNew;
   u08 fillOld, fillNew;
   u08 fillType;
-  u08 color;
   u08 vDraw;
   u08 height;
   u08 i;
   char thermValue[3];
 
   // See if we need to update the needle
-  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+  if (oldVal == newVal && mcClockInit == MC_FALSE)
     return;
 
   // Get thermometer 30-step fill level of old and new value
-  if (mcClockInit == GLCD_TRUE)
+  if (mcClockInit == MC_TRUE)
     fillOld = 0;
   else
     fillOld = oldVal / 2;
   fillNew = newVal / 2;
 
-  if (fillNew < fillOld && mcClockInit == GLCD_FALSE)
+  if (fillNew < fillOld && mcClockInit == MC_FALSE)
   {
     // Cleanup when new value is lower
+    glcdColorSetBg();
     glcdFillRectangle(x + 1, THERM_BOX_Y_START + 30 - fillOld,
-      THERM_BOX_WIDTH - 2, fillOld - fillNew, mcBgColor);
+      THERM_BOX_WIDTH - 2, fillOld - fillNew);
+    glcdColorSetFg();
   }
-  else if (fillNew > fillOld || mcClockInit == GLCD_TRUE)
+  else if (fillNew > fillOld || mcClockInit == MC_TRUE)
   {
     // A single thermometer is painted in three segments with decreasing
     // fill intensity. Determine what to draw per segment.
@@ -134,9 +129,9 @@ static void spotThermUpdate(u08 x, u08 oldVal, u08 newVal)
 
       // Determine how to draw
       if (i == 0 || (i == 1 && (x & 0x1) == 1))
-        color = mcBgColor;
+        glcdColorSetBg();
       else
-        color = mcFgColor;
+        glcdColorSetFg();
       if (i == 1)
         fillType = FILL_HALF;
       else
@@ -156,7 +151,7 @@ static void spotThermUpdate(u08 x, u08 oldVal, u08 newVal)
         {
           // Draw delta between old and new value in segment
           height = fillNew - fillOld;
-          if (mcClockInit == GLCD_TRUE)
+          if (mcClockInit == MC_TRUE)
             height++;
         }
         else
@@ -169,11 +164,13 @@ static void spotThermUpdate(u08 x, u08 oldVal, u08 newVal)
       // (Re)draw segment
       glcdFillRectangle2(x + 1,
         THERM_BOX_Y_START + 1 + 20 - 10 * i + (10 - vDraw),
-        THERM_BOX_WIDTH - 2, height, ALIGN_AUTO, fillType, color);
+        THERM_BOX_WIDTH - 2, height, ALIGN_AUTO, fillType);
     }
   }
 
   // Paint the thermometer value
+  glcdColorSetBg();
   animValToStr(newVal, thermValue);
-  glcdPutStr2(x, THERM_BULB_Y_START - 2, FONT_5X5P, thermValue, mcBgColor);
+  glcdPutStr2(x, THERM_BULB_Y_START - 2, FONT_5X5P, thermValue);
+  glcdColorSetFg();
 }

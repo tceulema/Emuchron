@@ -11,6 +11,7 @@
 # Clear display and show a static clock for 4 seconds
 hm --- press 'q' to quit ---
 le
+psf
 lds 1 1
 cs 4
 wts
@@ -34,7 +35,7 @@ wts
 rf null true null
   rf rn=0 rn<40 rn=rn+1
     # Set startline for both controllers
-    lss rand()*64 rand()*64
+    lss rand()*63 rand()*63
     wte 75
     tf
 

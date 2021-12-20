@@ -10,7 +10,7 @@
 #include <unistd.h>
 
 // Emuchron defines
-#include "stub.h"
+#include "stubrefs.h"
 
 // Load alarm info and Mario alarm data (when configured)
 #include "../mariotune.h"

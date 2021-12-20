@@ -3,13 +3,7 @@
 // Title    : Animation code for MONOCHRON traffic light clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -30,7 +24,6 @@
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Local function prototypes
 static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
@@ -44,7 +37,7 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
 void spotTrafLightCycle(void)
 {
   // Update common Spotfire clock elements and check if clock requires update
-  if (spotCommonUpdate() == GLCD_FALSE)
+  if (spotCommonUpdate() == MC_FALSE)
     return;
 
   DEBUGP("Update TrafficLight");
@@ -78,14 +71,13 @@ void spotTrafLightInit(u08 mode)
   for (i = 0; i <= 2; i++)
   {
     x = TRAF_BOX_X_START + i * TRAF_BOX_X_OFFSET_SIZE;
-    glcdRectangle(x, TRAF_BOX_Y_START, TRAF_BOX_WIDTH, TRAF_BOX_LENGTH,
-      mcFgColor);
+    glcdRectangle(x, TRAF_BOX_Y_START, TRAF_BOX_WIDTH, TRAF_BOX_LENGTH);
 
     // Each traffic light has three segments
     for (j = 0; j <= 2; j++)
       glcdCircle2(x + TRAF_SEG_X_OFFSET,
         TRAF_BOX_Y_START + TRAF_SEG_Y_OFFSET + j * TRAF_SEG_Y_OFFSET_SIZE,
-        TRAF_SEG_RADIUS, CIRCLE_FULL, mcFgColor);
+        TRAF_SEG_RADIUS, CIRCLE_FULL);
   }
 
   // Draw static axis part of trafficlight
@@ -102,19 +94,18 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
 {
   u08 segmentOld, segmentNew;
   u08 fillType;
-  u08 drawColor = mcFgColor;
 
   // See if we need to update the traffic light
   segmentOld = oldVal / segmentFactor;
   segmentNew = newVal / segmentFactor;
-  if (segmentOld == segmentNew && mcClockInit == GLCD_FALSE)
+  if (segmentOld == segmentNew && mcClockInit == MC_FALSE)
     return;
 
   // Clear old segment (clear content and redraw circle outline)
   glcdFillCircle2(x, y + segmentOld * TRAF_SEG_Y_OFFSET_SIZE, TRAF_SEG_RADIUS,
-    FILL_BLANK, mcFgColor);
+    FILL_BLANK);
   glcdCircle2(x, y + segmentOld * TRAF_SEG_Y_OFFSET_SIZE, TRAF_SEG_RADIUS,
-    CIRCLE_FULL, mcFgColor);
+    CIRCLE_FULL);
 
   // Define filltype and colordraw for new segment
   if (segmentNew == 0)
@@ -125,7 +116,7 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
   {
     fillType = FILL_HALF;
     if (x % 2 == 0)
-      drawColor = mcBgColor;
+      glcdColorSetBg();
   }
   else
   {
@@ -134,7 +125,8 @@ static void spotTrafSegmentUpdate(u08 x, u08 y, u08 segmentFactor, u08 oldVal,
 
   // Fill new segment (fill content and redraw circle outline)
   glcdFillCircle2(x, y + segmentNew * TRAF_SEG_Y_OFFSET_SIZE, TRAF_SEG_RADIUS,
-    fillType, drawColor);
+    fillType);
+  glcdColorSetFg();
   glcdCircle2(x, y + segmentNew * TRAF_SEG_Y_OFFSET_SIZE, TRAF_SEG_RADIUS,
-    CIRCLE_FULL, mcFgColor);
+    CIRCLE_FULL);
 }

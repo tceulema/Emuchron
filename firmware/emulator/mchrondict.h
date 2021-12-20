@@ -6,7 +6,7 @@
 #ifndef MCHRONDICT_H
 #define MCHRONDICT_H
 
-#include "../ks0108.h"
+#include "../ks0108conf.h"
 #include "mchron.h"
 
 // This macro returns a dictionary domain profile and its name
@@ -115,9 +115,9 @@ DOMAIN(domCharMode, \
 DOMAIN(domNumBacklight, \
   DOM_NUM_RANGE, NULL, 0, 16, "0 = dim .. 16 = bright");
 
-// Lcd color: 'b'ackground or 'f'oreground
-DOMAIN(domCharColor, \
-  DOM_CHAR_VAL, "bf", 0, 0, "b = background, f = foreground");
+// Lcd color: 0..1: 0 = GLCD_OFF, 1 = GLCD_ON
+DOMAIN(domNumColor, \
+  DOM_NUM_RANGE, NULL, 0, 1, "0 = Off, 1 = On");
 
 // Lcd controller id: 0..1
 DOMAIN(domNumController, \
@@ -251,9 +251,13 @@ DOMAIN(domStrComments, \
 DOMAIN(domStrFileName, \
   DOM_STRING, NULL, 0, 0, "full path or relative to startup directory mchron");
 
-// Help: command regex pattern
-DOMAIN(domStrPattern, \
-  DOM_STRING, NULL, 0, 0, "mchron command name regex pattern, '.' = all");
+// Help: command search property: 'a'rgument, 'd'escription, 'n'ame, '.' = all
+DOMAIN(domCharSearch, \
+  DOM_CHAR_VAL, "adn.", 0, 0, "a = argument, d = descr, n = name, . = all");
+
+// Help: command search regex pattern
+DOMAIN(domStrSearchPattern, \
+  DOM_STRING, NULL, 0, 0, "mchron command search regex pattern, '.' = all");
 
 // Number expression: info
 DOMAIN(domNumExpr, \
@@ -295,15 +299,6 @@ DOMAIN(domNumAssign, \
 cmdArg_t argComments[] =
 { { ARG_STRING, "comments",     &domStrComments } };
 
-// Command 'a*'
-// Argument profile for alarm switch position
-cmdArg_t argAlarmPos[] =
-{ { ARG_NUM,    "position",     &domNumOffOn } };
-// Argument profile for set alarm
-cmdArg_t argAlarmSet[] =
-{ { ARG_NUM,    "hour",         &domNumHour },
-  { ARG_NUM,    "min",          &domNumMinSec } };
-
 // Command 'b*'
 // Argument profile for beep
 cmdArg_t argBeep[] =
@@ -317,13 +312,6 @@ cmdArg_t argClockFeed[] =
 // Argument profile for clock select
 cmdArg_t argClockSelect[] =
 { { ARG_NUM,    "clock",        &domNumClock } };
-
-// Command 'd*'
-// Argument profile for date set
-cmdArg_t argDateSet[] =
-{ { ARG_NUM,    "day",          &domNumDay },
-  { ARG_NUM,    "month",        &domNumMonth },
-  { ARG_NUM,    "year",         &domNumYear } };
 
 // Command 'e'
 // Argument profile for execute command file
@@ -375,9 +363,10 @@ cmdArg_t argGrSaveFile[] =
   { ARG_STRING, "filename",     &domStrFileName } };
 
 // Command 'h*'
-// Argument profile for help command dictionary
+// Argument profile for help command dictionary using command name
 cmdArg_t argHelpCmd[] =
-{ { ARG_STRING, "pattern",      &domStrPattern } };
+{ { ARG_CHAR,   "search",       &domCharSearch },
+  { ARG_STRING, "pattern",      &domStrSearchPattern } };
 // Argument profile for help expression
 cmdArg_t argHelpExpr[] =
 { { ARG_NUM,    "value",        &domNumExpr } };
@@ -394,14 +383,12 @@ cmdArg_t argIf[] =
 { { ARG_NUM,    "condition",    &domNumCondition } };
 
 // Command 'l*'
+// Argument profile for set active lcd controller
+cmdArg_t argLcdActCtrlSet[] =
+{ { ARG_NUM,    "controller",   &domNumController } };
 // Argument profile for lcd backlight set
 cmdArg_t argLcdBacklightSet[] =
 { { ARG_NUM,    "backlight",    &domNumBacklight } };
-// Argument profile for controller cursor
-cmdArg_t argLcdCursorSet[] =
-{ { ARG_NUM,    "controller",   &domNumController },
-  { ARG_NUM,    "x",            &domNumCtrlPosX },
-  { ARG_NUM,    "yline",        &domNumCtrlPageY } };
 // Argument profile for controller display
 cmdArg_t argLcdDisplaySet[] =
 { { ARG_NUM,    "controller-0", &domNumOffOn },
@@ -419,27 +406,31 @@ cmdArg_t argLcdNcurGrSet[] =
 { { ARG_NUM,    "backlight",    &domNumOffOn } };
 // Argument profile for controller lcd read
 cmdArg_t argLcdRead[] =
-{ { ARG_NUM,    "controller",   &domNumController },
-  { ARG_STRING, "variable",     &domStrVarName } };
+{ { ARG_STRING, "variable",     &domStrVarName } };
 // Argument profile for controller lcd write
 cmdArg_t argLcdWrite[] =
-{ { ARG_NUM,    "controller",   &domNumController },
-  { ARG_NUM,    "data",         &domNumByteData } };
+{ { ARG_NUM,    "data",         &domNumByteData } };
 // Argument profile for controller startline
 cmdArg_t argLcdStartLineSet[] =
 { { ARG_NUM,    "controller-0", &domNumCtrlStartLine },
   { ARG_NUM,    "controller-1", &domNumCtrlStartLine } };
+// Argument profile for controller x cursor
+cmdArg_t argLcdXCursorSet[] =
+{ { ARG_NUM,    "x",            &domNumCtrlPosX } };
+// Argument profile for controller y cursor
+cmdArg_t argLcdYCursorSet[] =
+{ { ARG_NUM,    "yline",        &domNumCtrlPageY } };
 
 // Command 'm'
-// Argument profile for Monochron and eeprom emulator
+// Argument profile for Monochron application emulator
 cmdArg_t argMonochron[] =
 { { ARG_CHAR,   "mode",         &domCharMode } };
-
+// Argument profile for Monochron config pages emulator
 cmdArg_t argMonoConfig[] =
 { { ARG_CHAR,   "mode",         &domCharMode },
   { ARG_NUM,    "timeout",      &domNumOffOn },
   { ARG_NUM,    "restart",      &domNumOffOn } };
-
+// Argument profile for Monochron eeprom write
 cmdArg_t argEepromWrite[] =
 { { ARG_NUM,    "address",      &domNumKBAddress },
   { ARG_NUM,    "data",         &domNumByteData } };
@@ -447,8 +438,7 @@ cmdArg_t argEepromWrite[] =
 // Command 'p*'
 // Argument profile for paint ascii
 cmdArg_t argPaintAscii[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "x",            &domNumPosX },
+{ { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY },
   { ARG_STRING, "font",         &domWordFont },
   { ARG_CHAR,   "orientation",  &domCharOrient },
@@ -457,8 +447,7 @@ cmdArg_t argPaintAscii[] =
   { ARG_STRING, "text",         &domStrText } };
 // Argument profile for paint buffer
 cmdArg_t argPaintBuffer[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "buffer",       &domNumBufferId },
+{ { ARG_NUM,    "buffer",       &domNumBufferId },
   { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY },
   { ARG_NUM,    "xo",           &domNumElmXOffset },
@@ -467,70 +456,64 @@ cmdArg_t argPaintBuffer[] =
   { ARG_NUM,    "ysize",        &domNumImageYSize } };
 // Argument profile for paint buffer sprite
 cmdArg_t argPaintBufferSpr[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "buffer",       &domNumBufferId },
+{ { ARG_NUM,    "buffer",       &domNumBufferId },
   { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY },
   { ARG_NUM,    "frame",        &domNumFrame } };
 // Argument profile for paint buffer image
 cmdArg_t argPaintBufferImg[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "buffer",       &domNumBufferId },
+{ { ARG_NUM,    "buffer",       &domNumBufferId },
   { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY } };
 // Argument profile for paint circle
 cmdArg_t argPaintCircle[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "x",            &domNumPosX },
+{ { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY },
   { ARG_NUM,    "radius",       &domNumRadius },
   { ARG_NUM,    "pattern",      &domNumCirclePattern} };
 // Argument profile for paint circle filled
 cmdArg_t argPaintCircleFill[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "x",            &domNumPosX },
+{ { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY },
   { ARG_NUM,    "radius",       &domNumRadius },
   { ARG_NUM,    "pattern",      &domNumFillPattern } };
 // Argument profile for paint dot
 cmdArg_t argPaintDot[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "x",            &domNumPosX },
+{ { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY } };
 // Argument profile for paint line
 cmdArg_t argPaintLine[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "xstart",       &domNumPosX },
+{ { ARG_NUM,    "xstart",       &domNumPosX },
   { ARG_NUM,    "ystart",       &domNumPosY },
   { ARG_NUM,    "xend",         &domNumPosX },
   { ARG_NUM,    "yend",         &domNumPosY } };
 // Argument profile for paint number
 cmdArg_t argPaintNumber[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "x",            &domNumPosX },
+{ { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY },
   { ARG_STRING, "font",         &domWordFont },
   { ARG_CHAR,   "orientation",  &domCharOrient },
   { ARG_NUM,    "xscale",       &domNumScaleX },
   { ARG_NUM,    "yscale",       &domNumScaleY },
-  { ARG_NUM,    "value",       &domNumExpr },
+  { ARG_NUM,    "value",        &domNumExpr },
   { ARG_STRING, "format",       &domStrFormat } };
 // Argument profile for paint rectangle
 cmdArg_t argPaintRect[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "x",            &domNumPosX },
+{ { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY },
   { ARG_NUM,    "xsize",        &domNumXSize },
   { ARG_NUM,    "ysize",        &domNumYSize } };
 // Argument profile for paint rectangle filled
 cmdArg_t argPaintRectFill[] =
-{ { ARG_CHAR,   "color",        &domCharColor },
-  { ARG_NUM,    "x",            &domNumPosX },
+{ { ARG_NUM,    "x",            &domNumPosX },
   { ARG_NUM,    "y",            &domNumPosY },
   { ARG_NUM,    "xsize",        &domNumXSize },
   { ARG_NUM,    "ysize",        &domNumYSize },
   { ARG_NUM,    "align",        &domNumAlign },
   { ARG_NUM,    "pattern",      &domNumFillPattern } };
+// Argument profile for paint set draw color
+cmdArg_t argPaintSetColor[] =
+{ { ARG_NUM,    "color",        &domNumColor } };
 
 // Command 'r*'
 // Argument profile for repeat for
@@ -543,6 +526,18 @@ cmdArg_t argRepeatFor[] =
 // No additional profiles are needed
 
 // Command 't*'
+// Argument profile for alarm switch position
+cmdArg_t argTimeAlarmPos[] =
+{ { ARG_NUM,    "position",     &domNumOffOn } };
+// Argument profile for set alarm
+cmdArg_t argTimeAlarmSet[] =
+{ { ARG_NUM,    "hour",         &domNumHour },
+  { ARG_NUM,    "min",          &domNumMinSec } };
+// Argument profile for date set
+cmdArg_t argTimeDateSet[] =
+{ { ARG_NUM,    "day",          &domNumDay },
+  { ARG_NUM,    "month",        &domNumMonth },
+  { ARG_NUM,    "year",         &domNumYear } };
 // Argument profile for time set
 cmdArg_t argTimeSet[] =
 { { ARG_NUM,    "hour",         &domNumHour },
@@ -585,12 +580,6 @@ cmdArg_t argWaitTimerExpiry[] =
 cmdCommand_t cmdGroupComments[] =
 { { "#",   PC_CONTINUE,    CMDARGS(argComments),        CMDHANDLER(doComments),        "comments" } };
 
-// All commands for command group 'a' (alarm)
-cmdCommand_t cmdGroupAlarm[] =
-{ { "ap",  PC_CONTINUE,    CMDARGS(argAlarmPos),        CMDHANDLER(doAlarmPos),        "set alarm switch position" },
-  { "as",  PC_CONTINUE,    CMDARGS(argAlarmSet),        CMDHANDLER(doAlarmSet),        "set alarm time" },
-  { "at",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doAlarmToggle),     "toggle alarm switch position" } };
-
 // All commands for command group 'b' (beep)
 cmdCommand_t cmdGroupBeep[] =
 { { "b",   PC_CONTINUE,    CMDARGS(argBeep),            CMDHANDLER(doBeep),            "play beep" } };
@@ -599,11 +588,6 @@ cmdCommand_t cmdGroupBeep[] =
 cmdCommand_t cmdGroupClock[] =
 { { "cf",  PC_CONTINUE,    CMDARGS(argClockFeed),       CMDHANDLER(doClockFeed),       "feed clock time/keyboard events" },
   { "cs",  PC_CONTINUE,    CMDARGS(argClockSelect),     CMDHANDLER(doClockSelect),     "select clock" } };
-
-// All commands for command group 'd' (date)
-cmdCommand_t cmdGroupDate[] =
-{ { "dr",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doDateReset),       "reset date to system date" },
-  { "ds",  PC_CONTINUE,    CMDARGS(argDateSet),         CMDHANDLER(doDateSet),         "set date" } };
 
 // All commands for command group 'e' (execute)
 cmdCommand_t cmdGroupExecute[] =
@@ -623,7 +607,7 @@ cmdCommand_t cmdGroupGraphics[] =
 // All commands for command group 'h' (help)
 cmdCommand_t cmdGroupHelp[] =
 { { "h",   PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doHelp),            "show help" },
-  { "hc",  PC_CONTINUE,    CMDARGS(argHelpCmd),         CMDHANDLER(doHelpCmd),         "show command details" },
+  { "hc",  PC_CONTINUE,    CMDARGS(argHelpCmd),         CMDHANDLER(doHelpCmd),         "search command" },
   { "he",  PC_CONTINUE,    CMDARGS(argHelpExpr),        CMDHANDLER(doHelpExpr),        "show expression result" },
   { "hm",  PC_CONTINUE,    CMDARGS(argHelpMsg),         CMDHANDLER(doHelpMsg),         "show help message" } };
 
@@ -637,9 +621,9 @@ cmdCommand_t cmdGroupIf[] =
 // All commands for command group 'l' (lcd)
 cmdCommand_t cmdGroupLcd[] =
 { { "lbs", PC_CONTINUE,    CMDARGS(argLcdBacklightSet), CMDHANDLER(doLcdBacklightSet), "set lcd backlight brightness" },
-  { "lcr", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdCursorReset),  "reset controller lcd cursors" },
-  { "lcs", PC_CONTINUE,    CMDARGS(argLcdCursorSet),    CMDHANDLER(doLcdCursorSet),    "set controller lcd cursor" },
-  { "lds", PC_CONTINUE,    CMDARGS(argLcdDisplaySet),   CMDHANDLER(doLcdDisplaySet),   "switch controller lcd display on/off" },
+  { "lcr", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdCursorReset),  "reset lcd controller cursors" },
+  { "lcs", PC_CONTINUE,    CMDARGS(argLcdActCtrlSet),   CMDHANDLER(doLcdActCtrlSet),   "set active lcd controller" },
+  { "lds", PC_CONTINUE,    CMDARGS(argLcdDisplaySet),   CMDHANDLER(doLcdDisplaySet),   "switch lcd controller display on/off" },
   { "le",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdErase),        "erase lcd display" },
   { "lge", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdGlutEdit),     "edit glut lcd display" },
   { "lgg", PC_CONTINUE,    CMDARGS(argLcdGlutGrSet),    CMDHANDLER(doLcdGlutGrSet),    "set glut graphics options" },
@@ -647,10 +631,12 @@ cmdCommand_t cmdGroupLcd[] =
   { "lhs", PC_CONTINUE,    CMDARGS(argLcdHlSet),        CMDHANDLER(doLcdHlSet),        "set glut glcd pixel highlight" },
   { "li",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdInverse),      "inverse lcd display" },
   { "lng", PC_CONTINUE,    CMDARGS(argLcdNcurGrSet),    CMDHANDLER(doLcdNcurGrSet),    "set ncurses graphics options" },
-  { "lp",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdPrint),        "print controller state/registers" },
-  { "lr",  PC_CONTINUE,    CMDARGS(argLcdRead),         CMDHANDLER(doLcdRead),         "read controller lcd data in variable" },
-  { "lss", PC_CONTINUE,    CMDARGS(argLcdStartLineSet), CMDHANDLER(doLcdStartLineSet), "set controller lcd start line" },
-  { "lw",  PC_CONTINUE,    CMDARGS(argLcdWrite),        CMDHANDLER(doLcdWrite),        "write data to controller lcd" } };
+  { "lp",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdPrint),        "print lcd controller state/registers" },
+  { "lr",  PC_CONTINUE,    CMDARGS(argLcdRead),         CMDHANDLER(doLcdRead),         "read data from active lcd controller" },
+  { "lss", PC_CONTINUE,    CMDARGS(argLcdStartLineSet), CMDHANDLER(doLcdStartLineSet), "set lcd controller start line" },
+  { "lw",  PC_CONTINUE,    CMDARGS(argLcdWrite),        CMDHANDLER(doLcdWrite),        "write data to active lcd controller" },
+  { "lxs", PC_CONTINUE,    CMDARGS(argLcdXCursorSet),   CMDHANDLER(doLcdXCursorSet),   "set active lcd controller x cursor" },
+  { "lys", PC_CONTINUE,    CMDARGS(argLcdYCursorSet),   CMDHANDLER(doLcdYCursorSet),   "set active lcd controller y cursor" } };
 
 // All commands for command group 'm' (monochron)
 cmdCommand_t cmdGroupMonochron[] =
@@ -672,7 +658,10 @@ cmdCommand_t cmdGroupPaint[] =
   { "pl",  PC_CONTINUE,    CMDARGS(argPaintLine),       CMDHANDLER(doPaintLine),       "paint line" },
   { "pn",  PC_CONTINUE,    CMDARGS(argPaintNumber),     CMDHANDLER(doPaintNumber),     "paint number" },
   { "pr",  PC_CONTINUE,    CMDARGS(argPaintRect),       CMDHANDLER(doPaintRect),       "paint rectangle" },
-  { "prf", PC_CONTINUE,    CMDARGS(argPaintRectFill),   CMDHANDLER(doPaintRectFill),   "paint filled rectangle" } };
+  { "prf", PC_CONTINUE,    CMDARGS(argPaintRectFill),   CMDHANDLER(doPaintRectFill),   "paint filled rectangle" },
+  { "ps",  PC_CONTINUE,    CMDARGS(argPaintSetColor),   CMDHANDLER(doPaintSetColor),   "set draw color" },
+  { "psb", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doPaintSetBg),      "set draw color to background color" },
+  { "psf", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doPaintSetFg),      "set draw color to foreground color" } };
 
 // All commands for command group 'r' (repeat)
 cmdCommand_t cmdGroupRepeat[] =
@@ -684,9 +673,14 @@ cmdCommand_t cmdGroupStats[] =
 { { "sp",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doStatsPrint),      "print application statistics" },
   { "sr",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doStatsReset),      "reset application statistics" } };
 
-// All commands for command group 't' (time)
+// All commands for command group 't' (time/date/alarm)
 cmdCommand_t cmdGroupTime[] =
-{ { "tf",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doTimeFlush),       "flush time/date to clock" },
+{ { "tap", PC_CONTINUE,    CMDARGS(argTimeAlarmPos),    CMDHANDLER(doTimeAlarmPos),    "set alarm switch position" },
+  { "tas", PC_CONTINUE,    CMDARGS(argTimeAlarmSet),    CMDHANDLER(doTimeAlarmSet),    "set alarm time" },
+  { "tat", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doTimeAlarmToggle), "toggle alarm switch position" },
+  { "tdr", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doTimeDateReset),   "reset date to system date" },
+  { "tds", PC_CONTINUE,    CMDARGS(argTimeDateSet),     CMDHANDLER(doTimeDateSet),     "set date" },
+  { "tf",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doTimeFlush),       "flush time/date to clock" },
   { "tp",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doTimePrint),       "print time/date/alarm" },
   { "tr",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doTimeReset),       "reset time to system time" },
   { "ts",  PC_CONTINUE,    CMDARGS(argTimeSet),         CMDHANDLER(doTimeSet),         "set time" } };
@@ -715,10 +709,10 @@ cmdCommand_t cmdGroupExit[] =
 cmdDict_t cmdDictMchron[] =
 {
   { '#', "comments",   CMDGROUP(cmdGroupComments) },
-  { 'a', "alarm",      CMDGROUP(cmdGroupAlarm) },
+  { 'a', "-",          CMDGROUP(NULL) },
   { 'b', "beep",       CMDGROUP(cmdGroupBeep) },
   { 'c', "clock",      CMDGROUP(cmdGroupClock) },
-  { 'd', "date",       CMDGROUP(cmdGroupDate) },
+  { 'd', "-",          CMDGROUP(NULL) },
   { 'e', "execute",    CMDGROUP(cmdGroupExecute) },
   { 'f', "-",          CMDGROUP(NULL) },
   { 'g', "graphics",   CMDGROUP(cmdGroupGraphics) },

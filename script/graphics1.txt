@@ -5,12 +5,13 @@
 #
 
 le
+psf
 hm
 hm Read in image in buffer 0 in byte (8-bit) format and display it
 w 500
 gfi 0 b 128 64 ../script/bitmap/image-byte.txt
 gbi 0
-pbi f 0 0 0
+pbi 0 0 0
 hm
 w 0
 
@@ -20,7 +21,7 @@ hm Read in same image in buffer 1 but now in word (16-bit) format and display it
 w 500
 gfi 1 w 128 64 ../script/bitmap/image-word.txt
 gbi 1
-pbi f 1 0 0
+pbi 1 0 0
 hm
 w 0
 
@@ -30,7 +31,7 @@ hm Read in same image in buffer 2 but now in dword (32-bit) format and display i
 w 500
 gfi 2 d 128 64 ../script/bitmap/image-dword.txt
 gbi 2
-pbi f 2 0 0
+pbi 2 0 0
 hm
 w 0
 
@@ -45,8 +46,8 @@ hm Display the dword image from buffer 2 upside down
 # image buildup slugginess.
 w 500
 rf bit=0 bit<32 bit=bit+1
-  pb f 2 0 31-bit 128 bit 128 1
-  pb f 2 0 63-bit 0 bit 128 1
+  pb 2 0 31-bit 128 bit 128 1
+  pb 2 0 63-bit 0 bit 128 1
 rn
 hm
 w 0
@@ -63,12 +64,13 @@ hm Display the dword image from buffer 2 inversed and point mirrored on (64,32)
 # them up we can save on 8128 controller y-cursor commands (by knowing how the
 # ks0108.c [firmware] controller software cursor administration is optimized).
 w 500
+psb
 rf bit=0 bit<32 bit=bit+1
   rf x=0 x<128 x=x+1
-    pb b 2 x 31-bit 255-x bit 1 1
+    pb 2 x 31-bit 255-x bit 1 1
   rn
   rf x=0 x<128 x=x+1
-    pb b 2 x 63-bit 127-x bit 1 1
+    pb 2 x 63-bit 127-x bit 1 1
   rn
 rn
 hm
@@ -80,12 +82,13 @@ hm Horizontally rotate the dword image from buffer 2.
 hm
 hm --- press 'q' to quit ---
 wts
+psf
 rf offset=0 true offset=(offset+1)%128
-  pb f 2 0 0 offset 0 128-offset 32
-  pb f 2 0 32 128+offset 0 128-offset 32
+  pb 2 0 0 offset 0 128-offset 32
+  pb 2 0 32 128+offset 0 128-offset 32
   iif offset!=0
-    pb f 2 128-offset 0 0 0 offset 32
-    pb f 2 128-offset 32 128 0 offset 32
+    pb 2 128-offset 0 0 0 offset 32
+    pb 2 128-offset 32 128 0 offset 32
   ien
   wte 75
 rn

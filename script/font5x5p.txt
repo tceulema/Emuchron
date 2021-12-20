@@ -5,12 +5,15 @@
 #
 
 le
-pa f 1 1 5x5p h 1 1 abcdefghijklmnopqrstuvwxyz
-pa f 1 8 5x5p h 1 2 ABCDEFGHIJKLMNOPQRSTUVWXYZ
-pa f 1 20 5x5p h 3 1 0123456789
-pa f 1 27 5x5p h 1 1 !@#$%^&*()-=_+[]{};'\:"|,./<>?`~
-pa b 1 35 5x5p h 1 1 30/6=5  3+4=7  9-1=8  2*7=14
-pr f 0 34 101 7
-pa f 1 44 5x5p h 1 1 this font does not support lower-
-pa f 1 51 5x5p h 1 1 case characters. text can be placed
-pa f 1 58 5x5p h 1 1 at any (x,y) pixel location.
+psf
+pa 1 1 5x5p h 1 1 abcdefghijklmnopqrstuvwxyz
+pa 1 8 5x5p h 1 2 ABCDEFGHIJKLMNOPQRSTUVWXYZ
+pa 1 20 5x5p h 3 1 0123456789
+pa 1 27 5x5p h 1 1 !@#$%^&*()-=_+[]{};'\:"|,./<>?`~
+psb
+pa 1 35 5x5p h 1 1 30/6=5  3+4=7  9-1=8  2*7=14
+psf
+pr 0 34 101 7
+pa 1 44 5x5p h 1 1 this font does not support lower-
+pa 1 51 5x5p h 1 1 case characters. text can be placed
+pa 1 58 5x5p h 1 1 at any (x,y) pixel location.

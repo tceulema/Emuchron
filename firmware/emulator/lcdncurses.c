@@ -15,9 +15,10 @@
 #include "lcdncurses.h"
 
 // This is ugly:
-// Why can't we include the GLCD_* defs below from ks0108conf.h and ks0108.h?
+// Why can't we include the GLCD_*/MC_* defs below from ks0108conf.h, glcd.h
+// and global.h?
 // Defs TRUE and FALSE are defined in both "avrlibtypes.h" (loaded via
-// "ks0108.h") and <ncurses.h> and... they have different values for TRUE.
+// global.h) and <ncurses.h> and... they have different values for TRUE.
 // To make sure that we build our ncurses lcd stub using the proper defs we
 // must build our ncurses interface independent from the avr environment.
 // And because of this we have to duplicate common glcd defines like lcd panel
@@ -33,14 +34,22 @@
   ((GLCD_XPIXELS + GLCD_CONTROLLER_XPIXELS - 1) / GLCD_CONTROLLER_XPIXELS)
 #define GLCD_CONTROLLER_XPIXBITS 6
 #define GLCD_CONTROLLER_XPIXMASK 0x3f
-#define GLCD_FALSE		0
-#define GLCD_TRUE		1
 #define GLCD_OFF		0
 #define GLCD_ON			1
+#define MC_FALSE		0
+#define MC_TRUE			1
 
 // Fixed ncurses xterm geometry requirements
-#define NCUR_X_PIXELS 		258
-#define NCUR_Y_PIXELS 		66
+#define NCUR_XY_BORDERSIZE	1	// Draw area border is one term char
+#define NCUR_X_PIXSIZE		2	// A glcd x pixel is two terminal chars
+#define NCUR_Y_PIXSIZE		1	// A glcd y pixel is one terminal char
+
+// Terminal size requirements for our Monochron display, being 258x66 chars
+#define NCUR_X_PIXELS \
+  (GLCD_NUM_CONTROLLERS * GLCD_CONTROLLER_XPIXELS * NCUR_X_PIXSIZE + \
+  NCUR_XY_BORDERSIZE * 2)
+#define NCUR_Y_PIXELS \
+  (GLCD_CONTROLLER_YPIXELS * NCUR_Y_PIXSIZE + NCUR_XY_BORDERSIZE * 2)
 
 // The ncurses color index used for controllers and border windows background
 // and foreground colors
@@ -78,7 +87,7 @@ static unsigned char lcdNcurImage[GLCD_XPIXELS][GLCD_YPIXELS / 8];
 
 // The init parameters
 static lcdNcurInitArgs_t lcdNcurInitArgs;
-static unsigned char deviceActive = GLCD_FALSE;
+static unsigned char deviceActive = MC_FALSE;
 
 // Data needed for ncurses stub lcd device
 static FILE *ttyFile = NULL;
@@ -86,7 +95,7 @@ static SCREEN *ttyScreen;
 static WINDOW *winBorder;
 
 // Backlight support (init=yes) and brightness (init=full brightness)
-static unsigned char lcdUseBacklight = GLCD_TRUE;
+static unsigned char lcdUseBacklight = MC_TRUE;
 static unsigned char lcdBacklight = 16;
 
 // An Emuchron ncurses lcd pixel
@@ -112,7 +121,7 @@ static void lcdNcurRedraw(unsigned char controller, int startY, int rows);
 void lcdNcurBacklightSet(unsigned char backlight)
 {
   int brightness;
-  int i;
+  unsigned char i;
 
   // No need to update when backlight remains unchanged
   if (lcdBacklight == backlight)
@@ -122,14 +131,14 @@ void lcdNcurBacklightSet(unsigned char backlight)
   lcdBacklight = backlight;
 
   // See if update controller windows is required
-  if (lcdUseBacklight == GLCD_FALSE)
+  if (lcdUseBacklight == MC_FALSE)
     return;
 
   // Set new brightness in controller windows and flag update
   brightness = NCUR_BRIGHTNESS(backlight);
   init_color(NCUR_COLOR_WIN, brightness, brightness, brightness);
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-    lcdNcurCtrl[i].flush = GLCD_TRUE;
+    lcdNcurCtrl[i].flush = MC_TRUE;
 }
 
 //
@@ -140,7 +149,7 @@ void lcdNcurBacklightSet(unsigned char backlight)
 void lcdNcurCleanup(void)
 {
   // Nothing to do if the ncurses environment is not initialized
-  if (deviceActive == GLCD_FALSE)
+  if (deviceActive == MC_FALSE)
     return;
 
   // Reset settings applied during init of ncurses display
@@ -155,7 +164,7 @@ void lcdNcurCleanup(void)
   delscreen(ttyScreen);
   fclose(ttyFile);
   ttyFile = NULL;
-  deviceActive = GLCD_FALSE;
+  deviceActive = MC_FALSE;
 }
 
 //
@@ -194,7 +203,7 @@ void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data)
 
   // Sync internal window image and force window buffer flush
   lcdNcurImage[x][y] = data;
-  lcdNcurCtrl[controller].flush = GLCD_TRUE;
+  lcdNcurCtrl[controller].flush = MC_TRUE;
 
   // Process each individual bit of byte in display
   for (pixel = 0; pixel < 8; pixel++)
@@ -206,7 +215,7 @@ void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data)
       lcdNcurStats.bitCnf++;
 
       // Only draw when the controller display is on
-      if (lcdNcurCtrl[controller].display == GLCD_TRUE)
+      if (lcdNcurCtrl[controller].display == MC_TRUE)
       {
         // Switch between draw color and draw pixel
         lcdNcurDrawModeSet(controller, data & GLCD_ON);
@@ -238,7 +247,7 @@ void lcdNcurDisplaySet(unsigned char controller, unsigned char display)
     {
       // Clear out the controller window
       werase(lcdNcurCtrl[controller].winCtrl);
-      lcdNcurCtrl[controller].flush = GLCD_TRUE;
+      lcdNcurCtrl[controller].flush = MC_TRUE;
     }
     else
     {
@@ -283,8 +292,8 @@ static void lcdNcurDrawModeSet(unsigned char controller, unsigned char color)
 //
 void lcdNcurFlush(void)
 {
-  int i;
-  unsigned char refreshDone = GLCD_FALSE;
+  unsigned char i;
+  unsigned char refreshDone = MC_FALSE;
   struct stat buffer;
 
   // Check the ncurses tty if the previous check was in a preceding second
@@ -303,17 +312,17 @@ void lcdNcurFlush(void)
   // Dump only when activity has been signalled since last refresh
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
   {
-    if (lcdNcurCtrl[i].flush == GLCD_TRUE)
+    if (lcdNcurCtrl[i].flush == MC_TRUE)
     {
       // Flush changes in ncurses window but do not redraw yet
-      refreshDone = GLCD_TRUE;
+      refreshDone = MC_TRUE;
       wnoutrefresh(lcdNcurCtrl[i].winCtrl);
-      lcdNcurCtrl[i].flush = GLCD_FALSE;
+      lcdNcurCtrl[i].flush = MC_FALSE;
     }
   }
 
   // Do the actual redraw
-  if (refreshDone == GLCD_TRUE)
+  if (refreshDone == MC_TRUE)
     doupdate();
 }
 
@@ -324,9 +333,9 @@ void lcdNcurFlush(void)
 //
 void lcdNcurGraphicsSet(unsigned char backlight)
 {
-  unsigned char refresh = GLCD_FALSE;
+  unsigned char refresh = MC_FALSE;
   int brightness;
-  int i;
+  unsigned char i;
 
   // No need to update when brightness support is unchanged
   if (lcdUseBacklight == backlight)
@@ -336,25 +345,25 @@ void lcdNcurGraphicsSet(unsigned char backlight)
   lcdUseBacklight = backlight;
 
   // Depending on support value set new controller window brightness
-  if (backlight == GLCD_FALSE && lcdBacklight != 16)
+  if (backlight == MC_FALSE && lcdBacklight != 16)
   {
     // When unsupported fall back to full brightness
     brightness = NCUR_BRIGHTNESS(16);
-    refresh = GLCD_TRUE;
+    refresh = MC_TRUE;
   }
-  else if (backlight == GLCD_TRUE && lcdBacklight != 16)
+  else if (backlight == MC_TRUE && lcdBacklight != 16)
   {
     // When supported use the current backlight
     brightness = NCUR_BRIGHTNESS(lcdBacklight);
-    refresh = GLCD_TRUE;
+    refresh = MC_TRUE;
   }
 
   // Set new brightness in controller windows and flag update
-  if (refresh == GLCD_TRUE)
+  if (refresh == MC_TRUE)
   {
     init_color(NCUR_COLOR_WIN, brightness, brightness, brightness);
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-      lcdNcurCtrl[i].flush = GLCD_TRUE;
+      lcdNcurCtrl[i].flush = MC_TRUE;
   }
 }
 
@@ -367,14 +376,14 @@ unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
 {
   int brightWin;
   int brightBorder;
-  int i;
+  unsigned char i;
   FILE *fp;
   struct winsize sizeTty;
   struct stat statTty;
 
   // Nothing to do if the ncurses environment is already initialized
-  if (deviceActive == GLCD_TRUE)
-    return GLCD_TRUE;
+  if (deviceActive == MC_TRUE)
+    return MC_TRUE;
 
   // Copy ncursus init parameters
   lcdNcurInitArgs = *lcdNcurInitArgsSet;
@@ -384,7 +393,7 @@ unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   {
     printf("%s: -t: destination ncurses tty \"%s\" is not in use\n",
       __progname, lcdNcurInitArgs.tty);
-    return GLCD_FALSE;
+    return MC_FALSE;
   }
 
   // Open tty and check if it has a minimum size
@@ -393,7 +402,7 @@ unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   {
     printf("%s: -t: cannot open destination ncurses tty \"%s\"\n", __progname,
       lcdNcurInitArgs.tty);
-    return GLCD_FALSE;
+    return MC_FALSE;
   }
   if (ioctl(fileno(fp), TIOCGWINSZ, (char *)&sizeTty) >= 0)
   {
@@ -404,7 +413,7 @@ unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
       printf("small for use as monochron ncurses terminal (min = %dx%d chars)\n",
         NCUR_X_PIXELS, NCUR_Y_PIXELS);
       fclose(fp);
-      return GLCD_FALSE;
+      return MC_FALSE;
     }
   }
   fclose(fp);
@@ -434,12 +443,13 @@ unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   winBorder = newwin(NCUR_Y_PIXELS, NCUR_X_PIXELS, 0, 0);
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
   {
-    lcdNcurCtrl[i].winCtrl = newwin(GLCD_YPIXELS,
-      GLCD_CONTROLLER_XPIXELS * 2, 1, 1 + i * GLCD_CONTROLLER_XPIXELS * 2);
-    lcdNcurCtrl[i].display = GLCD_FALSE;
+    lcdNcurCtrl[i].winCtrl = newwin(GLCD_CONTROLLER_YPIXELS * NCUR_Y_PIXSIZE,
+      GLCD_CONTROLLER_XPIXELS * NCUR_X_PIXSIZE, 1,
+      1 + i * GLCD_CONTROLLER_XPIXELS * NCUR_X_PIXSIZE);
+    lcdNcurCtrl[i].display = MC_FALSE;
     lcdNcurCtrl[i].startLine = 0;
     lcdNcurCtrl[i].color = GLCD_OFF;
-    lcdNcurCtrl[i].flush = GLCD_FALSE;
+    lcdNcurCtrl[i].flush = MC_FALSE;
   }
 
   // Define black background and greyscale foreground colors and link them in
@@ -469,9 +479,9 @@ unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   gettimeofday(&tvThen, NULL);
 
   // We're initialized
-  deviceActive = GLCD_TRUE;
+  deviceActive = MC_TRUE;
 
-  return GLCD_TRUE;
+  return MC_TRUE;
 }
 
 //
@@ -526,7 +536,7 @@ static void lcdNcurRedraw(unsigned char controller, int startY, int rows)
   }
 
   // Signal redraw
-  lcdNcurCtrl[controller].flush = GLCD_TRUE;
+  lcdNcurCtrl[controller].flush = MC_TRUE;
 }
 
 //
@@ -542,7 +552,7 @@ void lcdNcurStartLineSet(unsigned char controller, unsigned char startLine)
 
   // If the display is off or when there's no change in the startline there's
   // no reason to redraw so only sync new value
-  if (lcdNcurCtrl[controller].display == GLCD_FALSE ||
+  if (lcdNcurCtrl[controller].display == MC_FALSE ||
       lcdNcurCtrl[controller].startLine == startLine)
   {
     lcdNcurCtrl[controller].startLine = startLine;
@@ -552,7 +562,7 @@ void lcdNcurStartLineSet(unsigned char controller, unsigned char startLine)
   // Determine the parameters that minimize ncurses scroll and redraw efforts
   if (lcdNcurCtrl[controller].startLine > startLine)
   {
-    if (lcdNcurCtrl[controller].startLine - startLine < GLCD_YPIXELS / 2)
+    if (lcdNcurCtrl[controller].startLine - startLine < GLCD_CONTROLLER_YPIXELS / 2)
     {
       scroll = (int)startLine - (int)lcdNcurCtrl[controller].startLine;
       fillStart = 0;
@@ -561,23 +571,23 @@ void lcdNcurStartLineSet(unsigned char controller, unsigned char startLine)
     else
     {
       scroll = (int)startLine - (int)lcdNcurCtrl[controller].startLine +
-        GLCD_YPIXELS;
+        GLCD_CONTROLLER_YPIXELS;
       fillStart = GLCD_YPIXELS - scroll;
       rows = scroll;
     }
   }
   else
   {
-    if (startLine - lcdNcurCtrl[controller].startLine < GLCD_YPIXELS / 2)
+    if (startLine - lcdNcurCtrl[controller].startLine < GLCD_CONTROLLER_YPIXELS / 2)
     {
       scroll = (int)startLine - (int)lcdNcurCtrl[controller].startLine;
-      fillStart = GLCD_YPIXELS - scroll;
+      fillStart = GLCD_CONTROLLER_YPIXELS - scroll;
       rows = scroll;
     }
     else
     {
       scroll = (int)startLine - (int)lcdNcurCtrl[controller].startLine -
-        GLCD_YPIXELS;
+        GLCD_CONTROLLER_YPIXELS;
       fillStart = 0;
       rows = -scroll;
     }
@@ -606,8 +616,8 @@ void lcdNcurStatsPrint(void)
   if (lcdNcurStats.byteReq == 0)
     printf("bitEff=-%%\n");
   else
-    printf("bitEff=%d%%\n",
-      (int)(lcdNcurStats.bitCnf * 100 / (lcdNcurStats.byteReq * 8)));
+    printf("bitEff=%.0f%%\n",
+      lcdNcurStats.bitCnf * 100 / ((double)lcdNcurStats.byteReq * 8));
 }
 
 //

@@ -6,6 +6,8 @@
 #ifndef ANALOG_H
 #define ANALOG_H
 
+#include "../avrlibtypes.h"
+
 // Basic analog clock
 void analogCycle(void);
 void analogHmInit(u08 mode);

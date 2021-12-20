@@ -5,11 +5,12 @@
 #
 
 le
-pa f 2 60 5x7m b 2 2 Hello
-pa f 20 17 5x5p b 1 1 hello
-pa f 23 55 5x5p b 2 1 hello
-pa f 30 35 5x7m b 1 1 Hello
-pa f 50 5 5x5p t 1 1 hello
-pa f 54 30 5x7m t 1 1 Hello
-pa f 70 8 5x5p t 2 3 hello
-pa f 124 2 5x7m t 7 2 Hello
+psf
+pa 2 60 5x7m b 2 2 Hello
+pa 20 17 5x5p b 1 1 hello
+pa 23 55 5x5p b 2 1 hello
+pa 30 35 5x7m b 1 1 Hello
+pa 50 5 5x5p t 1 1 hello
+pa 54 30 5x7m t 1 1 Hello
+pa 70 8 5x5p t 2 3 hello
+pa 124 2 5x7m t 7 2 Hello

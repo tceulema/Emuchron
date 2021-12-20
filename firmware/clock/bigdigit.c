@@ -3,13 +3,7 @@
 // Title    : Animation code for MONOCHRON big digit clock
 //*****************************************************************************
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "bigdigit.h"
@@ -43,7 +37,6 @@ extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
 
@@ -138,8 +131,8 @@ void bigDigCycle(void)
 
   // Only if a time event or init or force (due to button press) is flagged we
   // need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE &&
-      mcU8Util1 == GLCD_FALSE)
+  if (mcClockTimeEvent == MC_FALSE && mcClockInit == MC_FALSE &&
+      mcU8Util1 == MC_FALSE)
     return;
 
   DEBUGP("Update BigDigit");
@@ -197,7 +190,7 @@ void bigDigCycle(void)
   }
 
   // Draw digit(s) only when needed
-  if (oldVal != newVal || mcClockInit == GLCD_TRUE || mcU8Util1 == GLCD_TRUE)
+  if (oldVal != newVal || mcClockInit == MC_TRUE || mcU8Util1 == MC_TRUE)
   {
     char digits[3];
 
@@ -208,7 +201,7 @@ void bigDigCycle(void)
     {
       // Draw the single big digit
       glcdPutStr3(BIGDIG_ONE_X_START, BIGDIG_ONE_Y_START, FONT_5X7M,
-        &digits[1], BIGDIG_ONE_X_SCALE, BIGDIG_ONE_Y_SCALE, mcFgColor);
+        &digits[1], BIGDIG_ONE_X_SCALE, BIGDIG_ONE_Y_SCALE);
     }
     else
     {
@@ -216,7 +209,7 @@ void bigDigCycle(void)
       u08 addLocX = 0;
 
       // Check if only the right-most digit needs to be drawn; faster UI
-      if (mcClockInit == GLCD_FALSE && mcU8Util1 == GLCD_FALSE &&
+      if (mcClockInit == MC_FALSE && mcU8Util1 == MC_FALSE &&
           oldVal / 10 == newVal / 10)
       {
         // Draw only the right-most digit
@@ -226,12 +219,12 @@ void bigDigCycle(void)
 
       // Draw both big digits or only the right-most one
       glcdPutStr3(BIGDIG_TWO_X_START + addLocX, BIGDIG_TWO_Y_START, FONT_5X7M,
-        digitsPtr, BIGDIG_TWO_X_SCALE, BIGDIG_TWO_Y_SCALE, mcFgColor);
+        digitsPtr, BIGDIG_TWO_X_SCALE, BIGDIG_TWO_Y_SCALE);
     }
   }
 
   // Clear force flag (if set anyway)
-  mcU8Util1 = GLCD_FALSE;
+  mcU8Util1 = MC_FALSE;
 }
 
 //
@@ -253,31 +246,37 @@ void bigDigInit(u08 mode)
   {
     // Clear the most left part of the two digit area. The rest is overwritten
     // by the single digit clock
+    glcdColorSetBg();
     glcdFillRectangle(BIGDIG_TWO_X_START, BIGDIG_TWO_Y_START,
       BIGDIG_ONE_X_START - BIGDIG_TWO_X_START,
-      BIGDIG_FONT_HEIGHT * BIGDIG_TWO_Y_SCALE, mcBgColor);
+      BIGDIG_FONT_HEIGHT * BIGDIG_TWO_Y_SCALE);
   }
 
   // (Re)draw the labels. Redrawing is needed for a partial init to clear an
   // inverted clock item
+  glcdColorSetFg();
   labelLen = glcdPutStr3v(BIGDIG_HMS_X_START, BIGDIG_HMS_Y_START, FONT_5X7M,
-    ORI_VERTICAL_BU, labelTime, 1, 1, mcFgColor);
+    ORI_VERTICAL_BU, labelTime, 1, 1);
   if (mode == DRAW_INIT_PARTIAL)
   {
     // Clear the rim of any inverted HMS clock item
+    glcdColorSetBg();
     glcdRectangle(BIGDIG_HMS_X_START - 1, BIGDIG_HMS_Y_START - labelLen,
-      BIGDIG_FONT_HEIGHT + 2, labelLen + 2, mcBgColor);
+      BIGDIG_FONT_HEIGHT + 2, labelLen + 2);
   }
+  glcdColorSetFg();
   labelLen = glcdPutStr3v(BIGDIG_DMY_X_START, BIGDIG_DMY_Y_START, FONT_5X7M,
-    ORI_VERTICAL_TD, labelDate, 1, 1, mcFgColor);
+    ORI_VERTICAL_TD, labelDate, 1, 1);
   if (mode == DRAW_INIT_PARTIAL)
   {
     // Clear the rim of any inverted DMY clock item
+    glcdColorSetBg();
     glcdRectangle(BIGDIG_DMY_X_START - BIGDIG_FONT_HEIGHT,
-      BIGDIG_DMY_Y_START - 1, BIGDIG_FONT_HEIGHT + 2, labelLen + 2, mcBgColor);
+      BIGDIG_DMY_Y_START - 1, BIGDIG_FONT_HEIGHT + 2, labelLen + 2);
   }
 
   // Invert the current selected item
+  glcdColorSetFg();
   bigDigItemInvert();
 }
 
@@ -322,8 +321,8 @@ static void bigDigItemInvert(void)
 
   // Invert item
   glcdFillRectangle2(x, y, BIGDIG_FONT_HEIGHT + 2,
-    BIGDIG_FONT_WIDTH + 2 + sizeAdd, ALIGN_AUTO, FILL_INVERSE, mcFgColor);
+    BIGDIG_FONT_WIDTH + 2 + sizeAdd, ALIGN_AUTO, FILL_INVERSE);
 
   // And force the digit to be drawn
-  mcU8Util1 = GLCD_TRUE;
+  mcU8Util1 = MC_TRUE;
 }

@@ -5,12 +5,13 @@
 #
 
 le
-pa f 1 1 5x5p h 1 1 glcdcircle2 - draw patterns
-pa f 41 11 5x5p h 1 1 half
-pa f 72 11 5x5p h 1 1 half
-pa f 10 17 5x5p h 1 1 full         even
-pa f 67 17 5x5p h 1 1 uneven     third
-pc f 16 38 13 0
-pc f 47 38 13 1
-pc f 78 38 13 2
-pc f 109 38 13 3
+psf
+pa 1 1 5x5p h 1 1 glcdcircle2 - draw patterns
+pa 41 11 5x5p h 1 1 half
+pa 72 11 5x5p h 1 1 half
+pa 10 17 5x5p h 1 1 full         even
+pa 67 17 5x5p h 1 1 uneven     third
+pc 16 38 13 0
+pc 47 38 13 1
+pc 78 38 13 2
+pc 109 38 13 3

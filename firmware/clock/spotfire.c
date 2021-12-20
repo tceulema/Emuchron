@@ -3,16 +3,10 @@
 // Title    : Generic drawing code for MONOCHRON spotfire/quintusvisuals clocks
 //*****************************************************************************
 
-#include <stdlib.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
+#include "../ks0108conf.h"
 #include "spotfire.h"
 
 // Specifics for filter panel
@@ -59,7 +53,6 @@ extern volatile uint8_t mcClockNewDD, mcClockNewDM;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Common text labels
 extern char animHour[];
@@ -103,20 +96,20 @@ void spotAxisInit(u08 clockId)
       clockId == CHRON_LINECHART)
   {
     // Draw x/y-axis lines
-    glcdFillRectangle(8, 23, 1, 34, mcFgColor);
-    glcdFillRectangle(9, 56, 83, 1, mcFgColor);
+    glcdFillRectangle(8, 23, 1, 34);
+    glcdFillRectangle(9, 56, 83, 1);
 
     // Draw y-axis value 10 markers
     for (i = 24; i <= 54; i = i + 5)
-      glcdDot(7, i, mcFgColor);
+      glcdDot(7, i);
   }
 
   // Draw clock dependent things and setup coordinates for axis labels
   if (clockId == CHRON_BARCHART)
   {
     // Barchart
-    glcdDot(37, 57, mcFgColor);
-    glcdDot(64, 57, mcFgColor);
+    glcdDot(37, 57);
+    glcdDot(64, 57);
     xs = 72; xh = 16; y = 58;
   }
   else if (clockId == CHRON_CASCADE || clockId == CHRON_LINECHART)
@@ -141,9 +134,9 @@ void spotAxisInit(u08 clockId)
   }
 
   // Draw the axis labels
-  glcdPutStr2(xs, y, FONT_5X5P, animSec, mcFgColor);
-  glcdPutStr2(44, y, FONT_5X5P, animMin, mcFgColor);
-  glcdPutStr2(xh, y, FONT_5X5P, animHour, mcFgColor);
+  glcdPutStr2(xs, y, FONT_5X5P, animSec);
+  glcdPutStr2(44, y, FONT_5X5P, animMin);
+  glcdPutStr2(xh, y, FONT_5X5P, animHour);
 }
 
 //
@@ -159,7 +152,7 @@ void spotBarUpdate(u08 x, u08 width, u08 oldVal, u08 newVal, s08 valXOffset,
   char barValue[3];
 
   // See if there's any need to update a bar
-  if (oldVal == newVal && mcClockInit == GLCD_FALSE)
+  if (oldVal == newVal && mcClockInit == MC_FALSE)
     return;
 
   // Get height of old bar and new bar
@@ -169,7 +162,7 @@ void spotBarUpdate(u08 x, u08 width, u08 oldVal, u08 newVal, s08 valXOffset,
     (u08)((SPOT_BAR_HEIGHT_MAX / (float)SPOT_BAR_VAL_STEPS) * newVal + 0.5);
 
   // If there are no changes in barheight there's no need to repaint the bar
-  if (oldBarHeight != newBarHeight || mcClockInit == GLCD_TRUE)
+  if (oldBarHeight != newBarHeight || mcClockInit == MC_TRUE)
   {
     // Paint new bar
     if (fillType == FILL_BLANK)
@@ -177,38 +170,39 @@ void spotBarUpdate(u08 x, u08 width, u08 oldVal, u08 newVal, s08 valXOffset,
       // A FILL_BLANK is in fact drawing the outline of the bar first and
       // then fill it with blank
       glcdRectangle(x, SPOT_BAR_Y_START - newBarHeight, width,
-        newBarHeight + 1, mcFgColor);
+        newBarHeight + 1);
       if (newBarHeight > 1)
         glcdFillRectangle2(x + 1, SPOT_BAR_Y_START - newBarHeight + 1,
-          width - 2, newBarHeight - 1, ALIGN_TOP, fillType, mcFgColor);
+          width - 2, newBarHeight - 1, ALIGN_TOP, fillType);
     }
     else
     {
       glcdFillRectangle2(x, SPOT_BAR_Y_START - newBarHeight, width,
-        newBarHeight + 1, ALIGN_BOTTOM, fillType, mcFgColor);
+        newBarHeight + 1, ALIGN_BOTTOM, fillType);
     }
   }
 
   // Add the bar value (depending on bar value font size)
   animValToStr(newVal, barValue);
   glcdPutStr2(x + valXOffset, SPOT_BAR_Y_START - newBarHeight +
-    SPOT_BAR_VAL_Y_OFFSET, FONT_5X7M, barValue, mcFgColor);
+    SPOT_BAR_VAL_Y_OFFSET, FONT_5X7M, barValue);
 
+  glcdColorSetBg();
   // Clear the first line between the bar and the bar value
-  glcdFillRectangle(x, SPOT_BAR_Y_START - newBarHeight - 1, width, 1,
-    mcBgColor);
+  glcdFillRectangle(x, SPOT_BAR_Y_START - newBarHeight - 1, width, 1);
 
   // Clear the space left and right of the bar value
   glcdFillRectangle(x, SPOT_BAR_Y_START - newBarHeight + SPOT_BAR_VAL_Y_OFFSET,
-    valXOffset, -SPOT_BAR_VAL_Y_OFFSET - 1, mcBgColor);
+    valXOffset, -SPOT_BAR_VAL_Y_OFFSET - 1);
   glcdFillRectangle(x + width - valXOffset + 1,
     SPOT_BAR_Y_START - newBarHeight + SPOT_BAR_VAL_Y_OFFSET, valXOffset - 1,
-    -SPOT_BAR_VAL_Y_OFFSET - 1, mcBgColor);
+    -SPOT_BAR_VAL_Y_OFFSET - 1);
 
   // Clear what was above it (if any)
   if (oldBarHeight > newBarHeight)
     glcdFillRectangle(x, SPOT_BAR_Y_START - oldBarHeight +
-      SPOT_BAR_VAL_Y_OFFSET, width, oldBarHeight - newBarHeight, mcBgColor);
+      SPOT_BAR_VAL_Y_OFFSET, width, oldBarHeight - newBarHeight);
+  glcdColorSetFg();
 }
 
 //
@@ -227,31 +221,37 @@ void spotCommonInit(char *label, u08 mode)
     u08 pxDone;
 
     // Partial init: clear only the chart area
-    glcdFillRectangle(0, 16, 100, 48, mcBgColor);
+    glcdColorSetBg();
+    glcdFillRectangle(0, 16, 100, 48);
+    glcdColorSetFg();
 
     // Visualization title bar
-    pxDone = glcdPutStr2(2, 9, FONT_5X5P, label, mcFgColor);
+    pxDone = glcdPutStr2(2, 9, FONT_5X5P, label);
     if (pxDone + 2 < AD_X_START)
-      glcdFillRectangle(pxDone + 2, 9, AD_X_START - pxDone - 2, 5, mcBgColor);
+    {
+      glcdColorSetBg();
+      glcdFillRectangle(pxDone + 2, 9, AD_X_START - pxDone - 2, 5);
+      glcdColorSetFg();
+    }
   }
   else
   {
     // Full init: start from scratch
 
     // Draw main lines for menu bar, vis title bar and filter panel
-    glcdFillRectangle(0, 7, GLCD_XPIXELS, 1, mcFgColor);
-    glcdFillRectangle(0, 15, GLCD_XPIXELS, 1, mcFgColor);
-    glcdFillRectangle(101, 7, 1, GLCD_YPIXELS - 7, mcFgColor);
+    glcdFillRectangle(0, 7, GLCD_XPIXELS, 1);
+    glcdFillRectangle(0, 15, GLCD_XPIXELS, 1);
+    glcdFillRectangle(101, 7, 1, GLCD_YPIXELS - 7);
 
     // Init the Menu bar
     menuBarId = 255;
     spotMenuBarUpdate();
 
     // Init the visualization title bar label
-    glcdPutStr2(2, 9, FONT_5X5P, label, mcFgColor);
+    glcdPutStr2(2, 9, FONT_5X5P, label);
 
     // Filter panel label
-    glcdPutStr2(104, 9, FONT_5X5P, "FILTERS", mcFgColor);
+    glcdPutStr2(104, 9, FONT_5X5P, "FILTERS");
 
     // There are three filter sliders; hour + min + sec
     for (i = 0; i <= 2; i++)
@@ -265,13 +265,13 @@ void spotCommonInit(char *label, u08 mode)
 
       // Paint filter slider
       glcdPutStr2(FP_X_START, FP_Y_START + i * FP_Y_OFFSET_SIZE, FONT_5X5P,
-        sliderLabel, mcFgColor);
+        sliderLabel);
       glcdRectangle(FP_X_START + FP_RF_X_OFFSET,
         FP_Y_START + i * FP_Y_OFFSET_SIZE + FP_RF_Y_OFFSET, FP_RF_WIDTH,
-        FP_RF_HEIGHT, mcFgColor);
+        FP_RF_HEIGHT);
       glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET,
         FP_Y_START + i * FP_Y_OFFSET_SIZE + FP_RS_Y_OFFSET, FP_RS_WIDTH,
-        FP_RS_HEIGHT, mcFgColor);
+        FP_RS_HEIGHT);
     }
   }
 }
@@ -280,7 +280,7 @@ void spotCommonInit(char *label, u08 mode)
 // Function: spotCommonUpdate
 //
 // Update common parts used by all Spotfire clocks.
-// Returns GLCD_TRUE when Spotfire clocks need to update itself.
+// Returns MC_TRUE when Spotfire clocks need to update itself.
 //
 u08 spotCommonUpdate(void)
 {
@@ -288,24 +288,24 @@ u08 spotCommonUpdate(void)
   animADAreaUpdate(AD_X_START, AD_Y_START, AD_AREA_ALM_DATE);
 
   // Only if a time event or init is flagged we need to update the clock
-  if (mcClockTimeEvent == GLCD_FALSE && mcClockInit == GLCD_FALSE)
-    return GLCD_FALSE;
+  if (mcClockTimeEvent == MC_FALSE && mcClockInit == MC_FALSE)
+    return MC_FALSE;
 
   // Verify changes in day and month for the menu bar
   spotMenuBarUpdate();
 
   // Update the filter panel range sliders
-  if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
+  if (mcClockNewTS != mcClockOldTS || mcClockInit == MC_TRUE)
     spotRangeSliderUpdate(FP_Y_START + 2 * FP_Y_OFFSET_SIZE, FP_SEC_MAX,
       mcClockOldTS, mcClockNewTS);
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
+  if (mcClockNewTM != mcClockOldTM || mcClockInit == MC_TRUE)
     spotRangeSliderUpdate(FP_Y_START + FP_Y_OFFSET_SIZE, FP_MIN_MAX,
       mcClockOldTM, mcClockNewTM);
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
+  if (mcClockNewTH != mcClockOldTH || mcClockInit == MC_TRUE)
     spotRangeSliderUpdate(FP_Y_START, FP_HOUR_MAX, mcClockOldTH,
       mcClockNewTH);
 
-  return GLCD_TRUE;
+  return MC_TRUE;
 }
 
 //
@@ -317,7 +317,7 @@ static void spotMenuBarUpdate(void)
 {
   // Only get a new menu bar when the date has changed or when we're
   // initializing
-  if (mcClockDateEvent == GLCD_TRUE || mcClockInit == GLCD_TRUE)
+  if (mcClockDateEvent == MC_TRUE || mcClockInit == MC_TRUE)
   {
     u08 i;
     u08 posX;
@@ -335,7 +335,7 @@ static void spotMenuBarUpdate(void)
     if (menuBarId != i)
     {
       DEBUG(putstring("Menu bar Id -> "));
-      DEBUG(uart_putw_dec(i));
+      DEBUG(uart_put_dec(i));
       DEBUG(putstring_nl(""));
 
       // Sync new menu bar
@@ -357,12 +357,14 @@ static void spotMenuBarUpdate(void)
       }
 
       // Clear the current bar
-      glcdFillRectangle(0, 0, GLCD_XPIXELS, 7, mcBgColor);
+      glcdColorSetBg();
+      glcdFillRectangle(0, 0, GLCD_XPIXELS, 7);
+      glcdColorSetFg();
 
       // Print the first and optionally second msg string
-      posX = posX + glcdPutStr2(posX, 1, FONT_5X5P, mbDriver->msg1, mcFgColor);
+      posX = posX + glcdPutStr2(posX, 1, FONT_5X5P, mbDriver->msg1);
       if (mbDriver->msg2 != 0)
-        glcdPutStr2(posX, 1, FONT_5X5P, mbDriver->msg2, mcFgColor);
+        glcdPutStr2(posX, 1, FONT_5X5P, mbDriver->msg2);
     }
   }
 }
@@ -382,14 +384,16 @@ static void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal)
   sliderXPosNew = (u08)(((FP_RS_WIDTH - 2) / (float) maxVal) * newVal + 0.5);
 
   // Only update if there's a need to
-  if (sliderXPosOld != sliderXPosNew || mcClockInit == GLCD_TRUE)
+  if (sliderXPosOld != sliderXPosNew || mcClockInit == MC_TRUE)
   {
     // Clear range slider location marker area
+    glcdColorSetBg();
     glcdRectangle(FP_X_START + FP_RS_X_OFFSET - 1, y + FP_RS_Y_OFFSET - 1,
-      FP_RS_WIDTH + 2, FP_RS_HEIGHT + 2, mcBgColor);
+      FP_RS_WIDTH + 2, FP_RS_HEIGHT + 2);
+    glcdColorSetFg();
 
     // Add new range slider location markers
     glcdFillRectangle(FP_X_START + FP_RS_X_OFFSET + sliderXPosNew,
-      y + FP_RS_Y_OFFSET - 1, 2, FP_RS_HEIGHT + 2, mcFgColor);
+      y + FP_RS_Y_OFFSET - 1, 2, FP_RS_HEIGHT + 2);
   }
 }

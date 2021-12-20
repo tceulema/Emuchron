@@ -1,12 +1,16 @@
 //*****************************************************************************
 // Filename : 'glcd.h'
-// Title    : Graphic lcd API functions
+// Title    : High-level graphics lcd api for hd61202/ks0108 displays
 //*****************************************************************************
 
 #ifndef GLCD_H
 #define GLCD_H
 
 #include "avrlibtypes.h"
+
+// Lcd color values
+#define GLCD_OFF	0	// Black pixel data
+#define GLCD_ON		1	// White pixel data
 
 // Fill types
 #define FILL_FULL	0	// Full fill area
@@ -41,66 +45,64 @@
 #define ELM_BYTE	1	// Element is byte data (8 bits)
 #define ELM_WORD	2	// Element is word data (16 bits)
 #define ELM_DWORD	3	// Element is dword data (32 bits)
+
+// Bitmap data storage type
 #define DATA_PMEM	0	// Bitmap data is stored in progmen
 #define DATA_RAM	1	// Bitmap data is stored in ram
 
-// Basic math
-#define SIGN(x) ((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))
-
 // API-level interface commands
 
+// Clear and reset screen
+void glcdClearScreen(void);
+void glcdResetScreen(void);
+
+// Draw color
+u08 glcdColorGet(void);
+void glcdColorSet(u08 color);
+void glcdColorSetBg(void);
+void glcdColorSetFg(void);
+
 // Draw dot
-void glcdDot(u08 x, u08 y, u08 color);
+void glcdDot(u08 x, u08 y);
 
 // Draw line
-void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2, u08 color);
+void glcdLine(u08 x1, u08 y1, u08 x2, u08 y2);
 
 // Draw rectangle
-void glcdRectangle(u08 x, u08 y, u08 w, u08 h, u08 color);
+void glcdRectangle(u08 x, u08 y, u08 w, u08 h);
 
 // Draw and fill rectangle
-void glcdFillRectangle(u08 x, u08 y, u08 w, u08 h, u08 color);
-void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType,
-  u08 color);
+void glcdFillRectangle(u08 x, u08 y, u08 w, u08 h);
+void glcdFillRectangle2(u08 x, u08 y, u08 w, u08 h, u08 align, u08 fillType);
 
 // Draw full/dotted/filled circle at [xCenter,yCenter] with [radius]
-void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType,
-  u08 color);
-void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType,
-  u08 color);
+void glcdCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 lineType);
+void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType);
 
-// Write a standard ascii character (values 20-127) to the display at current
-// cursor location
-void glcdWriteChar(unsigned char c, u08 color);
-void glcdWriteCharFg(unsigned char c);
-
-// Write a string at current cursor location
-void glcdPutStr(char *data, u08 color);
-void glcdPutStrFg(char *data);
-
-// Write a number in two digits at current cursor location
-void glcdPrintNumber(u08 n, u08 color);
+// Write standard ascii character(s) (values 20-127) or number to the display
+// at current cursor location
+void glcdPutStr(char *data);
+void glcdWriteChar(unsigned char c);
+void glcdPrintNumber(u08 n);
 void glcdPrintNumberBg(u08 n);
-void glcdPrintNumberFg(u08 n);
 
 // Write a horizontal string at pixel position [x,y]
-u08 glcdPutStr2(u08 x, u08 y, u08 font, char *data, u08 color);
-u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale,
-  u08 color);
+u08 glcdPutStr2(u08 x, u08 y, u08 font, char *data);
+u08 glcdPutStr3(u08 x, u08 y, u08 font, char *data, u08 xScale, u08 yScale);
 
 // Write a vertical string at pixel position [x,y]
 u08 glcdPutStr3v(u08 x, u08 y, u08 font, u08 orientation, char *data,
-  u08 xScale, u08 yScale, u08 color);
+  u08 xScale, u08 yScale);
 
 // Draw a bitmap at pixel position [x,y] with size [w,h]
 void glcdBitmap(u08 x, u08 y, u16 xo, u08 yo, u08 w, u08 h, u08 elmType,
-  u08 origin, void *bitmap, u08 color);
-void glcdBitmap8PmFg(u08 x, u08 y, u08 w, u08 h, const uint8_t *bitmap);
-void glcdBitmap8RaFg(u08 x, u08 y, u08 w, u08 h, uint8_t *bitmap);
-void glcdBitmap16PmFg(u08 x, u08 y, u08 w, u08 h, const uint16_t *bitmap);
-void glcdBitmap16RaFg(u08 x, u08 y, u08 w, u08 h, uint16_t *bitmap);
-void glcdBitmap32PmFg(u08 x, u08 y, u08 w, u08 h, const uint32_t *bitmap);
-void glcdBitmap32RaFg(u08 x, u08 y, u08 w, u08 h, uint32_t *bitmap);
+  u08 origin, void *bitmap);
+void glcdBitmap8Pm(u08 x, u08 y, u08 w, u08 h, const uint8_t *bitmap);
+void glcdBitmap8Ra(u08 x, u08 y, u08 w, u08 h, uint8_t *bitmap);
+void glcdBitmap16Pm(u08 x, u08 y, u08 w, u08 h, const uint16_t *bitmap);
+void glcdBitmap16Ra(u08 x, u08 y, u08 w, u08 h, uint16_t *bitmap);
+void glcdBitmap32Pm(u08 x, u08 y, u08 w, u08 h, const uint32_t *bitmap);
+void glcdBitmap32Ra(u08 x, u08 y, u08 w, u08 h, uint32_t *bitmap);
 
 // Get the pixel width of a string
 u08 glcdGetWidthStr(u08 font, char *data);

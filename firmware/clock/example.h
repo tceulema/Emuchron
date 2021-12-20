@@ -6,6 +6,8 @@
 #ifndef EXAMPLE_H
 #define EXAMPLE_H
 
+#include "../avrlibtypes.h"
+
 // Basic example clock
 void exampleCycle(void);
 void exampleInit(u08 mode);

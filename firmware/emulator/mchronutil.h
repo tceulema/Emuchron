@@ -9,6 +9,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include "../avrlibtypes.h"
+#include "interpreter.h"
 #include "controller.h"
 
 // The coredump origin types
@@ -67,10 +68,10 @@ typedef struct _emuGrBuf_t
 } emuGrBuf_t;
 
 // mchron command argument translation functions
-u08 emuColorGet(char colorId);
 u08 emuFontGet(char *fontName);
 u08 emuFormatGet(char formatId, u08 *formatBytes, u08 *formatBits);
 u08 emuOrientationGet(char orientationId);
+u08 emuSearchTypeGet(char searchType);
 u08 emuStartModeGet(char startId);
 
 // mchron environment functions

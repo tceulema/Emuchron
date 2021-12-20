@@ -11,66 +11,67 @@ hm --- press 'q' to quit ---
 
 # Erase LCD display
 le
+psf
 
 # Wait some time prior starting entering text
 rf x=1 x<4 x=x+1
-  pa f 1 1 5x5p h 1 1 >_
+  pa 1 1 5x5p h 1 1 >_
   w 350
-  pa f 1 1 5x5p h 1 1 >    
+  pa 1 1 5x5p h 1 1 >    
   w 350
 rn
 
 # List the program
-pa f 1 1 5x5p h 1 1 >_
+pa 1 1 5x5p h 1 1 >_
 w 150
-pa f 1 1 5x5p h 1 1 >l_
+pa 1 1 5x5p h 1 1 >l_
 w 500
-pa f 1 1 5x5p h 1 1 >li_
+pa 1 1 5x5p h 1 1 >li_
 w 500
-pa f 1 1 5x5p h 1 1 >lis_
+pa 1 1 5x5p h 1 1 >lis_
 w 500
-pa f 1 1 5x5p h 1 1 >list_
+pa 1 1 5x5p h 1 1 >list_
 w 500
-pa f 1 1 5x5p h 1 1 >list  
+pa 1 1 5x5p h 1 1 >list  
 w 100
-pa f 1 8 5x5p h 1 1 10 for x = 1 to 10
+pa 1 8 5x5p h 1 1 10 for x = 1 to 10
 w 100
-pa f 1 15 5x5p h 1 1 20   print x;
+pa 1 15 5x5p h 1 1 20   print x;
 w 100
-pa f 1 22 5x5p h 1 1 30 next x
+pa 1 22 5x5p h 1 1 30 next x
 w 100
-pa f 1 29 5x5p h 1 1 ready
+pa 1 29 5x5p h 1 1 ready
 
 # Wait some time prior starting entering text
 rf x=1 x<4 x=x+1
-  pa f 1 36 5x5p h 1 1 >_
+  pa 1 36 5x5p h 1 1 >_
   w 350
-  pa f 1 36 5x5p h 1 1 >    
+  pa 1 36 5x5p h 1 1 >    
   w 350
 rn
 
 # Run the program
-pa f 1 36 5x5p h 1 1 >_
+pa 1 36 5x5p h 1 1 >_
 w 100
-pa f 1 36 5x5p h 1 1 >r_
+pa 1 36 5x5p h 1 1 >r_
 w 500
-pa f 1 36 5x5p h 1 1 >ru_
+pa 1 36 5x5p h 1 1 >ru_
 w 500
-pa f 1 36 5x5p h 1 1 >run_
+pa 1 36 5x5p h 1 1 >run_
 w 500
-pa f 1 36 5x5p h 1 1 >run  
+pa 1 36 5x5p h 1 1 >run  
 w 100
 rf x=1 x<=10 x=x+1
-  pn f 1+(x-1)*6 43 5x5p h 1 1 x %1.0f
+  pn 1+(x-1)*6 43 5x5p h 1 1 x %1.0f
   w 100
 rn
-pa f 1 50 5x5p h 1 1 ready
+pa 1 50 5x5p h 1 1 ready
 
 # Now blink the cursor indefinitely
 # Hit 'q' to quit the faking
 rf null true null
-  pa f 1 57 5x5p h 1 1 >_
+  pa 1 57 5x5p h 1 1 >_
   w 350
-  pa f 1 57 5x5p h 1 1 >  
+  pa 1 57 5x5p h 1 1 >  
   w 350
 rn

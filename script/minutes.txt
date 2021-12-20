@@ -13,7 +13,7 @@
 #
 
 # Make sure alarm will not trigger
-ap 0
+tap 0
 
 # Start a wait timer
 wts

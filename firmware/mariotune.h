@@ -9,6 +9,7 @@
 #ifndef MARIOTUNE_H
 #define MARIOTUNE_H
 
+#include "avrlibtypes.h"
 #include "alarm.h"
 
 #ifdef MARIO

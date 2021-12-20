@@ -4,13 +4,7 @@
 //*****************************************************************************
 
 #include <math.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "spotfire.h"
@@ -47,7 +41,6 @@
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcBgColor, mcFgColor;
 
 // Common text labels
 extern char animHour[];
@@ -55,8 +48,7 @@ extern char animMin[];
 extern char animSec[];
 
 // Local function prototypes
-static void spotSpiderAxisConnUpdate(u08 axisStart, u08 valStart, u08 valEnd,
-  u08 color);
+static void spotSpiderAxisConnUpdate(u08 axisStart, u08 valStart, u08 valEnd);
 
 //
 // Function: spotSpiderPlotCycle
@@ -68,32 +60,32 @@ void spotSpiderPlotCycle(void)
   char newVal[3];
 
   // Update common Spotfire clock elements and check if clock requires update
-  if (spotCommonUpdate() == GLCD_FALSE)
+  if (spotCommonUpdate() == MC_FALSE)
     return;
 
   DEBUGP("Update SpiderPlot");
 
   // Verify changes in time and update axis value
-  if (mcClockNewTS != mcClockOldTS || mcClockInit == GLCD_TRUE)
+  if (mcClockNewTS != mcClockOldTS || mcClockInit == MC_TRUE)
   {
     // Second
     animValToStr(mcClockNewTS, newVal);
     glcdPutStr2(SPDR_SEC_VAL_X_START, SPDR_SEC_VAL_Y_START, FONT_5X7M,
-      newVal, mcFgColor);
+      newVal);
   }
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == GLCD_TRUE)
+  if (mcClockNewTM != mcClockOldTM || mcClockInit == MC_TRUE)
   {
     // Minute
     animValToStr(mcClockNewTM, newVal);
     glcdPutStr2(SPDR_MIN_VAL_X_START, SPDR_MIN_VAL_Y_START, FONT_5X7M,
-      newVal, mcFgColor);
+      newVal);
   }
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == GLCD_TRUE)
+  if (mcClockNewTH != mcClockOldTH || mcClockInit == MC_TRUE)
   {
     // Hour
     animValToStr(mcClockNewTH, newVal);
     glcdPutStr2(SPDR_HOUR_VAL_X_START, SPDR_HOUR_VAL_Y_START, FONT_5X7M,
-      newVal, mcFgColor);
+      newVal);
   }
 
   // If only the seconds have changed verify if it impacts the Sec axis.
@@ -101,7 +93,7 @@ void spotSpiderPlotCycle(void)
   // anything. Repainting (=remove and paint) an unchanged plot can be seen on
   // the lcd by the lines faintly dis/reappearing; we want to avoid that.
   if (mcClockNewTS != mcClockOldTS && mcClockNewTM == mcClockOldTM &&
-    mcClockNewTH == mcClockOldTH && mcClockInit == GLCD_FALSE)
+    mcClockNewTH == mcClockOldTH && mcClockInit == MC_FALSE)
   {
     if ((u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) /
         SPDR_AXIS_MS_STEPS * mcClockOldTS) ==
@@ -115,29 +107,25 @@ void spotSpiderPlotCycle(void)
   // sec -> min, min -> hour, hour -> sec
 
   // First remove the 'old' connector and axis lines:
-  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, mcClockOldTS, mcClockOldTM,
-    mcBgColor);
-  spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, mcClockOldTM, mcClockOldTH,
-    mcBgColor);
-  spotSpiderAxisConnUpdate(SPDR_AXIS_HOUR, mcClockOldTH, mcClockOldTS,
-    mcBgColor);
+  glcdColorSetBg();
+  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, mcClockOldTS, mcClockOldTM);
+  spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, mcClockOldTM, mcClockOldTH);
+  spotSpiderAxisConnUpdate(SPDR_AXIS_HOUR, mcClockOldTH, mcClockOldTS);
 
   // Then draw the 'new' connector and axis lines:
-  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, mcClockNewTS, mcClockNewTM,
-    mcFgColor);
-  spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, mcClockNewTM, mcClockNewTH,
-    mcFgColor);
-  spotSpiderAxisConnUpdate(SPDR_AXIS_HOUR, mcClockNewTH, mcClockNewTS,
-    mcFgColor);
+  glcdColorSetFg();
+  spotSpiderAxisConnUpdate(SPDR_AXIS_SEC, mcClockNewTS, mcClockNewTM);
+  spotSpiderAxisConnUpdate(SPDR_AXIS_MIN, mcClockNewTM, mcClockNewTH);
+  spotSpiderAxisConnUpdate(SPDR_AXIS_HOUR, mcClockNewTH, mcClockNewTS);
 
   // Repaint the dotted inner circles at logical position 20 and 40 in case
   // they got distorted by updating the connector and axis lines
   glcdCircle2(SPDR_X_START, SPDR_Y_START,
     (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / 3L + SPDR_AXIS_VAL_BEGIN),
-    CIRCLE_THIRD, mcFgColor);
+    CIRCLE_THIRD);
   glcdCircle2(SPDR_X_START, SPDR_Y_START,
     (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / 3L * 2L + SPDR_AXIS_VAL_BEGIN),
-    CIRCLE_HALF_E, mcFgColor);
+    CIRCLE_HALF_E);
 }
 
 //
@@ -153,30 +141,29 @@ void spotSpiderPlotInit(u08 mode)
   spotCommonInit("spider plot", mode);
 
   // Draw static part of spider plot
-  glcdCircle2(SPDR_X_START, SPDR_Y_START, SPDR_RADIUS, CIRCLE_FULL, mcFgColor);
+  glcdCircle2(SPDR_X_START, SPDR_Y_START, SPDR_RADIUS, CIRCLE_FULL);
   glcdPutStr2(SPDR_SEC_LABEL_X_START, SPDR_SEC_LABEL_Y_START, FONT_5X5P,
-    animSec, mcFgColor);
+    animSec);
   glcdPutStr2(SPDR_MIN_LABEL_X_START, SPDR_MIN_LABEL_Y_START, FONT_5X5P,
-    animMin, mcFgColor);
+    animMin);
   glcdPutStr2(SPDR_HOUR_LABEL_X_START, SPDR_HOUR_LABEL_Y_START, FONT_5X5P,
-    animHour, mcFgColor);
-  glcdDot(SPDR_X_START, SPDR_Y_START, mcFgColor);
+    animHour);
+  glcdDot(SPDR_X_START, SPDR_Y_START);
 }
 
 //
 // Function: spotSpiderAxisConnUpdate
 //
 // Draw a connector line between two axis and an axis line in a Spotfire
-// QuintusVisuals Spider Plot. The color parameter will either remove or add
-// lines.
+// QuintusVisuals Spider Plot. Depending on the current paint color the line
+// is drawn or removed.
 // There is a hardcoded relation between start and end axis for drawing the
 // axis connectors:
 // axisStart = sec implies axisEnd = min
 // axisStart = min implies axisEnd = hour
 // axisStart = hour implies axisEnd = sec
 //
-static void spotSpiderAxisConnUpdate(u08 axisStart, u08 valStart, u08 valEnd,
-  u08 color)
+static void spotSpiderAxisConnUpdate(u08 axisStart, u08 valStart, u08 valEnd)
 {
   s08 startX, startY, endX, endY;
   float tmp;
@@ -227,17 +214,17 @@ static void spotSpiderAxisConnUpdate(u08 axisStart, u08 valStart, u08 valEnd,
   // both lines are drawn towards the sec axis, thus showing identical line
   // pixel behavior.
   if (axisStart == SPDR_AXIS_HOUR)
-    glcdLine(startX, startY, endX, endY, color);
+    glcdLine(startX, startY, endX, endY);
   else
-    glcdLine(endX, endY, startX, startY, color);
+    glcdLine(endX, endY, startX, startY);
 
   // Draw the axis line
   if (axisStart == SPDR_AXIS_HOUR)
     glcdLine(startX, startY, SPDR_X_START - (u08)(SPDR_RADIUS * COSPI3),
-      SPDR_Y_START - (u08)(SPDR_RADIUS * SINPI3), color);
+      SPDR_Y_START - (u08)(SPDR_RADIUS * SINPI3));
   else if (axisStart == SPDR_AXIS_MIN)
     glcdLine(startX, startY, SPDR_X_START - (u08)(SPDR_RADIUS * COSPI3),
-      SPDR_Y_START + (u08)(SPDR_RADIUS * SINPI3), color);
+      SPDR_Y_START + (u08)(SPDR_RADIUS * SINPI3));
   else
-    glcdLine(startX, startY, SPDR_X_START + SPDR_RADIUS, startY, color);
+    glcdLine(startX, startY, SPDR_X_START + SPDR_RADIUS, startY);
 }

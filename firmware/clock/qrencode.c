@@ -42,10 +42,10 @@
 //
 
 #include <string.h>
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
+#ifndef EMULIN
 #include <avr/pgmspace.h>
+#else
+#include "../emulator/stubrefs.h"
 #endif
 #include "qrencode.h"
 

@@ -29,7 +29,7 @@ CSRC = emulator/stub.c emulator/controller.c emulator/lcdglut.c \
   emulator/lcdncurses.c emulator/dictutil.c emulator/listutil.c \
   emulator/mchronutil.c emulator/scanutil.c emulator/varutil.c \
   emulator/mchron.c \
-  monomain.c ks0108.c glcd.c config.c anim.c \
+  monomain.c ks0108.c glcd.c config.c anim.c util.c \
   clock/analog.c clock/barchart.c clock/bigdigit.c clock/cascade.c \
   clock/crosstable.c clock/digital.c clock/example.c clock/linechart.c \
   clock/marioworld.c clock/mosquito.c clock/nerd.c clock/piechart.c \

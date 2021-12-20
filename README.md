@@ -39,10 +39,10 @@ evaluation for numeric command arguments.
 
 ### What comes extra with Emuchron
 Compared to the original Monochron [firmware](https://github.com/adafruit/monochron),
-Emuchron includes enhancements to the high level glcd graphics library,
-modified clock configuration pages, several example clocks, a graphics
-performance test module, a two-tone and Mario melody alarm, and demo and test
-scripts.
+Emuchron includes functional enhancements and draw speed optimizations in the
+high level glcd graphics library, modified clock configuration pages, many
+example clocks, a graphics performance test module, a two-tone and Mario melody
+alarm, and demo and test scripts.
 
 ### Where can I find more information on Emuchron
 For detailed information refer to the 100+ page installation, configuration and

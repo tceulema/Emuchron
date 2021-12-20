@@ -6,18 +6,19 @@
 
 # Erase lcd display and paint the function name
 le
-pa f 0 0 5x5p h 1 1 glcdRectangle
+psf
+pa 0 0 5x5p h 1 1 glcdRectangle
 
 # Rectangles of mixed length and width in 1970's style
 vs dx=1
 rf x=0 x<14 x=x+1
   vs dy=1
   rf y=0 y<9 y=y+1
-    pr f x+dx+4 y+dy+7 x+1 y+1
+    pr x+dx+4 y+dy+7 x+1 y+1
     vs dy=y+dy+1
   rn
   vs dx=x+dx+1
 rn
 
 # And enclose it with a big rectangle
-pr f 3 6 122 57
+pr 3 6 122 57

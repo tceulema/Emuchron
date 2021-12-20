@@ -65,7 +65,7 @@ var [a-zA-Z_]+
 
 "="	{ return IS; }
 
-{var}	{ yylval = (double)varIdGet(yytext, GLCD_TRUE);
+{var}	{ yylval = (double)varIdGet(yytext, MC_TRUE);
           if (yylval >= 0)
             return IDENTIFIER;
           varStatus = VAR_OVERFLOW;

@@ -6,7 +6,7 @@
 # Note: This script was used to create the logic for the wave clock in wave.c
 # [firmware/clock]. However, upon testing this logic on the actual Monochron
 # it turned out the algorithm was too slow as it required too much interaction
-# with the lcd controllers. Thererfore, the actual wave clock does not rely on
+# with the lcd controllers. Therefore, the actual wave clock does not rely on
 # glcdBitmap(), but instead implements its own dedicated and optimized logic to
 # minimize interaction with the lcd controllers.
 #
@@ -29,11 +29,12 @@ hm
 hm --- press 'q' to quit ---
 
 le
+psf
 wts
 rf null true null
   rf rad=0 rad<2*pi rad=rad+pi/23
     rf i=0 i<width i=i+1
-     pb f 0 xs+i ys+ydelta*sin(-rad+2*pi*i/width) i 0 1 height
+     pb 0 xs+i ys+ydelta*sin(-rad+2*pi*i/width) i 0 1 height
     rn
     wte 75
   rn

@@ -10,13 +10,7 @@
 // https://sylviashow.com/episodes/s2/e3/mini/monochron/
 // https://github.com/techninja/MarioChron
 
-#ifdef EMULIN
-#include "../emulator/stub.h"
-#else
-#include "../util.h"
-#endif
-#include "../ks0108.h"
-#include "../monomain.h"
+#include "../global.h"
 #include "../glcd.h"
 #include "../anim.h"
 #include "marioworld.h"
@@ -77,7 +71,7 @@
 // About MARIO_MOVE and MARIO_FEET defs below:
 // MARIO_MOVE determines how fast Mario moves. The lower the value the faster
 // Mario moves, but a fast move will make Mario look blurry on the lcd.
-// MARIO_FOOT determines how fast Mario swaps his feet, based on the x location
+// MARIO_FEET determines how fast Mario swaps his feet, based on the x location
 // of Mario. The speed for swapping is also influenced by the speed with which
 // Mario moves, as determined by MARIO_MOVE. The lower the value the faster
 // Mario swaps his feet, but a fast swap speed will make Mario's feet look
@@ -151,7 +145,6 @@ extern volatile u08 mcAlarmSwitch;
 extern volatile u08 mcUpdAlarmSwitch;
 extern volatile u08 mcCycleCounter;
 extern volatile u08 mcClockTimeEvent;
-extern volatile u08 mcBgColor, mcFgColor;
 extern volatile u08 mcU8Util1;
 
 // Static data for date/alarm and time score data
@@ -191,7 +184,7 @@ static u08 blockMinY;			// Position y to animate right block
 static u08 blockAnim;			// Bouncing block animation index
 static u08 blockAnimX;			// Bouncing block x position
 static u08 blockFrame;			// Block animation frame to be drawn
-static u08 blockUpdate = GLCD_FALSE;	// Request to update frame of blocks
+static u08 blockUpdate = MC_FALSE;	// Request to update frame of blocks
 static const uint16_t __attribute__ ((progmem)) block[] = // 8x10 frame
 {
   0x00fc,0x0102,0x010a,0x01a6,0x01b6,0x011a,0x0102,0x00fc, // Frame 0
@@ -318,11 +311,11 @@ static void marioTurtle(void);
 //
 static void marioAlmAreaUpdate(void)
 {
-  u08 newAlmDisplayState = GLCD_FALSE;
+  u08 newAlmDisplayState = MC_FALSE;
   u08 hdrPos;
 
   // Draw initial header (WORLD or ALARM) and fill initial alarm time in buffer
-  if (mcClockInit == GLCD_TRUE)
+  if (mcClockInit == MC_TRUE)
   {
     marioBufFill(mcAlarmH, FONT7X7_COLON, mcAlarmM, DA_ALARM, daBuf);
     if (mcAlarmSwitch == ALARM_SWITCH_OFF)
@@ -337,7 +330,7 @@ static void marioAlmAreaUpdate(void)
       waPos = WA_ALARM;
     }
   }
-  else if (mcUpdAlarmSwitch == GLCD_TRUE)
+  else if (mcUpdAlarmSwitch == MC_TRUE)
   {
     // If we switched on/off the alarm update alarm time in buffer
     marioBufFill(mcAlarmH, FONT7X7_COLON, mcAlarmM, DA_ALARM, daBuf);
@@ -359,16 +352,16 @@ static void marioAlmAreaUpdate(void)
   }
 
   // Set alarm blinking state in case we're alarming
-  if (mcAlarming == GLCD_TRUE && (mcCycleCounter & 0x08) == 8)
-    newAlmDisplayState = GLCD_TRUE;
+  if (mcAlarming == MC_TRUE && (mcCycleCounter & 0x08) == 8)
+    newAlmDisplayState = MC_TRUE;
 
   // Make alarm area blink during alarm or cleanup after end of alarm
   if (newAlmDisplayState != mcU8Util1)
   {
     // Inverse the coin blocks
     mcU8Util1 = newAlmDisplayState;
-    blockUpdate = GLCD_TRUE;
-    if (mcU8Util1 == GLCD_FALSE)
+    blockUpdate = MC_TRUE;
+    if (mcU8Util1 == MC_FALSE)
       blockFrame = 0;
     else
       blockFrame = 1;
@@ -409,17 +402,17 @@ static void marioBlock(void)
 
     // Set animation for next cycle and request block update
     blockAnim++;
-    blockUpdate = GLCD_TRUE;
+    blockUpdate = MC_TRUE;
   }
 
   // Update the blocks when needed
-  if (blockUpdate == GLCD_TRUE)
+  if (blockUpdate == MC_TRUE)
   {
-    glcdBitmap16PmFg(BLOCK_HOUR_X, blockHourY, BLOCK_WIDTH, BLOCK_HEIGHT,
+    glcdBitmap16Pm(BLOCK_HOUR_X, blockHourY, BLOCK_WIDTH, BLOCK_HEIGHT,
       block + blockFrame * BLOCK_WIDTH);
-    glcdBitmap16PmFg(BLOCK_MIN_X, blockMinY, BLOCK_WIDTH, BLOCK_HEIGHT,
+    glcdBitmap16Pm(BLOCK_MIN_X, blockMinY, BLOCK_WIDTH, BLOCK_HEIGHT,
       block + blockFrame * BLOCK_WIDTH);
-    blockUpdate = GLCD_FALSE;
+    blockUpdate = MC_FALSE;
   }
 
   // Detect end of block bounce
@@ -489,7 +482,7 @@ static void marioCoin(void)
     return;
 
   // Draw frame and set next frame (that may indicate animation stop)
-  glcdBitmap8PmFg(coinAnimX, COIN_Y, COIN_WIDTH, COIN_HEIGHT,
+  glcdBitmap8Pm(coinAnimX, COIN_Y, COIN_WIDTH, COIN_HEIGHT,
     coin + coinFrame * COIN_WIDTH);
   coinFrame++;
 }
@@ -522,27 +515,29 @@ void marioInit(u08 mode)
   DEBUGP("Init Mario");
 
   // Score coin and 'x' at top-right
-  glcdBitmap8PmFg(80, 1, COIN_WIDTH, COIN_HEIGHT, coin + 4 * COIN_WIDTH);
-  glcdPutStr2(90, 1, FONT_5X7M, "x", mcFgColor);
+  glcdBitmap8Pm(80, 1, COIN_WIDTH, COIN_HEIGHT, coin + 4 * COIN_WIDTH);
+  glcdPutStr2(90, 1, FONT_5X7M, "x");
 
   // Draw the bolted plateau for the turtle
   glcdRectangle(PLATEAU_MIN, PLATEAU_Y, PLATEAU_MAX - PLATEAU_MIN + 1,
-    GROUND_Y - PLATEAU_Y + 1, mcFgColor);
-  glcdDot(PLATEAU_MIN, PLATEAU_Y, mcBgColor);
-  glcdDot(PLATEAU_MAX, PLATEAU_Y, mcBgColor);
-  glcdBitmap8PmFg(PLATEAU_MIN + 2, PLATEAU_Y + 2, 4, 4, bolt);
-  glcdBitmap8PmFg(PLATEAU_MAX - 5, PLATEAU_Y + 2, 4, 4, bolt);
+    GROUND_Y - PLATEAU_Y + 1);
+  glcdColorSetBg();
+  glcdDot(PLATEAU_MIN, PLATEAU_Y);
+  glcdDot(PLATEAU_MAX, PLATEAU_Y);
+  glcdColorSetFg();
+  glcdBitmap8Pm(PLATEAU_MIN + 2, PLATEAU_Y + 2, 4, 4, bolt);
+  glcdBitmap8Pm(PLATEAU_MAX - 5, PLATEAU_Y + 2, 4, 4, bolt);
 
   // Other images (ground, clouds, plant pots and coin blocks)
   for (i = 0; i < 16; i++)
-    glcdBitmap8PmFg(i * 8, GROUND_Y, 8, 6, ground);
-  glcdBitmap8PmFg(54, 5, 16, 8, cloud);
-  glcdBitmap8PmFg(12, 21, 16, 8, cloud);
-  glcdBitmap8PmFg(100, 12, 16, 8, cloud);
-  glcdBitmap16PmFg(POT_LEFT_X, POT_Y, POT_WIDTH, POT_HEIGHT, plantpot);
-  glcdBitmap16PmFg(POT_RIGHT_X, POT_Y, POT_WIDTH, POT_HEIGHT, plantpot);
-  glcdBitmap16PmFg(BLOCK_HOUR_X, BLOCK_Y, 8, 10, block);
-  glcdBitmap16PmFg(BLOCK_MIN_X, BLOCK_Y, 8, 10, block);
+    glcdBitmap8Pm(i * 8, GROUND_Y, 8, 6, ground);
+  glcdBitmap8Pm(54, 5, 16, 8, cloud);
+  glcdBitmap8Pm(12, 21, 16, 8, cloud);
+  glcdBitmap8Pm(100, 12, 16, 8, cloud);
+  glcdBitmap16Pm(POT_LEFT_X, POT_Y, POT_WIDTH, POT_HEIGHT, plantpot);
+  glcdBitmap16Pm(POT_RIGHT_X, POT_Y, POT_WIDTH, POT_HEIGHT, plantpot);
+  glcdBitmap16Pm(BLOCK_HOUR_X, BLOCK_Y, 8, 10, block);
+  glcdBitmap16Pm(BLOCK_MIN_X, BLOCK_Y, 8, 10, block);
 
   // Init some data to prevent graphic anomalies at (re)start: the blocks don't
   // bounce, the coin does not animate and mario does not jump. Also, mario,
@@ -553,13 +548,13 @@ void marioInit(u08 mode)
   blockAnim = BLOCK_STOP;
   coinFrame = COIN_STOP;
   marJump = MARIO_GROUND;
-  marJumpCnf = GLCD_FALSE;
-  marJumpHour = GLCD_FALSE;
-  marJumpMin = GLCD_FALSE;
+  marJumpCnf = MC_FALSE;
+  marJumpHour = MC_FALSE;
+  marJumpMin = MC_FALSE;
   marWait = MARIO_MOVE;
   plaWait = PLANT_MOVE;
   turWait = TURTLE_MOVE;
-  mcU8Util1 = GLCD_FALSE;
+  mcU8Util1 = MC_FALSE;
 }
 
 //
@@ -573,14 +568,14 @@ static void marioMario(void)
 
   // If the minute or hour has changed and no coin is animated, jump the next
   // chance we get
-  if (mcClockTimeEvent == GLCD_TRUE && marJumpHour == GLCD_FALSE &&
-      marJumpMin == GLCD_FALSE && coinFrame == COIN_STOP)
+  if (mcClockTimeEvent == MC_TRUE && marJumpHour == MC_FALSE &&
+      marJumpMin == MC_FALSE && coinFrame == COIN_STOP)
   {
     // Hour change has precedence over minute change
     if (scoreTimeLeft != mcClockNewTH)
-      marJumpHour = GLCD_TRUE;
+      marJumpHour = MC_TRUE;
     else if (scoreTimeRight != mcClockNewTM)
-      marJumpMin = GLCD_TRUE;
+      marJumpMin = MC_TRUE;
   }
 
   // Mario waits some clock cycles before he moves
@@ -594,7 +589,7 @@ static void marioMario(void)
   // On specific points we may start jumping
   if ((marJumpHour && marX == BLOCK_HOUR_X - marDir * 4) ||
       (marJumpMin && marX == BLOCK_MIN_X - marDir * 4))
-    marJumpCnf = GLCD_TRUE;
+    marJumpCnf = MC_TRUE;
 
   // Set default y and modify in case we are jumping
   marY = GROUND_Y - MARIO_HEIGHT;
@@ -607,28 +602,31 @@ static void marioMario(void)
     marJump++;
     if (marJump == sizeof(marArc))
     {
-      marJumpHour = GLCD_FALSE;
-      marJumpMin = GLCD_FALSE;
-      marJumpCnf = GLCD_FALSE;
+      marJumpHour = MC_FALSE;
+      marJumpMin = MC_FALSE;
+      marJumpCnf = MC_FALSE;
       marJump = MARIO_GROUND;
     }
   }
 
   // Clear previous frame if we are jumping and save new location
   if (marPrevY != marY)
-    glcdFillRectangle(marPrevX, marPrevY, MARIO_WIDTH, MARIO_HEIGHT,
-      mcBgColor);
+  {
+    glcdColorSetBg();
+    glcdFillRectangle(marPrevX, marPrevY, MARIO_WIDTH, MARIO_HEIGHT);
+    glcdColorSetFg();
+  }
   marPrevX = marX;
   marPrevY = marY;
 
   // Determine frame to draw and draw it. When Mario is jumping don't swap
   // his feet during the jumping process.
-  if (marJumpCnf == GLCD_TRUE)
+  if (marJumpCnf == MC_TRUE)
     frame = marLastFrame;
   else
     frame = marDir + 1 + ((marX >> MARIO_FEET) & 0x1);
   marLastFrame = frame;
-  glcdBitmap16PmFg(marX, marY, MARIO_WIDTH, MARIO_HEIGHT,
+  glcdBitmap16Pm(marX, marY, MARIO_WIDTH, MARIO_HEIGHT,
     mario + frame * MARIO_WIDTH);
 
   // Move for next draw and switch direction when needed
@@ -649,7 +647,7 @@ static void marioPlant(void)
   // See if we need to start animating the plant
   if (plaFrame == PLANT_STOP)
   {
-    if (mcClockTimeEvent == GLCD_FALSE)
+    if (mcClockTimeEvent == MC_FALSE)
       return;
 
     // Countdown for next plant to animate
@@ -689,11 +687,9 @@ static void marioPlant(void)
 
   // Draw (a height subset of) the open or closed plant frame
   if ((plaFrame & 0x2) == 0)
-    glcdBitmap16PmFg(plaAnimX, POT_Y - height, PLANT_WIDTH, height,
-      plaOpen);
+    glcdBitmap16Pm(plaAnimX, POT_Y - height, PLANT_WIDTH, height, plaOpen);
   else
-    glcdBitmap16PmFg(plaAnimX, POT_Y - height, PLANT_WIDTH, height,
-      plaClosed);
+    glcdBitmap16Pm(plaAnimX, POT_Y - height, PLANT_WIDTH, height, plaClosed);
 }
 
 //
@@ -703,7 +699,7 @@ static void marioPlant(void)
 //
 static void marioScore(void)
 {
-  if (mcClockInit == GLCD_TRUE)
+  if (mcClockInit == MC_TRUE)
   {
     // Administer static scores independent from actual time/date
     scoreTimeLeft = mcClockNewTH;
@@ -759,7 +755,7 @@ static void marioScore(void)
 static void marioScroll(u08 x, u08 y, u08 pos, u08 width, u08 origin,
   void *buf)
 {
-  glcdBitmap(x, y, 0, pos, width, 7, ELM_WORD, origin, buf, mcFgColor);
+  glcdBitmap(x, y, 0, pos, width, 7, ELM_WORD, origin, buf);
 }
 
 //
@@ -791,7 +787,7 @@ static void marioTurtle(void)
     // Regular move from left to right and back
     turWait = 0;
     turFrame = turDir + 1 + (turX & 0x1);
-    glcdBitmap16PmFg(turX, turY, TURTLE_WIDTH, TURTLE_HEIGHT,
+    glcdBitmap16Pm(turX, turY, TURTLE_WIDTH, TURTLE_HEIGHT,
       turtle + turFrame * TURTLE_WIDTH);
 
     // Move for next draw and switch direction when needed
@@ -808,18 +804,23 @@ static void marioTurtle(void)
   if (turAnim < TURTLE_JUMP)
   {
     // Ascend turtle 4px high
-    glcdBitmap16PmFg(turX, turY - turAnim - 1, TURTLE_WIDTH, TURTLE_HEIGHT,
+    glcdBitmap16Pm(turX, turY - turAnim - 1, TURTLE_WIDTH, TURTLE_HEIGHT,
       turtle + turFrame * TURTLE_WIDTH);
+    glcdColorSetBg();
     glcdLine(turX, PLATEAU_Y - 1 - turAnim, turX + TURTLE_WIDTH,
-      PLATEAU_Y - 1 - turAnim, mcBgColor);
+      PLATEAU_Y - 1 - turAnim);
+    glcdColorSetFg();
   }
   else if (turAnim < TURTLE_JUMP * 2 + 1)
   {
     // Change into turtle shell that descends back to the plateau
     if (turAnim == TURTLE_JUMP)
-      glcdFillRectangle(turX, turY - TURTLE_JUMP, TURTLE_WIDTH, TURTLE_HEIGHT,
-        mcBgColor);
-    glcdBitmap8PmFg(SHELL_X, SHELL_Y - (TURTLE_JUMP * 2 - turAnim),
+    {
+      glcdColorSetBg();
+      glcdFillRectangle(turX, turY - TURTLE_JUMP, TURTLE_WIDTH, TURTLE_HEIGHT);
+      glcdColorSetFg();
+    }
+    glcdBitmap8Pm(SHELL_X, SHELL_Y - (TURTLE_JUMP * 2 - turAnim),
       SHELL_WIDTH, SHELL_HEIGHT, turtleShell);
   }
   else if (turAnim < TURTLE_JUMP * 2 + 35)
@@ -827,7 +828,7 @@ static void marioTurtle(void)
     // Shell slides off the display
     if (turAnim >= TURTLE_JUMP * 2 + 25)
       drawWidth = SHELL_WIDTH - turAnim + TURTLE_JUMP * 2 + 24;
-    glcdBitmap8PmFg(SHELL_X + turAnim - TURTLE_JUMP * 2, SHELL_Y, drawWidth,
+    glcdBitmap8Pm(SHELL_X + turAnim - TURTLE_JUMP * 2, SHELL_Y, drawWidth,
       SHELL_HEIGHT, turtleShell);
   }
   else if (turAnim < TURTLE_WAIT)
@@ -840,7 +841,7 @@ static void marioTurtle(void)
   {
     // Make turtle re-appear at start position
     turFrame = turDir + 1 + (turX & 0x1);
-    glcdBitmap16PmFg(turX, PLATEAU_Y - (turAnim - TURTLE_WAIT + 1),
+    glcdBitmap16Pm(turX, PLATEAU_Y - (turAnim - TURTLE_WAIT + 1),
       TURTLE_WIDTH, turAnim - TURTLE_WAIT + 1,
       turtle + turFrame * TURTLE_WIDTH);
   }

@@ -13,7 +13,7 @@
 #include <readline/history.h>
 
 // Monochron and emuchron defines
-#include "../ks0108.h"
+#include "../global.h"
 #include "expr.h"
 #include "dictutil.h"
 #include "scanutil.h"
@@ -67,7 +67,7 @@ void cmdArgCleanup(cmdLine_t *cmdLine)
   int i;
 
   // Anything to clean?
-  cmdLine->initialized = GLCD_FALSE;
+  cmdLine->initialized = MC_FALSE;
   if (cmdLine->args == NULL)
     return;
 
@@ -98,7 +98,7 @@ static char *cmdArgCreate(char *arg, int len, int isExpr)
   char *cmdArg;
 
   // Do we need to reserve space for adding a '\n' to the argument
-  if (isExpr == GLCD_TRUE)
+  if (isExpr == MC_TRUE)
     closeLen = 2;
 
   // Allocate memory and copy the argument into it
@@ -106,7 +106,7 @@ static char *cmdArgCreate(char *arg, int len, int isExpr)
   memcpy(cmdArg, arg, (size_t)len);
 
   // Do we need to add a '\n' or just stick with adding a trailing '\0'
-  if (isExpr == GLCD_TRUE)
+  if (isExpr == MC_TRUE)
   {
     cmdArg[len] = '\n';
     cmdArg[len + 1] = '\0';
@@ -138,7 +138,7 @@ u08 cmdArgInit(char **input, cmdLine_t *cmdLine)
   *input = cmdLine->input + strspn(cmdLine->input, " \t");
   if (**input == '\0')
   {
-    cmdLine->initialized = GLCD_TRUE;
+    cmdLine->initialized = MC_TRUE;
     return CMD_RET_OK;
   }
 
@@ -273,7 +273,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
     {
       // Scan and validate a single char argument
       j = strcspn(workPtr, " \t");
-      cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+      cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_FALSE);
       if (cmdArgValidateChar(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
         return CMD_RET_ERROR;
     }
@@ -282,7 +282,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
       // Copy the flex/bison expression argument up to next delimeter.
       // Validation is done at runtime when the expression is evaluated.
       j = strcspn(workPtr, " \t");
-      cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_TRUE);
+      cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_TRUE);
     }
     else if (argType == ARG_STRING)
     {
@@ -291,7 +291,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
       {
         // Copy the word argument up to next delimeter and validate value
         j = strcspn(workPtr, " \t");
-        cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+        cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_FALSE);
         if (cmdArgValidateWord(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
           return CMD_RET_ERROR;
       }
@@ -299,7 +299,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
       {
         // Copy the word argument up to next delimeter and validate value
         j = strcspn(workPtr, " \t");
-        cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+        cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_FALSE);
         if (cmdArgValidateRegex(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
           return CMD_RET_ERROR;
       }
@@ -307,7 +307,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
       {
         // Copy the remainder of the input string (that may be empty)
         j = strlen(workPtr);
-        cmdLine->args[i] = cmdArgCreate(workPtr, j, GLCD_FALSE);
+        cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_FALSE);
       }
       else
       {
@@ -334,7 +334,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
   }
 
   // Successful scan
-  cmdLine->initialized = GLCD_TRUE;
+  cmdLine->initialized = MC_TRUE;
   return CMD_RET_OK;
 }
 
@@ -346,7 +346,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
 static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char *argValue)
 {
   int i = 0;
-  u08 charFound = GLCD_FALSE;
+  u08 charFound = MC_FALSE;
   char *argCharList = cmdArg->cmdDomain->domTextList;
 
   if (cmdArg->cmdDomain->domType != DOM_CHAR_VAL)
@@ -363,15 +363,15 @@ static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char *argValue)
   }
 
   // Try to find the character in the character validation list
-  while (charFound == GLCD_FALSE && argCharList[i] != '\0')
+  while (charFound == MC_FALSE && argCharList[i] != '\0')
   {
     if (argCharList[i] == argValue[0])
-      charFound = GLCD_TRUE;
+      charFound = MC_TRUE;
     i++;
   }
 
   // Return error if not found
-  if (charFound == GLCD_FALSE)
+  if (charFound == MC_FALSE)
   {
     printf("%s? invalid: %s\n", cmdArg->argName, argValue);
     return CMD_RET_ERROR;
@@ -403,13 +403,13 @@ static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
     if (argValue <= cmdArg->cmdDomain->domNumMin - 0.1)
     {
       printf("%s? invalid: ", cmdArg->argName);
-      cmdArgValuePrint(argValue, GLCD_FALSE, GLCD_TRUE);
+      cmdArgValuePrint(argValue, MC_FALSE, MC_TRUE);
       return CMD_RET_ERROR;
     }
     if (argValue >= cmdArg->cmdDomain->domNumMax + 0.1)
     {
       printf("%s? invalid: ", cmdArg->argName);
-      cmdArgValuePrint(argValue, GLCD_FALSE, GLCD_TRUE);
+      cmdArgValuePrint(argValue, MC_FALSE, MC_TRUE);
       return CMD_RET_ERROR;
     }
   }
@@ -417,7 +417,7 @@ static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
   // Validate assignment expression
   if (domType == DOM_NUM_ASSIGN)
   {
-    if (exprAssign == GLCD_FALSE)
+    if (exprAssign == MC_FALSE)
     {
       printf("%s? parse error\n", cmdArg->argName);
       return CMD_RET_ERROR;
@@ -477,7 +477,7 @@ static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
 {
   int i = 0;
   int j = 0;
-  u08 wordFound = GLCD_FALSE;
+  u08 wordFound = MC_FALSE;
   char *argWordList = cmdArg->cmdDomain->domTextList;
 
   if (cmdArg->cmdDomain->domType != DOM_WORD_VAL)
@@ -487,7 +487,7 @@ static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
   }
 
   // Try to find the word in the word validation list
-  while (wordFound == GLCD_FALSE && argWordList[i] != '\0')
+  while (wordFound == MC_FALSE && argWordList[i] != '\0')
   {
     if (argWordList[i] == '\n')
     {
@@ -495,7 +495,7 @@ static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
       if (argValue[j] == '\0')
       {
         // Input value and domain word are identical
-        wordFound = GLCD_TRUE;
+        wordFound = MC_TRUE;
       }
       else
       {
@@ -525,11 +525,11 @@ static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
 
   // In case we reached the end of the validation string we have a match when
   // the input string also reached the end
-  if (wordFound == GLCD_FALSE && argValue[j] == '\0')
-    wordFound = GLCD_TRUE;
+  if (wordFound == MC_FALSE && argValue[j] == '\0')
+    wordFound = MC_TRUE;
 
   // Return error if not found
-  if (wordFound == GLCD_FALSE)
+  if (wordFound == MC_FALSE)
   {
     printf("%s? invalid: %s\n", cmdArg->argName, argValue);
     return CMD_RET_ERROR;
@@ -550,7 +550,7 @@ u08 cmdArgValuePrint(double value, u08 detail, u08 forceNewline)
 
   if (fabs(value) >= 10000 || fabs(value) < 0.01L)
   {
-    if (detail == GLCD_TRUE)
+    if (detail == MC_TRUE)
     {
       if ((double)((long long)value) == value &&
           fabs(value) < 10E9L)
@@ -567,13 +567,13 @@ u08 cmdArgValuePrint(double value, u08 detail, u08 forceNewline)
   {
     if ((double)((long long)value) == value)
       length = printf("%lld ", (long long)value);
-    else if (detail == GLCD_TRUE)
+    else if (detail == MC_TRUE)
       length = printf("%.6f ", value);
     else
       length = printf("%.2f ", value);
   }
 
-  if (forceNewline == GLCD_TRUE)
+  if (forceNewline == MC_TRUE)
     length = length + printf("\n");
 
   return length;
@@ -583,12 +583,13 @@ u08 cmdArgValuePrint(double value, u08 detail, u08 forceNewline)
 // Function: cmdInputCleanup
 //
 // Cleanup the input stream by free-ing the last malloc-ed data and cleaning up
-// the readline library interface (when used)
+// the readline library interface (when used).
+// Note: The input stream file will NOT be closed.
 //
 void cmdInputCleanup(cmdInput_t *cmdInput)
 {
   // Only cleanup when initialized
-  if (cmdInput->initialized == GLCD_FALSE)
+  if (cmdInput->initialized == MC_FALSE)
     return;
 
   // Add last read to history cache when applicable
@@ -624,21 +625,23 @@ void cmdInputCleanup(cmdInput_t *cmdInput)
   }
 
   // Cleanup complete
-  cmdInput->initialized = GLCD_FALSE;
+  cmdInput->initialized = MC_FALSE;
 }
 
 //
 // Function: cmdInputInit
 //
-// Open an input stream in preparation to read its input line by line
-// regardless the line size.
+// Prepare an open input stream for reading its input line by line regardless
+// the line size.
 // Note: It is assumed that the readline method is used only once, being the
 // mchron command line.
 //
-void cmdInputInit(cmdInput_t *cmdInput)
+void cmdInputInit(cmdInput_t *cmdInput, FILE *file, u08 readMethod)
 {
+  cmdInput->file = file;
   cmdInput->input = NULL;
-  if (cmdInput->readMethod == CMD_INPUT_READLINELIB)
+  cmdInput->readMethod = readMethod;
+  if (readMethod == CMD_INPUT_READLINELIB)
   {
     // Open/create the mchron readline history file to make sure it exists
     FILE *fp;
@@ -686,7 +689,7 @@ void cmdInputInit(cmdInput_t *cmdInput)
   }
 
   // Init done
-  cmdInput->initialized = GLCD_TRUE;
+  cmdInput->initialized = MC_TRUE;
 }
 
 //
@@ -736,26 +739,26 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
     // Use our own input mechanism to read an input line from a text file.
     // Command line input uses the readline library.
     char inputCli[CMD_BUILD_LEN];
-    u08 done = GLCD_FALSE;
+    u08 done = MC_FALSE;
     char *inputPtr = NULL;
     char *mergePtr = NULL;
     char *buildPtr = NULL;
     int inputLen = 0;
     int inputLenTotal = 0;
 
-    // First start with providing a prompt, when specified.
-    if (prompt[0] != '\0')
+    // First start with providing a prompt, when specified
+    if (prompt != NULL)
       printf("%s", prompt);
 
     // Get first character batch
     inputPtr = fgets(inputCli, CMD_BUILD_LEN, cmdInput->file);
-    while (done == GLCD_FALSE)
+    while (done == MC_FALSE)
     {
       if (inputPtr == NULL)
       {
         // EOF: we're done
         cmdInput->input = buildPtr;
-        done = GLCD_TRUE;
+        done = MC_TRUE;
       }
       else
       {
@@ -789,7 +792,7 @@ void cmdInputRead(char *prompt, cmdInput_t *cmdInput)
           // with readline library functionality.
           buildPtr[inputLenTotal - 1] = '\0';
           cmdInput->input = buildPtr;
-          done = GLCD_TRUE;
+          done = MC_TRUE;
         }
         else
         {

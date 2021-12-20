@@ -5,21 +5,13 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "util.h"
+#include "global.h"
 #include "i2cconf.h"
 #include "i2c.h"
 
 // Standard I2C bit rates are:
 // 100KHz for slow speed
 // 400KHz for high speed
-
-// Generate i2c debug strings.
-// 0 = Off, 1 = On
-// Note: Actually putting the strings onto the FTDI bus requires the master
-// debug flag in monomain.h [firmware] to be enabled.
-#define I2C_DEBUG	0
-#define DEBUGI(x)	if (I2C_DEBUG) { x; }
-#define DEBUGIP(x)	DEBUGI(putstring_nl(x))
 
 // TWSR values (not bits)
 // (taken from avr-libc twi.h - thank you Marek Michalkiewicz)
@@ -95,21 +87,19 @@ static void i2cWaitForComplete(void);
 // Send an (address|R/W) combination or a data byte over I2C
 static void i2cSendByte(u08 data);
 // Receive a data byte over i2c:
-// ackFlag = TRUE if received data should be ACK'ed
-// ackFlag = FALSE if received data should be NACK'ed
+// ackFlag = MC_TRUE if received data should be ACK'ed
+// ackFlag = MC_FALSE if received data should be NACK'ed
 static void i2cReceiveByte(u08 ackFlag);
 // Pick up the data that was received with i2cReceiveByte()
 static u08 i2cGetReceivedByte(void);
 // Get current I2c bus status from TWSR
 //static u08 i2cGetStatus(void);
 
-// functions
 void i2cInit(void)
 {
   // Set pull-up resistors on I2C bus pins
-  // TODO: should #ifdef these
-  sbi(PORTC, 5);  // i2c SCL on ATmegaxx8
-  sbi(PORTC, 4);  // i2c SDA on ATmegaxx8
+  sbi(I2C_PORT, I2C_SCL);	// i2c SCL on ATmegaxx8
+  sbi(I2C_PORT, I2C_SDA);	// i2c SDA on ATmegaxx8
 
   // Clear SlaveReceive and SlaveTransmit handler to null
   i2cSlaveReceive = 0;
@@ -123,29 +113,13 @@ void i2cInit(void)
   // Enable TWI interrupt and slave address ACK
   sbi(TWCR, TWIE);
   sbi(TWCR, TWEA);
-  //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWEA));
   // Enable interrupts
   sei();
 }
 
 static void i2cSetBitrate(u16 bitrate)
 {
-  //u08 bitrate_div;
-  // set i2c bitrate
-  // SCL freq = F_CPU / (16 + 2 * TWBR)
-  /*
-  #ifdef TWPS0
-  // For processors with additional bitrate division (mega128)
-  // SCL freq = F_CPU / (16 + 2 * TWBR * 4 ^ TWPS)
-  // set TWPS to zero
-  cbi(TWSR, TWPS0);
-  cbi(TWSR, TWPS1);
-  #endif
-  */
-
-  // Calculate bitrate division
-  //bitrate_div = (F_CPU / 32) / bitrate;
-  //outb(TWBR, bitrate_div);
+  // Default to 32
   TWBR = 32;
 }
 
@@ -170,20 +144,21 @@ static void i2cSetBitrate(u16 bitrate)
 static inline void i2cSendStart(void)
 {
   // Send start condition
-  outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWSTA));
+  outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWSTA));
 }
 
 static inline void i2cSendStop(void)
 {
   // Transmit stop condition.
   // Leave with TWEA on for slave receiving.
-  outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWEA) | BV(TWSTO));
+  outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWEA) |
+    _BV(TWSTO));
 }
 
 static inline void i2cWaitForComplete(void)
 {
   // Wait for i2c interface to complete operation
-  while (!(inb(TWCR) & BV(TWINT)));
+  while (!(inb(TWCR) & _BV(TWINT)));
 }
 
 static inline void i2cSendByte(u08 data)
@@ -191,7 +166,7 @@ static inline void i2cSendByte(u08 data)
   // Save data to the TWDR
   outb(TWDR, data);
   // Begin send
-  outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT));
+  outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT));
 }
 
 static inline void i2cReceiveByte(u08 ackFlag)
@@ -199,13 +174,13 @@ static inline void i2cReceiveByte(u08 ackFlag)
   // Begin receive over i2c
   if (ackFlag)
   {
-    // ackFlag = TRUE: ACK the received data
-    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWEA));
+    // ackFlag = MC_TRUE: ACK the received data
+    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWEA));
   }
   else
   {
-    // ackFlag = FALSE: NACK the received data
-    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT));
+    // ackFlag = MC_FALSE: NACK the received data
+    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT));
   }
 }
 
@@ -294,7 +269,7 @@ u08 i2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
 
   // Transmit stop condition. Leave with TWEA on for slave receiving.
   i2cSendStop();
-  while (!(inb(TWCR) & BV(TWSTO)));
+  while (!(inb(TWCR) & _BV(TWSTO)));
 
   // Enable TWI interrupt
   sbi(TWCR, TWIE);
@@ -323,7 +298,7 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
     // Accept receive data and ack it
     while (length > 1)
     {
-      i2cReceiveByte(TRUE);
+      i2cReceiveByte(MC_TRUE);
       i2cWaitForComplete();
       *data++ = i2cGetReceivedByte();
       // Decrement length
@@ -331,7 +306,7 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
     }
 
     // Accept receive data and nack it (last-byte signal)
-    i2cReceiveByte(FALSE);
+    i2cReceiveByte(MC_FALSE);
     i2cWaitForComplete();
     *data++ = i2cGetReceivedByte();
   }
@@ -390,7 +365,7 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
     // Accept receive data and ack it
     while (receivelength > 1)
     {
-      i2cReceiveByte(TRUE);
+      i2cReceiveByte(MC_TRUE);
       i2cWaitForComplete();
       *receivedata++ = i2cGetReceivedByte();
       // Decrement length
@@ -398,7 +373,7 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
     }
 
     // Accept receive data and nack it (last-byte signal)
-    i2cReceiveByte(TRUE);
+    i2cReceiveByte(MC_TRUE);
     i2cWaitForComplete();
     *receivedata++ = i2cGetReceivedByte();
   }
@@ -406,7 +381,7 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
   // Transmit stop condition.
   // Leave with TWEA on for slave receiving.
   i2cSendStop();
-  while (!(inb(TWCR) & BV(TWSTO)));
+  while (!(inb(TWCR) & _BV(TWSTO)));
 
   // Enable TWI interrupt
   sbi(TWCR, TWIE);
@@ -466,11 +441,11 @@ SIGNAL(TWI_vect)
   //case TW_MR_ARB_LOST:		// 0x38: Bus arbitration lost
     DEBUGIP("I2C: MT->ARB_LOST");
     // Release bus
-    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT));
+    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT));
     // Set state
     I2cState = I2C_IDLE;
     // Release bus and transmit start when bus is free
-    //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWSTA));
+    //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWSTA));
     break;
 
   case TW_MR_DATA_ACK:			// 0x50: Data acknowledged
@@ -478,16 +453,15 @@ SIGNAL(TWI_vect)
     // Store received data byte
     ; uint8_t x = inb(TWDR);
     I2cReceiveData[I2cReceiveDataIndex++] = x;
-    uart_putw_hex(x);
     // Fall-through to see if more bytes will be received
   case TW_MR_SLA_ACK:			// 0x40: Slave address acknowledged
     DEBUGIP("I2C: MR->SLA_ACK");
     if (I2cReceiveDataIndex < I2cReceiveDataLength - 1)
       // Data byte will be received, reply with ACK (more bytes in transfer)
-      i2cReceiveByte(TRUE);
+      i2cReceiveByte(MC_TRUE);
     else
       // Data byte will be received, reply with NACK (final byte in transfer)
-      i2cReceiveByte(FALSE);
+      i2cReceiveByte(MC_FALSE);
     break;
 
   // Slave Receiver status codes
@@ -502,7 +476,7 @@ SIGNAL(TWI_vect)
     // Prepare buffer
     I2cReceiveDataIndex = 0;
     // Receive data byte and return ACK
-    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWEA));
+    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWEA));
     break;
 
   case TW_SR_DATA_ACK:			// 0x80: data byte received, ACK returned
@@ -514,14 +488,14 @@ SIGNAL(TWI_vect)
     if (I2cReceiveDataIndex < I2C_RECEIVE_DATA_BUFFER_SIZE)
     {
       // Receive data byte and return ACK
-      i2cReceiveByte(TRUE);
-      //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWEA));
+      i2cReceiveByte(MC_TRUE);
+      //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWEA));
     }
     else
     {
       // Receive data byte and return NACK
-      i2cReceiveByte(FALSE);
-      //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT));
+      i2cReceiveByte(MC_FALSE);
+      //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT));
     }
     break;
 
@@ -529,15 +503,15 @@ SIGNAL(TWI_vect)
   case TW_SR_GCALL_DATA_NACK:		// 0x98: data byte received, NACK returned
     DEBUGIP("I2C: SR->DATA_NACK");
     // Receive data byte and return NACK
-    i2cReceiveByte(FALSE);
-    //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT));
+    i2cReceiveByte(MC_FALSE);
+    //outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT));
     break;
 
   case TW_SR_STOP:			// 0xa0: STOP or REPEATED START received
 					//       while addressed as slave
     DEBUGIP("I2C: SR->SR_STOP");
     // Switch to SR mode with SLA ACK
-    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWEA));
+    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWEA));
     // i2c receive is complete, call i2cSlaveReceive
     if (i2cSlaveReceive)
       i2cSlaveReceive(I2cReceiveDataIndex, I2cReceiveData);
@@ -554,7 +528,8 @@ SIGNAL(TWI_vect)
     I2cState = I2C_SLAVE_TX;
     // Request data from application
     if (i2cSlaveTransmit)
-      I2cSendDataLength = i2cSlaveTransmit(I2C_SEND_DATA_BUFFER_SIZE, I2cSendData);
+      I2cSendDataLength = i2cSlaveTransmit(I2C_SEND_DATA_BUFFER_SIZE,
+        I2cSendData);
     // Reset data index
     I2cSendDataIndex = 0;
     // Fall-through to transmit first data byte
@@ -564,10 +539,10 @@ SIGNAL(TWI_vect)
     outb(TWDR, I2cSendData[I2cSendDataIndex++]);
     if (I2cSendDataIndex < I2cSendDataLength)
       // Expect ACK to data byte
-      outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWEA));
+      outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWEA));
     else
       // Expect NACK to data byte
-      outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT));
+      outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT));
     break;
 
   case TW_ST_DATA_NACK:			// 0xc0: data byte transmitted, NACK received
@@ -575,7 +550,7 @@ SIGNAL(TWI_vect)
     DEBUGIP("I2C: ST->DATA_NACK or LAST_DATA");
     // All done
     // Switch to open slave
-    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWEA));
+    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWEA));
     // Set state
     I2cState = I2C_IDLE;
     break;
@@ -588,7 +563,8 @@ SIGNAL(TWI_vect)
   case TW_BUS_ERROR:			// 0x00: Bus error (illegal start/stop condition?)
     DEBUGIP("I2C: BUS_ERROR");
     // Reset internal hardware and release bus
-    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | BV(TWINT) | BV(TWSTO) | BV(TWEA));
+    outb(TWCR, (inb(TWCR) & TWCR_CMD_MASK) | _BV(TWINT) | _BV(TWSTO) |
+      _BV(TWEA));
     // Set state
     I2cState = I2C_IDLE;
     break;

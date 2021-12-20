@@ -3,11 +3,18 @@
 // Title    : UART I/O utility functions for MONOCHRON
 //*****************************************************************************
 
-#include "monomain.h"
+#include "global.h"
 #include "util.h"
 
+// Local function prototype
+static void uart_dec(uint32_t dw, uint32_t num);
+
+//
+// Function: uart_init
+//
 // Creates a 8N1 UART connect.
 // Remember that the BRR is #defined for each F_CPU in util.h [firmware].
+//
 void uart_init(uint16_t BRR)
 {
   // Set baudrate counter
@@ -19,40 +26,37 @@ void uart_init(uint16_t BRR)
   DDRD &= ~_BV(0);
 }
 
-int uart_putchar(char c)
+//
+// Function: uart_putchar
+//
+// Put a single character. This is the base function used by other functions to
+// put numbers and strings.
+//
+void uart_putchar(char c)
 {
   loop_until_bit_is_set(UCSR0A, UDRE0);
   UDR0 = c;
-  return 0;
+#ifdef EMULIN
+  stubUartPutChar();
+#endif
 }
 
-void uart_putc_hex(uint8_t b)
-{
-  /* Upper nibble */
-  if ((b >> 4) < 0x0a)
-    uart_putc((b >> 4) + '0');
-  else
-    uart_putc((b >> 4) - 0x0a + 'a');
-
-  /* Lower nibble */
-  if ((b & 0x0f) < 0x0a)
-    uart_putc((b & 0x0f) + '0');
-  else
-    uart_putc((b & 0x0f) - 0x0a + 'a');
-}
-
-void uart_putw_hex(uint16_t w)
-{
-  uart_putc_hex((uint8_t)(w >> 8));
-  uart_putc_hex((uint8_t)(w & 0xff));
-}
-
+//
+// Function: uart_getchar
+//
+// Wait for a char and read it
+//
 char uart_getchar(void)
 {
   while (!(UCSR0A & _BV(RXC0)));
   return UDR0;
 }
 
+//
+// Function: uart_getch
+//
+// Scan for the presence of a char
+//
 char uart_getch(void)
 {
   return (UCSR0A & _BV(RXC0));
@@ -64,9 +68,14 @@ char uart_getch(void)
 // The compiler is smart enough to omit the generation of the function block
 // code based on the master debugging flag. I do admit this looks ugly.
 
+//
+// Function: ROM_putstring
+//
+// Put a progmem string and add a nl if needed
+//
 void ROM_putstring(const char *str, uint8_t nl)
 {
-  if (DEBUGGING == 1)
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
   {
     uint8_t i;
 
@@ -80,81 +89,136 @@ void ROM_putstring(const char *str, uint8_t nl)
   }
 }
 
+//
+// Function: uart_put_hex
+//
+// Put an 8-bit number in hex format
+//
+void uart_put_hex(uint8_t b)
+{
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
+  {
+    /* Upper nibble */
+    if ((b >> 4) < 0x0a)
+      uart_putchar((b >> 4) + '0');
+    else
+      uart_putchar((b >> 4) - 0x0a + 'a');
+
+    /* Lower nibble */
+    if ((b & 0x0f) < 0x0a)
+      uart_putchar((b & 0x0f) + '0');
+    else
+      uart_putchar((b & 0x0f) - 0x0a + 'a');
+  }
+}
+
+//
+// Function: uart_putw_hex
+//
+// Put a 16-bit number in hex format
+//
+void uart_putw_hex(uint16_t w)
+{
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
+  {
+    uart_put_hex((uint8_t)(w >> 8));
+    uart_put_hex((uint8_t)(w & 0xff));
+  }
+}
+
+//
+// Function: uart_putdw_hex
+//
+// Put a 32-bit number in hex format
+//
 void uart_putdw_hex(uint32_t dw)
 {
-  if (DEBUGGING == 1)
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
   {
     uart_putw_hex((uint16_t)(dw >> 16));
     uart_putw_hex((uint16_t)(dw & 0xffff));
   }
 }
 
+//
+// Function: uart_put_sdec
+//
+// Put a signed 8-bit number in decimal format
+//
+void uart_put_sdec(int8_t b)
+{
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
+  {
+    if (b < 0)
+    {
+      uart_putchar('-');
+      b = -b;
+    }
+    uart_dec((uint32_t)b, 100);
+  }
+}
+
+//
+// Function: uart_put_dec
+//
+// Put an unsigned 8-bit number in decimal format
+//
+void uart_put_dec(uint8_t b)
+{
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
+  {
+    uart_dec((uint32_t)b, 100);
+  }
+}
+
+//
+// Function: uart_putw_dec
+//
+// Put an unsigned 16-bit number in decimal format
+//
 void uart_putw_dec(uint16_t w)
 {
-  if (DEBUGGING == 1)
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
   {
-    uint16_t num = 10000;
-    uint8_t started = 0;
-    uint8_t b;
-
-    while (num > 0)
-    {
-      b = w / num;
-      if (b > 0 || started || num == 1)
-      {
-        uart_putc('0' + b);
-        started = 1;
-      }
-      w = w - b * num;
-      num = num / 10;
-    }
+    uart_dec((uint32_t)w, 10000);
   }
 }
 
-void uart_put_dec(int8_t w)
-{
-  if (DEBUGGING == 1)
-  {
-    uint16_t num = 100;
-    uint8_t started = 0;
-    int8_t b;
-
-    if (w < 0)
-    {
-      uart_putc('-');
-      w = -w;
-    }
-    while (num > 0)
-    {
-      b = w / num;
-      if (b > 0 || started || num == 1)
-      {
-        uart_putc('0' + b);
-        started = 1;
-      }
-      w = w - b * num;
-      num = num / 10;
-    }
-  }
-}
-
+//
+// Function: uart_putdw_dec
+//
+// Put an unsigned 32-bit number in decimal format
+//
 void uart_putdw_dec(uint32_t dw)
 {
-  if (DEBUGGING == 1)
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
   {
-    uint32_t num = 1000000000;
+    uart_dec(dw, 1000000000);
+  }
+}
+
+//
+// Function: uart_dec
+//
+// Put a number in decimal format using a divider representing an 8/16/32-bit
+// size number
+//
+static void uart_dec(uint32_t dw, uint32_t num)
+{
+  if (DEBUGGING == 1 || DEBUGI2C == 1)
+  {
     uint8_t started = 0;
-    uint8_t b;
+    uint8_t digit;
 
     while (num > 0)
     {
-      b = dw / num;
-      if (b > 0 || started || num == 1)
+      digit = dw / num;
+      if (digit > 0 || started || num == 1)
       {
-        uart_putc('0' + b);
+        uart_putchar('0' + digit);
         started = 1;
       }
-      dw = dw - b * num;
+      dw = dw - digit * num;
       num = num / 10;
     }
   }

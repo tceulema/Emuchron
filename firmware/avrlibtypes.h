@@ -70,15 +70,24 @@ typedef __int32_t  LONG;
 #endif
 
 // Maximum value that can be held by unsigned data types (8/16/32 bits)
-#define MAX_U08	255
-#define MAX_U16	65535
-#define MAX_U32	4294967295
+#define MAX_U08		255
+#define MAX_U16		65535
+#define MAX_U32		4294967295
+#define MAX_UINT8_T	255
+#define MAX_UINT16_T	65535
+#define MAX_UINT32_T	4294967295
 
-// Maximum values that can be held by signed data types (8/16/32 bits)
-#define MIN_S08	-128
-#define MAX_S08	127
-#define MIN_S16	-32768
-#define MAX_S16	32767
-#define MIN_S32	-2147483648
-#define MAX_S32	2147483647
+// Min/Max values that can be held by signed data types (8/16/32 bits)
+#define MIN_S08		-128
+#define MAX_S08		127
+#define MIN_S16		-32768
+#define MAX_S16		32767
+#define MIN_S32		-2147483648
+#define MAX_S32		2147483647
+#define MIN_INT8_T	-128
+#define MAX_INT8_T	127
+#define MIN_INT16_T	-32768
+#define MAX_INT16_T	32767
+#define MIN_INT32_T	-2147483648
+#define MAX_INT32_T	2147483647
 #endif

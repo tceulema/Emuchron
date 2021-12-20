@@ -13,6 +13,7 @@
 
 # Show message and a clock
 hm --- press 'q' to quit ---
+psf
 cs 8
 
 # Move inverted circle from left to right to left (etc...) while
@@ -23,9 +24,9 @@ vs x=29
 rf null true null
   rf x=x+2*delta x>=31&&x<=96 x=x+delta
     tf
-    pcf f x 32 31 4
+    pcf x 32 31 4
     wte 75
-    pcf f x 32 31 4
+    pcf x 32 31 4
   rn
   li
   vs delta=-delta

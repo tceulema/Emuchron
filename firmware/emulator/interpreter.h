@@ -7,7 +7,7 @@
 #define INTERPRETER_H
 
 #include <stdio.h>
-#include "../global.h"
+#include "../avrlibtypes.h"
 
 // The mchron configuration folder relative to $HOME
 #define MCHRON_CONFIG		"/.config/mchron"

@@ -7,6 +7,7 @@
 #define EXPR_H
 
 #include "../avrlibtypes.h"
+#include "interpreter.h"
 
 // Evaluate mchron numeric expression
 u08 exprEvaluate(char *argName, char *exprString);
