@@ -18,7 +18,7 @@
 // Project/system dependent defines
 
 // Version of our Emuchron project code base
-#define EMUCHRON_VERSION		"v7.0"
+#define EMUCHRON_VERSION		"v7.0.1"
 
 // Our own definition of the Monchron/Emuchron truth.
 // Why do we do this? It turns out that gcc sometimes get utterly confused

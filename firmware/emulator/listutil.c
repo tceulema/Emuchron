@@ -114,7 +114,7 @@ u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
     retVal = cmdArgInit(&input, cmdLine);
     if (retVal != CMD_RET_OK)
       return CMD_RET_ERROR;
-    if (*cmdLine->input == '\0')
+    if (cmdLine->cmdCommand == NULL)
     {
       // Input contains only white space chars.
       // Dump newline in the log only when we run at root command level.
@@ -207,8 +207,8 @@ static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
   // Command not found
   if (retVal != CMD_RET_OK)
     return -1;
-  // Empty command
-  if (*cmdLine->input == '\0')
+  // Input contains only white space chars
+  if (cmdLine->cmdCommand == NULL)
     return 0;
 
   // Get the control block type and based on that optionally link it to a (new)
