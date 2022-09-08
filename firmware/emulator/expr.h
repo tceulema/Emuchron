@@ -10,5 +10,5 @@
 #include "interpreter.h"
 
 // Evaluate mchron numeric expression
-u08 exprEvaluate(char *argName, char *exprString);
+u08 exprEvaluate(char *argName, argInfo_t *argInfo);
 #endif

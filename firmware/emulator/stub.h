@@ -57,7 +57,6 @@ u08 stubLogfileOpen(char debugFile[]);
 
 // Alarm sound and switch stubs
 void alarmSoundReset(void);
-void alarmSoundStop(void);
 void alarmSwitchSet(u08 on, u08 show);
 void alarmSwitchShow(void);
 void alarmSwitchToggle(u08 show);

@@ -54,10 +54,9 @@ typedef struct
 } timeElement_t;
 
 // Monochron environment variables
-extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
+extern volatile uint8_t mcClockOldTM;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
-extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern char *animMonths[12];
@@ -173,9 +172,6 @@ void mosquitoInit(u08 mode)
   elementSec = elementSecInit;
   elementMin = elementMinInit;
   elementHour = elementHourInit;
-
-  // Force the alarm info area to init itself
-  mcAlarmSwitch = ALARM_SWITCH_NONE;
 
   // Init the initial direction of each element
   mosquitoDirectionSet();

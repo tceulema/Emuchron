@@ -38,18 +38,28 @@
 #include "clock/trafficlight.h"
 #include "clock/wave.h"
 
+// This define is related to animADAreaUpdate() on how to deal with snoozing
+// for the AD area options that will show the alarm time.
+// When 0 it will show the blinking alarm time while snoozing.
+// When 1 it will show the snoozing countdown timer while snoozing.
+#define ALM_SNZ_COUNTDOWN	1
+
 // The following monomain.c global variables are used to transfer the hardware
 // state to a stable functional Monochron clock state.
 // They are not to be used in individual Monochron clocks as their contents are
 // considered unstable.
-extern volatile uint8_t almSwitchOn, almAlarming;
+extern volatile uint8_t almSwitchOn, almAlarming, almAlarmEvent;
+extern volatile uint8_t almSnoozing, almSnoozeEvent;
+extern uint16_t almTickerSnooze;
 extern volatile rtcDateTime_t rtcDateTimeNext;
 extern volatile uint8_t rtcTimeEvent;
 
 // The following mcXYZ global variables are for use in any Monochron clock.
 // In a Monochron clock its contents are considered stable.
+// The alarm/snoozing state, alarm switch and their event triggers may only be
+// used in a clock cycle() function.
 
-// Previous and new date/time (also ref mcClockTimeEvent)
+// Previous and new time/date (also ref mcClockTimeEvent/mcCLockDateEvent)
 volatile uint8_t mcClockOldTS = 0, mcClockOldTM = 0, mcClockOldTH = 0;
 volatile uint8_t mcClockNewTS = 0, mcClockNewTM = 0, mcClockNewTH = 0;
 volatile uint8_t mcClockOldDD = 0, mcClockOldDM = 0, mcClockOldDY = 0;
@@ -58,19 +68,42 @@ volatile uint8_t mcClockNewDD = 0, mcClockNewDM = 0, mcClockNewDY = 0;
 // Indicates whether real time clock has changed since last check.
 // Note the following:
 // - mcClockTimeEvent turns true when the time or date has changed since last
-//   check
-// - mcClockDateEvent turns true when the date has changed since last check
+//   check.
+// - mcClockDateEvent turns true when the date has changed since last check.
 volatile uint8_t mcClockTimeEvent = MC_FALSE;
 volatile uint8_t mcClockDateEvent = MC_FALSE;
 
 // Indicates whether the alarm switch is On or Off
 volatile uint8_t mcAlarmSwitch;
 
-// Indicates whether the alarm switch has changed since last check
+// Indicates whether the alarm switch has changed since last check. It will
+// also turn true upon clock initialization.
 volatile uint8_t mcUpdAlarmSwitch = MC_FALSE;
 
-// Indicates whether the clock is alarming/snoozing or not
+// Indicates whether the clock alarming state has changed since last check and
+// its current alarming state.
+// Note the following:
+// - mcAlarmEvent turns true when the clock starts alarming or stops alarming
+//   due to alarm timeout or by pressing the 'M' button. Upon flipping the
+//   alarm switch while alarming/snoozing, it is caught by mcUpdAlarmSwitch.
+// - mcAlarming indicates whether the clock is currently alarming/snoozing.
+//   Use in combination with mcSnoozing to discriminate between audible alarm
+//   and silent snoozing.
+volatile uint8_t mcAlarmEvent = MC_FALSE;
 volatile uint8_t mcAlarming = MC_FALSE;
+
+// Indicates whether the clock snoozing state has changed since last check, its
+// current snoozing state and the snooze countdown timer in seconds.
+// Note the following:
+// - mcSnoozeEvent turns true when the clock starts snoozing or stops snoozing
+//   due to snooze timeout. When stopping alarming while snoozing it is caught
+//   by either mcAlarmEvent (press 'M' button) or mcUpdAlarmSwitch (alarm
+//   switch flipped to off).
+// - mcSnoozing indicates whether the clock is currently snoozing.
+//   Note that mcSnoozing can only be true when mcAlarming is true.
+volatile uint8_t mcSnoozeEvent = MC_FALSE;
+volatile uint8_t mcSnoozing = MC_FALSE;
+volatile uint16_t mcTickerSnooze = 0;
 
 // The alarm time
 volatile uint8_t mcAlarmH, mcAlarmM;
@@ -160,7 +193,7 @@ clockDriver_t *mcClockPool = monochron;
 volatile uint8_t mcMchronClock = 0;
 
 // The alarm blink state
-static u08 almDisplayState;
+static u08 almDisplayState = MC_FALSE;
 
 // Local function prototypes
 static void animAlarmSwitchCheck(void);
@@ -170,9 +203,9 @@ static void animDateTimeCopy(void);
 //
 // Function: animADAreaUpdate
 //
-// Draw update in clock alarm/date area. It supports generic alarm/date area
-// functionality used in many clocks. The type defines whether the area is used
-// for displaying the alarm time only, date only or a combination of both,
+// Draw update in clock alarm/snooze/date area. It supports generic alarm/date
+// area functionality used in many clocks. The type defines whether the area is
+// used for displaying the alarm time only, date only or a combination of both,
 // depending on whether the alarm switch is on or off.
 // NOTE: A single clock can implement multiple date-only areas but only a
 // single area that includes the alarm. This restriction is due to the method
@@ -185,22 +218,85 @@ void animADAreaUpdate(u08 x, u08 y, u08 type)
   u08 pxDone = 0;
   char msg[6];
 
+  // When only the date is shown our logic is very simple
   if (type == AD_AREA_DATE_ONLY)
   {
-    // Only the date is shown
     if (mcClockDateEvent == MC_TRUE || mcClockInit == MC_TRUE)
       animDatePrint(x, y);
     return;
   }
 
-  // Detect change in displaying alarm or date
-  if (mcUpdAlarmSwitch == MC_TRUE || mcClockDateEvent == MC_TRUE)
+  // Determine whether we need to update the alarm/date area
+  if (mcAlarming == MC_TRUE)
   {
+    // Get new alarming blinking on/off state
+    if ((mcCycleCounter & 0x08) == 8)
+      newAlmDisplayState = MC_TRUE;
+
+    // Detect alarm area refresh while alarming/snoozing
+    if ((ALM_SNZ_COUNTDOWN == 1 && mcSnoozing == MC_FALSE &&
+          almDisplayState != newAlmDisplayState) ||
+        (ALM_SNZ_COUNTDOWN == 1 && mcSnoozing == MC_TRUE &&
+          mcClockTimeEvent == MC_TRUE) ||
+        (ALM_SNZ_COUNTDOWN == 1 && mcSnoozeEvent == MC_TRUE) ||
+        (ALM_SNZ_COUNTDOWN == 0 && almDisplayState != newAlmDisplayState) ||
+        mcAlarmEvent == MC_TRUE || mcClockInit == MC_TRUE)
+    {
+      // Set to show either the snooze timeout or the alarm time. The snooze
+      // timeout is static inversed whereas the alarm time is flashing.
+      DEBUGP("Update AD 1");
+      if (ALM_SNZ_COUNTDOWN == 1 && mcSnoozing == MC_TRUE)
+      {
+        animValToStr(mcTickerSnooze / 60, msg);
+        animValToStr(mcTickerSnooze % 60, &msg[3]);
+      }
+      else
+      {
+        animValToStr(mcAlarmH, msg);
+        animValToStr(mcAlarmM, &msg[3]);
+      }
+      msg[2] = ':';
+
+      // Draw border around alarm/snooze
+      if (newAlmDisplayState == MC_TRUE ||
+          (ALM_SNZ_COUNTDOWN == 1 && mcSnoozing == MC_TRUE))
+        glcdColorSetFg();
+      else
+        glcdColorSetBg();
+      glcdRectangle(x - 1, y - 1, 19, 7);
+
+      // Draw the alarm time or snooze timeout
+      if (newAlmDisplayState == MC_TRUE ||
+          (ALM_SNZ_COUNTDOWN == 1 && mcSnoozing == MC_TRUE))
+        glcdColorSetBg();
+      else
+        glcdColorSetFg();
+      pxDone = glcdPutStr2(x, y, FONT_5X5P, msg);
+
+      // Clean up any trailing remnants of a date string
+      if (type == AD_AREA_ALM_DATE && mcUpdAlarmSwitch == MC_TRUE)
+      {
+        glcdColorSetBg();
+        glcdFillRectangle(x + pxDone, y, AD_AREA_AD_WIDTH - pxDone, 5);
+      }
+    }
+
+    // Sync on/off state
+    almDisplayState = newAlmDisplayState;
+  }
+  else if (mcUpdAlarmSwitch == MC_TRUE || mcClockDateEvent == MC_TRUE ||
+    mcAlarmEvent == MC_TRUE)
+  {
+    // Show either alarm time, current date or clear area
+    almDisplayState = MC_FALSE;
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {
-      if (mcUpdAlarmSwitch == MC_TRUE)
+      if (mcUpdAlarmSwitch == MC_TRUE || mcAlarmEvent == MC_TRUE)
       {
         // Show alarm time
+        DEBUGP("Update AD 2");
+        glcdColorSetBg();
+        glcdRectangle(x - 1, y - 1, 19, 7);
         glcdColorSetFg();
         animValToStr(mcAlarmH, msg);
         msg[2] = ':';
@@ -218,26 +314,14 @@ void animADAreaUpdate(u08 x, u08 y, u08 type)
     else
     {
       // Remove potential alarm time that is potentially inverted
+      DEBUGP("Update AD 3");
       glcdColorSetBg();
       glcdFillRectangle(x - 1, y - 1, 19, 7);
-      almDisplayState = MC_FALSE;
 
       // Show date if requested
       if (type == AD_AREA_ALM_DATE)
         animDatePrint(x, y);
     }
-  }
-
-  // Set alarm blinking state in case we're alarming
-  if (mcAlarming == MC_TRUE && (mcCycleCounter & 0x08) == 8)
-    newAlmDisplayState = MC_TRUE;
-
-  // Make alarm area blink during alarm or cleanup after end of alarm
-  if (newAlmDisplayState != almDisplayState)
-  {
-    // Inverse the alarm area
-    almDisplayState = newAlmDisplayState;
-    glcdFillRectangle2(x - 1, y - 1, 19, 7, ALIGN_AUTO, FILL_INVERSE);
   }
   glcdColorSetFg();
 }
@@ -251,9 +335,6 @@ void animADAreaUpdate(u08 x, u08 y, u08 type)
 //
 static void animAlarmSwitchCheck(void)
 {
-  // Reset pending functional alarm switch change
-  mcUpdAlarmSwitch = MC_FALSE;
-
   if (almSwitchOn == MC_TRUE)
   {
     if (mcAlarmSwitch != ALARM_SWITCH_ON)
@@ -308,11 +389,15 @@ void animClockDraw(u08 mode)
 {
   clockDriver_t *clockDriver = &mcClockPool[mcMchronClock];
 
-  // Sync alarming state and time event for clock
+  // Sync alarming/snoozing state and time event for clock
+  mcAlarmEvent = almAlarmEvent;
   mcAlarming = almAlarming;
+  mcSnoozeEvent = almSnoozeEvent;
+  mcSnoozing = almSnoozing;
   mcClockTimeEvent = rtcTimeEvent;
 
-  // If there's a time event, sync Monochron time with RTC
+  // If there's a time event, sync Monochron time with RTC and the snooze
+  // ticker
   if (mcClockTimeEvent == MC_TRUE)
   {
     DEBUGTP("Update by time event");
@@ -325,6 +410,7 @@ void animClockDraw(u08 mode)
     if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
         mcClockNewDY != mcClockOldDY)
       mcClockDateEvent = MC_TRUE;
+    mcTickerSnooze = almTickerSnooze;
   }
 
   // Have the clock initialize or update itself
@@ -339,7 +425,18 @@ void animClockDraw(u08 mode)
       if (mcClockTimeEvent == MC_TRUE)
         animDateTimeCopy();
 
-      // Clear init flag (if set anyway) in case of first clock draw
+      // Clear events that may have been raised for processing in this cycle
+      if (mcAlarmEvent == MC_TRUE)
+      {
+        mcAlarmEvent = MC_FALSE;
+        almAlarmEvent = MC_FALSE;
+      }
+      if (mcSnoozeEvent == MC_TRUE)
+      {
+        mcSnoozeEvent = MC_FALSE;
+        almSnoozeEvent = MC_FALSE;
+      }
+      mcUpdAlarmSwitch = MC_FALSE;
       mcClockInit = MC_FALSE;
     }
     else // DRAW_INIT_FULL or DRAW_INIT_PARTIAL

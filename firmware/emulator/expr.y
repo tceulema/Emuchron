@@ -20,13 +20,11 @@
 // but for our mchron purpose it is accurate enough.
 #define EPSILON		1E-7L
 
-// The following expression evaluator objects are the only ones that are
-// externally accessible
-double exprValue;	// The resulting expression value
-u08 exprAssign;		// Indicates if input expression is an assignment
-
-// Variable error status flag (variable is not active)
-static u08 varStatus;
+// Expression evaluator results
+static double exprValue;	// The resulting expression value
+static u08 exprAssign;		// Indicates if expression is an assignment
+static u08 exprConst;		// Indicates if expression is a constant value
+static u08 varStatus;		// Indicates if variable is (in)active
 
 // Dummy value to be used in c library math functions
 static double myDummy;
@@ -172,7 +170,7 @@ Line:
 Assignment:
     // Assignment expression to set value of variable
     IDENTIFIER IS Expression { $$ = varValSet((int)$1, $3);
-        exprAssign = MC_TRUE; }
+        exprAssign = MC_TRUE; exprConst = MC_FALSE; }
 ;
 
 Expression:
@@ -180,6 +178,7 @@ Expression:
     NUMBER { $$ = $1; }
     // Get variable value
     | IDENTIFIER { $$ = varValGet((int)$1, &varStatus);
+        exprConst = MC_FALSE;
         if (varStatus == VAR_NOTINUSE) { YYERROR; } }
     // Mathematical operator expressions
     | Expression PLUS Expression { $$ = $1 + $3; }
@@ -199,13 +198,13 @@ Expression:
     | COS LEFT Expression RIGHT { $$ = cos($3); }
     | FRAC LEFT Expression RIGHT { $$ = modf($3, &myDummy); }
     | INTEGER LEFT Expression RIGHT { modf($3, &($$)); }
-    | RAND LEFT RIGHT { $$ = (double)rand() / RAND_MAX; }
+    | RAND LEFT RIGHT { $$ = (double)rand() / RAND_MAX; exprConst = MC_FALSE;}
     | RAND LEFT Expression RIGHT
       { if ($3 >= 1)
           srand((int)$3);
         else
           srand(time(NULL));
-        $$ = (double)rand() / RAND_MAX; }
+        $$ = (double)rand() / RAND_MAX; exprConst = MC_FALSE;}
     | SIN LEFT Expression RIGHT { $$ = sin($3); }
     // Bit operators
     // Note: Bit operations are done on type unsigned int

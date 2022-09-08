@@ -117,7 +117,7 @@ DOMAIN(domNumBacklight, \
 
 // Lcd color: 0..1: 0 = GLCD_OFF, 1 = GLCD_ON
 DOMAIN(domNumColor, \
-  DOM_NUM_RANGE, NULL, 0, 1, "0 = Off, 1 = On");
+  DOM_NUM_RANGE, NULL, 0, 1, "0 = off (black), 1 = on (white)");
 
 // Lcd controller id: 0..1
 DOMAIN(domNumController, \
@@ -523,7 +523,9 @@ cmdArg_t argRepeatFor[] =
   { ARG_NUM,    "post",         &domNumPost } };
 
 // Command 's*'
-// No additional profiles are needed
+// Argument profile for providing command stack statistics
+cmdArg_t argStatsStack[] =
+{ { ARG_NUM,    "enable",       &domNumOffOn } };
 
 // Command 't*'
 // Argument profile for alarm switch position
@@ -591,7 +593,8 @@ cmdCommand_t cmdGroupClock[] =
 
 // All commands for command group 'e' (execute)
 cmdCommand_t cmdGroupExecute[] =
-{ { "e",   PC_CONTINUE,    CMDARGS(argExecute),         CMDHANDLER(doExecute),         "execute commands from file" } };
+{ { "e",   PC_CONTINUE,    CMDARGS(argExecute),         CMDHANDLER(doExecFile),        "execute commands from file" },
+  { "er",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doExecResume),      "resume interrupted execution" } };
 
 // All commands for command group 'g' (graphics buffer)
 cmdCommand_t cmdGroupGraphics[] =
@@ -621,7 +624,7 @@ cmdCommand_t cmdGroupIf[] =
 // All commands for command group 'l' (lcd)
 cmdCommand_t cmdGroupLcd[] =
 { { "lbs", PC_CONTINUE,    CMDARGS(argLcdBacklightSet), CMDHANDLER(doLcdBacklightSet), "set lcd backlight brightness" },
-  { "lcr", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdCursorReset),  "reset lcd controller cursors" },
+  { "lcr", PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdCursorReset),  "reset lcd cursor administration" },
   { "lcs", PC_CONTINUE,    CMDARGS(argLcdActCtrlSet),   CMDHANDLER(doLcdActCtrlSet),   "set active lcd controller" },
   { "lds", PC_CONTINUE,    CMDARGS(argLcdDisplaySet),   CMDHANDLER(doLcdDisplaySet),   "switch lcd controller display on/off" },
   { "le",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doLcdErase),        "erase lcd display" },
@@ -670,7 +673,8 @@ cmdCommand_t cmdGroupRepeat[] =
 
 // All commands for command group 's' (statistics)
 cmdCommand_t cmdGroupStats[] =
-{ { "sp",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doStatsPrint),      "print application statistics" },
+{ { "sls", PC_CONTINUE,    CMDARGS(argStatsStack),      CMDHANDLER(doStatsStack),      "set list runtime statistics" },
+  { "sp",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doStatsPrint),      "print application statistics" },
   { "sr",  PC_CONTINUE,    CMDARGS(NULL),               CMDHANDLER(doStatsReset),      "reset application statistics" } };
 
 // All commands for command group 't' (time/date/alarm)

@@ -22,12 +22,6 @@
 #define ALM_MONOCHRON	0
 #define ALM_EMUCHRON	1
 
-// The max size of a malloc-ed graphics data buffer.
-// Technically the firmware supports a progmem buffer size up to 64KB. The
-// Monochron m328 cpu has 32 KB flash available, but 2 KB is reserved for the
-// bootloader, leaving 30 KB free for software and progmem data.
-#define GRAPH_BUF_BYTES	30720
-
 // The graphics data buffer usage type
 #define GRAPH_NULL	0	// Not initialized
 #define GRAPH_RAW	1	// Free format use of graphics data
@@ -41,12 +35,12 @@
 // Definition of a structure to hold the main() arguments
 typedef struct _emuArgcArgv_t
 {
-  int argDebug;				// argv index for logfile arg
-  int argGlutGeometry;			// argv index for glut geometry arg
-  int argGlutPosition;			// argv index for glut window pos arg
-  int argLcdType;			// argv index for lcd device arg
-  int argTty;				// argv index for ncurses tty arg
-  ctrlDeviceArgs_t ctrlDeviceArgs;	// Processed args for lcd stub interface
+  int argDebug;			// argv index for logfile arg
+  int argGlutGeometry;		// argv index for glut geometry arg
+  int argGlutPosition;		// argv index for glut window pos arg
+  int argLcdType;		// argv index for lcd device arg
+  int argTty;			// argv index for ncurses tty arg
+  ctrlDeviceArgs_t ctrlDeviceArgs; // Processed args for lcd stub interface
 } emuArgcArgv_t;
 
 // Definition of a structure holding a graphics buffer and its metadata
@@ -68,6 +62,7 @@ typedef struct _emuGrBuf_t
 } emuGrBuf_t;
 
 // mchron command argument translation functions
+u08 emuEchoReqGet(char echo);
 u08 emuFontGet(char *fontName);
 u08 emuFormatGet(char formatId, u08 *formatBytes, u08 *formatBits);
 u08 emuOrientationGet(char orientationId);

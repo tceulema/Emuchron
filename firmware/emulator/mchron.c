@@ -65,13 +65,11 @@
 #define TO_UINT16_T(d)	((uint16_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 
 // Monochron defined data
-extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
 extern volatile uint8_t mcBgColor, mcFgColor;
-extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
+extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
@@ -88,31 +86,21 @@ extern char argChar[];
 extern double argDouble[];
 extern char *argString[];
 
-// The expression evaluator expression result value
-extern double exprValue;
-
-// The command list execution depth tells us if we're running at command prompt
-// level
-extern int listExecDepth;
-
 // Flag to indicate we're going to exit
 extern u08 invokeExit;
 
 // This is me
 extern const char *__progname;
 
+// The current command echo state
+extern u08 cmdEcho;
+
 // The command line input stream control structure
 cmdInput_t cmdInput;
-
-// The current command echo state
-u08 echoCmd = CMD_ECHO_YES;
 
 // Initial user definable mchron alarm time
 uint8_t emuAlarmH = 22;
 uint8_t emuAlarmM = 9;
-
-// Current command file execution depth
-int fileExecDepth = 0;
 
 // The timer used for the 'wte' and 'wts' commands
 static struct timeval tvTimer;
@@ -247,7 +235,7 @@ int main(int argc, char *argv[])
 
   // Init the stubbed alarm switch to 'Off' and clear audible alarm
   alarmSwitchSet(MC_FALSE, MC_FALSE);
-  alarmSoundStop();
+  alarmSoundReset();
 
   // Init emuchron system clock + clock plugin time, then print it
   rtcTimeInit();
@@ -266,6 +254,9 @@ int main(int argc, char *argv[])
 
   // Init the command line input interface
   cmdInputInit(&cmdInput, stdin, CMD_INPUT_READLINELIB);
+
+  // Init the command stack
+  cmdStackInit();
 
   // All initialization is done!
   printf("\nenter 'h' for help\n");
@@ -299,15 +290,16 @@ int main(int argc, char *argv[])
   if (retVal != CMD_RET_EXIT)
     printf("\n<ctrl>d - exit\n");
 
-  // Cleanup command line and command line read interface
+  // Cleanup command line, command line read interface and command stack
   free(prompt);
   cmdLine->input = NULL;
-  cmdListCleanup(cmdLine, NULL);
+  cmdLineCleanup(cmdLine);
   cmdInputCleanup(&cmdInput);
+  cmdStackCleanup();
 
   // Shutdown gracefully by killing audio, stopping the controller and lcd
   // device(s), and cleaning up the named variables and graphics buffers
-  alarmSoundStop();
+  alarmSoundReset();
   ctrlCleanup();
   varReset();
   for (i = 0; i < GRAPHICS_BUFFERS; i++)
@@ -376,8 +368,8 @@ u08 doClockFeed(cmdLine_t *cmdLine)
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_SCAN);
 
-  // Init alarm and functional clock time
-  mcAlarming = MC_FALSE;
+  // Reset alarm and init functional clock time
+  alarmSoundReset();
   rtcMchronTimeInit();
 
   // Init stub event handler used in main loop below and get first event
@@ -402,13 +394,12 @@ u08 doClockFeed(cmdLine_t *cmdLine)
   // Flush any pending updates in the lcd device
   ctrlLcdFlush();
 
+  // Kill alarm (if sounding anyway) and reset it
+  alarmSoundReset();
+
   // Return to line mode if needed
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_LINE);
-
-  // Kill alarm (if sounding anyway) and reset it
-  alarmSoundStop();
-  alarmSoundReset();
 
   return CMD_RET_OK;
 }
@@ -433,12 +424,12 @@ u08 doClockSelect(cmdLine_t *cmdLine)
   if (clock == CHRON_NONE)
   {
     // Release clock
-    emuClockRelease(echoCmd);
+    emuClockRelease(cmdEcho);
   }
   else
   {
     // Switch to new clock: init and do first clock cycle
-    alarmSoundStop();
+    alarmSoundReset();
     mcMchronClock = clock;
     almStateSet();
     animClockDraw(DRAW_INIT_FULL);
@@ -456,7 +447,7 @@ u08 doClockSelect(cmdLine_t *cmdLine)
 u08 doComments(cmdLine_t *cmdLine)
 {
   // Dump comments command in the log only when we run at root command level
-  if (listExecDepth == 0)
+  if (cmdStackIsActive() == MC_FALSE)
     DEBUGP(cmdLine->input);
 
   return CMD_RET_OK;
@@ -484,7 +475,7 @@ u08 doEepromReset(cmdLine_t *cmdLine)
   stubEepReset();
   eepInit();
 
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     printf("eeprom reset\n");
 
   return CMD_RET_OK;
@@ -506,78 +497,39 @@ u08 doEepromWrite(cmdLine_t *cmdLine)
 }
 
 //
-// Function: doExecute
+// Function: doExecFile
 //
 // Execute mchron commands from a file
 //
-u08 doExecute(cmdLine_t *cmdLine)
+u08 doExecFile(cmdLine_t *cmdLine)
 {
-  int myEchoCmd;
-  char *fileName;
-  cmdLine_t *cmdLineRoot = NULL;
-  cmdPcCtrl_t *cmdPcCtrlRoot = NULL;
+  u08 echoReq;
   u08 retVal = CMD_RET_OK;
 
-  // Verify too deep nested 'e' commands (prevent potential recursive call)
-  if (fileExecDepth >= CMD_FILE_DEPTH_MAX)
+  echoReq = emuEchoReqGet(argChar[0]);
+  retVal = cmdStackPush(cmdLine, echoReq, argString[1], NULL);
+
+  return retVal;
+}
+
+//
+// Function: doExecResume
+//
+// Resume execution of interrupted command stack
+//
+u08 doExecResume(cmdLine_t *cmdLine)
+{
+  u08 retVal = CMD_RET_OK;
+
+  if (cmdStackIsActive() == MC_TRUE)
   {
-    printf("%s: max stack level exceeded (max=%d)\n",
-      cmdLine->cmdCommand->cmdName, CMD_FILE_DEPTH_MAX);
-    return CMD_RET_ERROR;
+    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
+    retVal = CMD_RET_ERROR;
   }
-
-  // Keep current command echo to restore at end of this function
-  myEchoCmd = echoCmd;
-
-  // Get new command echo state where 'i' keeps current one
-  if (argChar[0] == 'e')
-    echoCmd = CMD_ECHO_YES;
-  else if (argChar[0] == 's')
-    echoCmd = CMD_ECHO_NO;
-
-  // Let's start: increase stack level
-  fileExecDepth++;
-
-  // Load the lines from the command file in a linked list.
-  // Warning: this will overwrite the cmd scan global variables so we need to
-  // copy the filename first for future reference.
-  // When ok execute the list. If an error occured prepare for completing a
-  // stack trace.
-  fileName = malloc(strlen(argString[1]) + 1);
-  sprintf(fileName, "%s", argString[1]);
-  retVal = cmdListFileLoad(&cmdLineRoot, &cmdPcCtrlRoot,
-    cmdLine->cmdCommand->cmdArg[1].argName, fileName, fileExecDepth);
-  if (retVal == CMD_RET_OK)
+  else
   {
-    // Start command list statistics when at root level and execute the command
-    // list
-    if (listExecDepth == 0)
-      cmdListStatsInit();
-    retVal = cmdListExecute(cmdLineRoot, fileName);
+    retVal = cmdStackResume();
   }
-  else if (retVal == CMD_RET_ERROR)
-  {
-    retVal = CMD_RET_RECOVER;
-  }
-
-  // We're done: decrease stack level
-  fileExecDepth--;
-
-  // Either all commands in the linked list have been executed successfully or
-  // an error has occured. Do some admin stuff by cleaning up the linked list.
-  free(fileName);
-  cmdListCleanup(cmdLineRoot, cmdPcCtrlRoot);
-
-  // Final stack trace element for error/interrupt that occured at lower level
-  if (retVal == CMD_RET_RECOVER && listExecDepth == 0)
-    printf(CMD_STACK_ROOT_FMT, fileExecDepth, __progname, cmdLine->input);
-
-  // Print command list statistics when back at root level
-  if (listExecDepth == 0)
-    cmdListStatsPrint();
-
-  // Restore original command echo state
-  echoCmd = myEchoCmd;
 
   return retVal;
 }
@@ -591,7 +543,7 @@ u08 doExit(cmdLine_t *cmdLine)
 {
   u08 retVal = CMD_RET_OK;
 
-  if (listExecDepth > 0)
+  if (cmdStackIsActive() == MC_TRUE)
   {
     printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
     retVal = CMD_RET_ERROR;
@@ -680,7 +632,7 @@ u08 doGrLoadCtrImg(cmdLine_t *cmdLine)
   emuGrBuf->bufImgFrames = emuGrBuf->bufElmCount / width;
 
   // Show image buffer info
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     grBufInfoPrint(emuGrBuf);
 
   return CMD_RET_OK;
@@ -704,7 +656,7 @@ u08 doGrLoadFile(cmdLine_t *cmdLine)
     return retVal;
 
   // Show raw data buffer info
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     grBufInfoPrint(emuGrBuf);
 
   return CMD_RET_OK;
@@ -751,7 +703,7 @@ u08 doGrLoadFileImg(cmdLine_t *cmdLine)
   emuGrBuf->bufImgFrames = emuGrBuf->bufElmCount / width;
 
   // Show image buffer info
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     grBufInfoPrint(emuGrBuf);
 
   return CMD_RET_OK;
@@ -803,7 +755,7 @@ u08 doGrLoadFileSpr(cmdLine_t *cmdLine)
   emuGrBuf->bufSprFrames = frames;
 
   // Show sprite buffer info
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     grBufInfoPrint(emuGrBuf);
 
   return CMD_RET_OK;
@@ -827,7 +779,7 @@ u08 doGrReset(cmdLine_t *cmdLine)
   {
     for (i = 0; i < GRAPHICS_BUFFERS; i++)
       grBufInit(&emuGrBufs[i], MC_TRUE);
-    if (echoCmd == CMD_ECHO_YES)
+    if (cmdEcho == CMD_ECHO_YES)
       printf("buffers reset\n");
   }
 
@@ -869,7 +821,7 @@ u08 doGrSaveFile(cmdLine_t *cmdLine)
 //
 u08 doHelp(cmdLine_t *cmdLine)
 {
-  if (listExecDepth > 0)
+  if (cmdStackIsActive() == MC_TRUE)
   {
     printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
     return CMD_RET_ERROR;
@@ -890,7 +842,7 @@ u08 doHelpCmd(cmdLine_t *cmdLine)
   u08 searchType;
   u08 retVal;
 
-  if (listExecDepth > 0)
+  if (cmdStackIsActive() == MC_TRUE)
   {
     printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
     return CMD_RET_ERROR;
@@ -944,11 +896,11 @@ u08 doIf(cmdLine_t **cmdProgCounter)
   cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
 
   // Evaluate the condition expression
-  if (exprEvaluate(cmdArg[0].argName, cmdLine->args[0]) != CMD_RET_OK)
+  if (exprEvaluate(cmdArg[0].argName, &cmdLine->argInfo[0]) != CMD_RET_OK)
     return CMD_RET_ERROR;
 
   // Decide where to go depending on the condition result
-  if (exprValue != 0)
+  if (cmdLine->argInfo[0].exprValue != 0)
   {
     // Make the if-then block active and continue on next line
     cmdPcCtrlChild->active = MC_TRUE;
@@ -1016,11 +968,11 @@ u08 doIfElseIf(cmdLine_t **cmdProgCounter)
   else
   {
     // Evaluate the condition expression
-    if (exprEvaluate(cmdArg[0].argName, cmdLine->args[0]) != CMD_RET_OK)
+    if (exprEvaluate(cmdArg[0].argName, &cmdLine->argInfo[0]) != CMD_RET_OK)
       return CMD_RET_ERROR;
 
     // Decide where to go depending on the condition result
-    if (exprValue != 0)
+    if (cmdLine->argInfo[0].exprValue != 0)
     {
       // Make the if-else-if block active and continue on the next line
       cmdPcCtrlChild->active = MC_TRUE;
@@ -1150,7 +1102,7 @@ u08 doLcdGlutEdit(cmdLine_t *cmdLine)
   u08 y;
   u08 event;
 
-  if (listExecDepth > 0)
+  if (cmdStackIsActive() == MC_TRUE)
   {
     printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
     return CMD_RET_ERROR;
@@ -1328,7 +1280,7 @@ u08 doLcdRead(cmdLine_t *cmdLine)
   varValSet(varId, (double)lcdByte);
 
   // Print the variable holding the lcd byte
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
   {
     varName = malloc(strlen(argString[1]) + 3);
     sprintf(varName, "^%s$", argString[1]);
@@ -1421,27 +1373,21 @@ u08 doMonochron(cmdLine_t *cmdLine)
   // Get the start mode
   startWait = emuStartModeGet(argChar[0]);
 
-  // Clear active clock (if any)
-  emuClockRelease(CMD_ECHO_NO);
-
   // Switch to keyboard scan mode if needed
   myKbMode = kbModeGet();
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_SCAN);
 
-  // Set essential Monochron startup data
-  mcClockOldTS = mcClockOldTM = mcClockOldTH = 0;
+  // Clear active clock (if any) that also resets audible alarm and data
+  emuClockRelease(CMD_ECHO_NO);
+
+  // Init remaining essential Monochron startup data
   mcClockNewTS = mcClockNewTM = mcClockNewTH = 0;
-  mcClockOldDD = mcClockOldDM = mcClockOldDY = 0;
   mcClockNewDD = mcClockNewDM = mcClockNewDY = 0;
   mcClockPool = monochron;
-  mcMchronClock = 0;
   mcClockTimeEvent = MC_FALSE;
   mcClockDateEvent = MC_FALSE;
   almSwitchOn = MC_FALSE;
-  almAlarming = MC_FALSE;
-  almTickerAlarm = 0;
-  almTickerSnooze = 0;
 
   // Clear the screen so we won't see any flickering upon changing the
   // backlight later on
@@ -1459,12 +1405,9 @@ u08 doMonochron(cmdLine_t *cmdLine)
   // Start Monochron and witness the magic :-)
   monoMain();
 
-  // We're done.
-  // Restore the clock pool that mchron supports (as it was overridden by the
-  // Monochron clock pool). By clearing any active clock from that pool also
-  // any audible alarm will be stopped and reset.
+  // We're done. Reset audible alarm and restore the mchron clock pool.
+  alarmSoundReset();
   mcClockPool = emuMonochron;
-  emuClockRelease(CMD_ECHO_NO);
 
   // Restore alarm, foreground/background color and backlight as they were
   // prior to starting Monochron
@@ -1504,12 +1447,10 @@ u08 doMonoConfig(cmdLine_t *cmdLine)
     kbModeSet(KB_MODE_SCAN);
 
   // Set essential Monochron startup data
+  alarmSoundReset();
   mcClockTimeEvent = MC_FALSE;
   mcClockDateEvent = MC_FALSE;
   almSwitchOn = MC_FALSE;
-  almAlarming = MC_FALSE;
-  almTickerAlarm = 0;
-  almTickerSnooze = 0;
 
   // Clear the screen so we won't see any flickering upon changing the
   // backlight later on
@@ -1534,14 +1475,12 @@ u08 doMonoConfig(cmdLine_t *cmdLine)
     cfgMenuMain();
   while (stubEventQuitGet() == MC_FALSE && restart == MC_TRUE);
 
-  // We're done.
-  // Restore the clock pool that mchron supports. By clearing any active clock
-  // from that pool also any audible alarm will be stopped and reset.
-  mcClockPool = emuMonochron;
-  emuClockRelease(CMD_ECHO_NO);
+  // We're done. Kill alarm (if sounding anyway) and reset it.
+  alarmSoundReset();
 
-  // Restore alarm, foreground/background color and backlight as they were
-  // prior to starting Monochron config.
+  // Restore clock pool, alarm, foreground/background color and backlight as
+  // they were prior to starting Monochron config.
+  mcClockPool = emuMonochron;
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
   mcBgColor = emuBgColor;
@@ -1577,7 +1516,7 @@ u08 doPaintAscii(cmdLine_t *cmdLine)
     // Horizontal text
     len = glcdPutStr3(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
       argString[2], TO_U08(argDouble[2]), TO_U08(argDouble[3]));
-    if (echoCmd == CMD_ECHO_YES)
+    if (cmdEcho == CMD_ECHO_YES)
       printf("hor px=%d\n", (int)len);
   }
   else
@@ -1585,7 +1524,7 @@ u08 doPaintAscii(cmdLine_t *cmdLine)
     // Vertical text
     len = glcdPutStr3v(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
       orientation, argString[2], TO_U08(argDouble[2]), TO_U08(argDouble[3]));
-    if (echoCmd == CMD_ECHO_YES)
+    if (cmdEcho == CMD_ECHO_YES)
       printf("vert px=%d\n", (int)len);
   }
   ctrlLcdFlush();
@@ -1782,7 +1721,7 @@ u08 doPaintNumber(cmdLine_t *cmdLine)
     // Horizontal text
     len = glcdPutStr3(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
       valString, TO_U08(argDouble[2]), TO_U08(argDouble[3]));
-    if (echoCmd == CMD_ECHO_YES)
+    if (cmdEcho == CMD_ECHO_YES)
       printf("hor px=%d\n", (int)len);
   }
   else
@@ -1790,7 +1729,7 @@ u08 doPaintNumber(cmdLine_t *cmdLine)
     // Vertical text
     len = glcdPutStr3v(TO_U08(argDouble[0]), TO_U08(argDouble[1]), font,
       orientation, valString, TO_U08(argDouble[2]), TO_U08(argDouble[3]));
-    if (echoCmd == CMD_ECHO_YES)
+    if (cmdEcho == CMD_ECHO_YES)
       printf("vert px=%d\n", (int)len);
   }
   ctrlLcdFlush();
@@ -1890,23 +1829,23 @@ u08 doRepeatFor(cmdLine_t **cmdProgCounter)
     // First entry for this loop. Make the repeat active, then evaluate the
     // repeat init and the repeat condition expressions.
     cmdPcCtrlChild->active = MC_TRUE;
-    if (exprEvaluate(cmdArg[0].argName, cmdLine->args[0]) != CMD_RET_OK)
+    if (exprEvaluate(cmdArg[0].argName, &cmdLine->argInfo[0]) != CMD_RET_OK)
       return CMD_RET_ERROR;
-    if (exprEvaluate(cmdArg[1].argName, cmdLine->args[1]) != CMD_RET_OK)
+    if (exprEvaluate(cmdArg[1].argName, &cmdLine->argInfo[1]) != CMD_RET_OK)
       return CMD_RET_ERROR;
   }
   else
   {
-    // For a next repeat loop first evaluate the step expression and then
-    // re-evaluate the repeat condition expression
-    if (exprEvaluate(cmdArg[2].argName, cmdLine->args[2]) != CMD_RET_OK)
+    // For a next repeat loop first evaluate the repeat post expression and
+    // then re-evaluate the repeat condition expression
+    if (exprEvaluate(cmdArg[2].argName, &cmdLine->argInfo[2]) != CMD_RET_OK)
       return CMD_RET_ERROR;
-    if (exprEvaluate(cmdArg[1].argName, cmdLine->args[1]) != CMD_RET_OK)
+    if (exprEvaluate(cmdArg[1].argName, &cmdLine->argInfo[1]) != CMD_RET_OK)
       return CMD_RET_ERROR;
   }
 
   // Decide where to go depending on the repeat condition result
-  if (exprValue != 0)
+  if (cmdLine->argInfo[1].exprValue != 0)
   {
     // Continue at next line
     *cmdProgCounter = (*cmdProgCounter)->next;
@@ -1978,8 +1917,27 @@ u08 doStatsReset(cmdLine_t *cmdLine)
   // Reset glcd interface and lcd performance statistics
   ctrlStatsReset(CTRL_STATS_ALL);
 
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     printf("statistics reset\n");
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doStatsStack
+//
+// Enable/disable reporting of stack command runtime statistics
+//
+u08 doStatsStack(cmdLine_t *cmdLine)
+{
+  if (cmdStackIsActive() == MC_TRUE)
+  {
+    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
+    return CMD_RET_ERROR;
+  }
+
+  // Enable/disable printing stack command runtime statistics
+  cmdStackPrintSet(TO_U08(argDouble[0]));
 
   return CMD_RET_OK;
 }
@@ -2012,7 +1970,7 @@ u08 doTimeAlarmPos(cmdLine_t *cmdLine)
   }
 
   // Report the new alarm settings
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
   {
     // Report current time+date+alarm
     rtcTimeRead();
@@ -2073,7 +2031,7 @@ u08 doTimeAlarmSet(cmdLine_t *cmdLine)
   }
 
   // Report the new alarm settings
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
   {
     // Report current time+date+alarm
     rtcTimeRead();
@@ -2102,7 +2060,7 @@ u08 doTimeAlarmToggle(cmdLine_t *cmdLine)
   }
 
   // Report the new alarm settings
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
   {
     // Report current time+date+alarm
     rtcTimeRead();
@@ -2129,7 +2087,7 @@ u08 doTimeDateReset(cmdLine_t *cmdLine)
   emuClockUpdate();
 
   // Report (new) time+date+alarm
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
@@ -2157,7 +2115,7 @@ u08 doTimeDateSet(cmdLine_t *cmdLine)
   emuClockUpdate();
 
   // Report (new) time+date+alarm
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
@@ -2180,7 +2138,7 @@ u08 doTimeFlush(cmdLine_t *cmdLine)
   emuClockUpdate();
 
   // Report (new) time+date+alarm
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
@@ -2219,7 +2177,7 @@ u08 doTimeReset(cmdLine_t *cmdLine)
   emuClockUpdate();
 
   // Report time+date+alarm
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
@@ -2247,7 +2205,7 @@ u08 doTimeSet(cmdLine_t *cmdLine)
   emuClockUpdate();
 
   // Report new time+date+alarm
-  if (echoCmd == CMD_ECHO_YES)
+  if (cmdEcho == CMD_ECHO_YES)
     emuTimePrint(ALM_EMUCHRON);
 
   return CMD_RET_OK;
@@ -2286,7 +2244,7 @@ u08 doVarReset(cmdLine_t *cmdLine)
   if (strcmp(argString[1], ".") == 0)
   {
     varInUse = varReset();
-    if (echoCmd == CMD_ECHO_YES)
+    if (cmdEcho == CMD_ECHO_YES)
       printf("reset variables: %d\n", varInUse);
     return CMD_RET_OK;
   }
@@ -2336,7 +2294,7 @@ u08 doWait(cmdLine_t *cmdLine)
   if (delay == 0)
   {
     // Wait for keypress
-    if (listExecDepth == 0)
+    if (cmdStackIsActive() == MC_FALSE)
       ch = waitKeypress(MC_FALSE);
     else
       ch = waitKeypress(MC_TRUE);
@@ -2348,7 +2306,7 @@ u08 doWait(cmdLine_t *cmdLine)
   }
 
   // A 'q' will interrupt any command execution
-  if (ch == 'q' && listExecDepth > 0)
+  if (ch == 'q' && cmdStackIsActive() == MC_TRUE)
   {
     printf("quit\n");
     return CMD_RET_INTERRUPT;
@@ -2372,7 +2330,7 @@ u08 doWaitTimerExpiry(cmdLine_t *cmdLine)
   ch = waitTimerExpiry(&tvTimer, delay, MC_TRUE, NULL);
 
   // A 'q' will interrupt any command execution
-  if (ch == 'q' && listExecDepth > 0)
+  if (ch == 'q' && cmdStackIsActive() == MC_TRUE)
   {
     printf("quit\n");
     return CMD_RET_INTERRUPT;

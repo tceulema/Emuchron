@@ -45,6 +45,7 @@
 // Instructions for adding a new entry/entries:
 // 1 - Add new define(s) at bottom of the list.
 // 2 - Add default value(s) in eepDefault[] in monomain.c [firmware].
+// 3 - Add new define(s) in eepDict[] in mchronutil.c [firmware/emulator].
 // Warning: Keep defines EE_ALARM_HOUR1..EE_ALARM_MIN4 together in a single
 //          range block and in sequential order.
 #define EE_INIT		(EE_OFFSET + 0)

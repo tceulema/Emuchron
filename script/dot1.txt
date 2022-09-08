@@ -36,9 +36,8 @@ vs y=63.999
 rf null true null
   iif rand()<ratio
     psb
-    pd int(rand()*x) int(rand()*y)
   iel
     psf
-    pd int(rand()*x) int(rand()*y)
   ien
+  pd int(rand()*x) int(rand()*y)
 rn

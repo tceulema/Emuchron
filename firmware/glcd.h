@@ -15,7 +15,7 @@
 // Fill types
 #define FILL_FULL	0	// Full fill area
 #define FILL_HALF	1	// Half fill area
-#define FILL_THIRDUP	2	// Third fill area with upward issulion
+#define FILL_THIRDUP	2	// Third fill area with upward illusion
 #define FILL_THIRDDOWN	3	// Third fill area with downward illusion
 #define FILL_INVERSE	4	// Invert area
 #define FILL_BLANK	5	// Clear area

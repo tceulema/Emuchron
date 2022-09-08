@@ -30,10 +30,23 @@
 #include "mchronutil.h"
 
 // Avoid typos in eeprom item name when printing the eeprom contents
-#define EEPNAME(a)	a, #a
+#define EEPNAME(a)	{ a, #a }
+
+// The max size of a malloc-ed graphics data buffer.
+// Technically the firmware supports a progmem buffer size up to 64KB. The
+// Monochron m328 cpu has 32 KB flash available, but 2 KB is reserved for the
+// bootloader, leaving 30 KB free for software and progmem data.
+#define GRAPH_BUF_BYTES	30720
 
 // The graphics data buffer lcd controller origin (as opposed to filename)
 #define GRAPH_ORIGIN_CTRL	"lcd controllers"
+
+// Definition of an eeprom dictionary used to always print in sorted order
+typedef struct _eepDict_t
+{
+  uint8_t eepItemId;		// The eeprom item id
+  char *eepItemName;		// The eeprom item id as a string
+} eepDict_t;
 
 // Monochron defined data
 extern volatile rtcDateTime_t rtcDateTime;
@@ -42,8 +55,6 @@ extern volatile uint8_t rtcTimeEvent;
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockTimeEvent;
-extern volatile uint8_t mcBgColor, mcFgColor;
 extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern clockDriver_t *mcClockPool;
@@ -58,12 +69,35 @@ extern cmdInput_t cmdInput;
 // This is me
 extern const char *__progname;
 
+// The eeprom dictionary. When printing the eeprom contents using command 'mep'
+// the dictionary will be sorted on id value first so it will be printed in
+// the proper id order.
+static eepDict_t eepDict[] =
+{
+  EEPNAME(EE_INIT),
+  EEPNAME(EE_BRIGHT),
+  EEPNAME(EE_VOLUME),
+  EEPNAME(EE_REGION),
+  EEPNAME(EE_TIME_FORMAT),
+  EEPNAME(EE_SNOOZE),
+  EEPNAME(EE_BGCOLOR),
+  EEPNAME(EE_ALARM_SELECT),
+  EEPNAME(EE_ALARM_HOUR1),
+  EEPNAME(EE_ALARM_MIN1),
+  EEPNAME(EE_ALARM_HOUR2),
+  EEPNAME(EE_ALARM_MIN2),
+  EEPNAME(EE_ALARM_HOUR3),
+  EEPNAME(EE_ALARM_MIN3),
+  EEPNAME(EE_ALARM_HOUR4),
+  EEPNAME(EE_ALARM_MIN4)
+};
+static int eepCount = sizeof(eepDict)/sizeof(eepDict_t);
+
 // Flags indicating active state upon exit
 u08 invokeExit = MC_FALSE;
 static u08 closeWinMsg = MC_FALSE;
 
 // Local function prototypes
-static void emuEepromPrintItem(uint16_t item, char *name);
 static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
 
 //
@@ -317,7 +351,6 @@ void emuClockRelease(u08 echoCmd)
   mcMchronClock = 0;
 
   // Kill alarm (if sounding anyway) and reset it
-  alarmSoundStop();
   alarmSoundReset();
 }
 
@@ -411,7 +444,7 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
 
   // Switch back to regular keyboard input mode and kill audible sound (if any)
   kbModeSet(KB_MODE_LINE);
-  alarmSoundStop();
+  alarmSoundReset();
 
   // Depending on the lcd device(s) used we'll see the latest image or not.
   // In case we're using ncurses, regardless with or without glut, flush the
@@ -443,20 +476,41 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
 }
 
 //
+// Function: emuEchoReqGet
+//
+// Get the requested list command echo, used for tracing command files
+//
+u08 emuEchoReqGet(char echo)
+{
+  // Get requested command list echo type
+  if (echo == 'e')
+    return LIST_ECHO_ECHO;
+  else if (echo == 'i')
+    return LIST_ECHO_INHERIT;
+  else // 's'
+    return LIST_ECHO_SILENT;
+}
+
+//
 // Function: emuEepromPrint
 //
-// Warning: This function assumes the contents of the eeprom is according the
-// sequence of EE_* defines in monomain.h [firmware]. Keep this function in
-// line with these #define's.
+// Prints the eeprom contents using the sorted id's defined in the eeprom
+// dictionary.
 //
 void emuEepromPrint(void)
 {
+  int i;
   uint8_t value;
+  eepDict_t *myDict;
+  eepDict_t *dictSort[eepCount];
+  u08 allSorted = MC_FALSE;
+  int eepIdx = eepCount;
 
   printf("eeprom:\n");
 
   // Memory address offset Monochron settings in eeprom
   printf("monochron eeprom offset = %d (0x%03x)\n", EE_OFFSET, EE_OFFSET);
+
   // Status Monochron eeprom settings based on value of location EE_INIT
   value = eeprom_read_byte((uint8_t *)EE_INIT);
   printf("monochron eeprom status = ");
@@ -469,36 +523,32 @@ void emuEepromPrint(void)
 
   // All Monochron eeprom settings
   printf("byte address name            value\n");
-  emuEepromPrintItem(EEPNAME(EE_INIT));
-  emuEepromPrintItem(EEPNAME(EE_BRIGHT));
-  emuEepromPrintItem(EEPNAME(EE_VOLUME));
-  emuEepromPrintItem(EEPNAME(EE_REGION));
-  emuEepromPrintItem(EEPNAME(EE_TIME_FORMAT));
-  emuEepromPrintItem(EEPNAME(EE_SNOOZE));
-  emuEepromPrintItem(EEPNAME(EE_BGCOLOR));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_SELECT));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_HOUR1));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_MIN1));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_HOUR2));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_MIN2));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_HOUR3));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_MIN3));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_HOUR4));
-  emuEepromPrintItem(EEPNAME(EE_ALARM_MIN4));
-}
 
-//
-// Function: emuEepromPrintItem
-//
-// Print eeprom info for a single Monochron eeprom settings item
-//
-static void emuEepromPrintItem(uint16_t item, char *name)
-{
-  uint8_t value;
-
-  value = eeprom_read_byte((uint8_t *)(size_t)item);
-  printf("%2d   0x%03x   %-15s %3d (0x%02x)\n", item - EE_OFFSET, item, name,
-    value, value);
+  // Copy all id's, sort them and then print them
+  for (i = 0; i < eepCount; i++)
+    dictSort[i] = &eepDict[i];
+  while (allSorted == MC_FALSE)
+  {
+    allSorted = MC_TRUE;
+    for (i = 0; i < eepIdx - 1; i++)
+    {
+      if (dictSort[i]->eepItemId > dictSort[i + 1]->eepItemId)
+      {
+        myDict = dictSort[i];
+        dictSort[i] = dictSort[i + 1];
+        dictSort[i + 1] = myDict;
+        allSorted = MC_FALSE;
+      }
+    }
+    eepIdx--;
+  }
+  for (i = 0; i < eepCount; i++)
+  {
+    value = eeprom_read_byte((uint8_t *)(size_t)dictSort[i]->eepItemId);
+    printf("%2d   0x%03x   %-15s %3d (0x%02x)\n",
+      dictSort[i]->eepItemId - EE_OFFSET, dictSort[i]->eepItemId,
+      dictSort[i]->eepItemName, value, value);
+  }
 }
 
 //
@@ -594,7 +644,7 @@ u08 emuSearchTypeGet(char searchType)
 void emuShutdown(void)
 {
   kbModeSet(KB_MODE_LINE);
-  alarmSoundStop();
+  alarmSoundReset();
   cmdInputCleanup(&cmdInput);
   ctrlCleanup();
   if (invokeExit == MC_FALSE && closeWinMsg == MC_FALSE)
@@ -667,7 +717,7 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
     // Note that abort() below will trigger a SIGABRT that will be handled
     // separately, eventually causing the program to coredump
     kbModeSet(KB_MODE_LINE);
-    alarmSoundStop();
+    alarmSoundReset();
     invokeExit = MC_TRUE;
     printf("\n<ctrl>\\ - quit\n");
     abort();
@@ -1035,7 +1085,7 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
   fp = fopen(fileName, "r");
   if (fp == NULL)
   {
-    printf("%s? cannot open data file \"%s\"\n", argName, fileName);
+    printf("cannot open data file \"%s\"\n", fileName);
     return CMD_RET_ERROR;
   }
 
@@ -1047,7 +1097,6 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
     if (count * formatBytes >= GRAPH_BUF_BYTES)
     {
       printf("buffer overflow at element %d\n", count);
-      grBufInit(emuGrBuf, MC_TRUE);
       fclose(fp);
       return CMD_RET_ERROR;
     }
@@ -1058,7 +1107,6 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
         (format == ELM_DWORD && bufVal > 0xffffffff))
     {
       printf("%s? data value overflow at element %d\n", argName, count + 1);
-      grBufInit(emuGrBuf, MC_TRUE);
       fclose(fp);
       return CMD_RET_ERROR;
     }
@@ -1076,7 +1124,6 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
   if (scanRetVal == 0)
   {
     printf("%s? data scan error at element %i\n", argName, count + 1);
-    grBufInit(emuGrBuf, MC_TRUE);
     fclose(fp);
     return CMD_RET_ERROR;
   }

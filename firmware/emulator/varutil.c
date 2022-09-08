@@ -16,6 +16,24 @@
 #include "scanutil.h"
 #include "varutil.h"
 
+// The administration of mchron variables.
+// Variables are spread over buckets. There are VAR_BUCKETS buckets.
+// For administering buckets we use VAR_BUCKETS_BITS bits.
+// WARNING: Make sure that VAR_BUCKETS <= 2 ^ VAR_BUCKETS_BITS
+// Each bucket can contain up to VAR_BUCKET_SIZE_COUNT variables.
+// For administering a bucket size we use VAR_BUCKET_SIZE_BITS bits.
+// A variable id is a combination of VAR_BUCKET_SIZE_BITS + VAR_BUCKETS_BITS
+// bits. For portability reasons do not exceed a total length of 16 bits.
+#define VAR_BUCKETS		51
+#define VAR_BUCKETS_BITS	6
+#define VAR_BUCKETS_MASK	(~((~(int)0) << VAR_BUCKETS_BITS))
+#define VAR_BUCKET_SIZE_BITS	8
+#define VAR_BUCKET_SIZE_COUNT	(~((~(int)0) << VAR_BUCKET_SIZE_BITS) + 1)
+
+// Variable printing spacing (in characters)
+#define VAR_WIDTH_VAR		14
+#define VAR_WIDTH_LINE		70
+
 // A structure to hold runtime information for a named numeric variable
 typedef struct _varVariable_t
 {
@@ -32,20 +50,6 @@ typedef struct _varBucket_t
   int count;			// Number of bucket members
   struct _varVariable_t *var;	// Pointer to first bucket member
 } varBucket_t;
-
-// The administration of mchron variables.
-// Variables are spread over buckets. There are VAR_BUCKETS buckets.
-// For administering buckets we use VAR_BUCKETS_BITS bits.
-// WARNING: Make sure that VAR_BUCKETS <= 2 ^ VAR_BUCKETS_BITS
-// Each bucket can contain up to VAR_BUCKET_SIZE_COUNT variables.
-// For administering a bucket size we use VAR_BUCKET_SIZE_BITS bits.
-// A variable id is a combination of VAR_BUCKET_SIZE_BITS + VAR_BUCKETS_BITS
-// bits. For portability reasons do not exceed a total length of 16 bits.
-#define VAR_BUCKETS		51
-#define VAR_BUCKETS_BITS	6
-#define VAR_BUCKETS_MASK	(~((~(int)0) << VAR_BUCKETS_BITS))
-#define VAR_BUCKET_SIZE_BITS	8
-#define VAR_BUCKET_SIZE_COUNT	(~((~(int)0) << VAR_BUCKET_SIZE_BITS) + 1)
 
 // Create the variable buckets and also administer the total number of
 // bucket members (=variables) in use
@@ -249,7 +253,6 @@ void varInit(void)
 //
 u08 varPrint(char *pattern, u08 summary)
 {
-  const int spaceCountMax = 60;
   regex_t regex;
   int status = 0;
   int spaceCount = 0;
@@ -312,12 +315,13 @@ u08 varPrint(char *pattern, u08 summary)
           varInUse++;
           spaceCount = spaceCount + printf("%s=", varSort[i]->varName) +
             cmdArgValuePrint(varSort[i]->varValue, MC_FALSE, MC_FALSE);
-          if (spaceCount % 10 != 0)
+          if (spaceCount % VAR_WIDTH_VAR != 0 && spaceCount < VAR_WIDTH_LINE)
           {
-            printf("%*s", 10 - spaceCount % 10, "");
-            spaceCount = spaceCount + 10 - spaceCount % 10;
+            printf("%*s", VAR_WIDTH_VAR - spaceCount % VAR_WIDTH_VAR, "");
+            spaceCount = spaceCount + VAR_WIDTH_VAR -
+              spaceCount % VAR_WIDTH_VAR;
           }
-          if (spaceCount >= spaceCountMax)
+          if (spaceCount >= VAR_WIDTH_LINE)
           {
             spaceCount = 0;
             printf("\n");

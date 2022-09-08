@@ -56,6 +56,7 @@ extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcMchronClock;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcBgColor, mcFgColor;
+extern volatile uint16_t mcTickerSnooze;
 extern clockDriver_t *mcClockPool;
 
 // The following variable drives the configuration menu timeout ticker
@@ -73,9 +74,12 @@ volatile rtcDateTime_t rtcDateTimeNext;
 volatile uint8_t rtcTimeEvent = MC_FALSE;
 
 // The following variables drive the Monochron alarm
+volatile uint8_t almAlarmEvent = MC_FALSE;
 volatile uint8_t almAlarming = MC_FALSE;
 volatile uint8_t almAlarmSelect = 0;
 int16_t almTickerAlarm = 0;
+volatile uint8_t almSnoozeEvent = MC_FALSE;
+volatile uint8_t almSnoozing = MC_FALSE;
 uint16_t almTickerSnooze = 0;
 static uint8_t almStopRequest = MC_FALSE;
 volatile uint8_t almSwitchOn = MC_FALSE;
@@ -486,7 +490,13 @@ SIGNAL(TIMER2_OVF_vect)
   rtcTimeRead();
   if (rtcDateTime.timeSec != lastSec)
   {
-    // Time has changed. Do admin on countdown timers.
+    // Log new time
+    DEBUGT(putstring("**** "));
+    DEBUGT(uart_put_dec(rtcDateTime.timeHour); uart_putchar(':'));
+    DEBUGT(uart_put_dec(rtcDateTime.timeMin); uart_putchar(':'));
+    DEBUGT(uart_put_dec(rtcDateTime.timeSec); putstring_nl(""));
+
+    // Do admin on countdown timers
     if (cfgTickerActivity)
       cfgTickerActivity--;
     if (almAlarming == MC_TRUE)
@@ -496,6 +506,11 @@ SIGNAL(TIMER2_OVF_vect)
         // Init alarm data at starting positions right before we return from
         // snooze
         DEBUGP("Alarm -> Snooze timeout");
+        if (almSnoozeEvent == MC_FALSE)
+        {
+          almSnoozeEvent = MC_TRUE;
+          almSnoozing = MC_FALSE;
+        }
         almSoundReset();
       }
       if (almTickerSnooze)
@@ -503,12 +518,6 @@ SIGNAL(TIMER2_OVF_vect)
       if (almTickerAlarm > 0)
         almTickerAlarm--;
     }
-
-    // Log new time
-    DEBUGT(putstring("**** "));
-    DEBUGT(uart_put_dec(rtcDateTime.timeHour); uart_putchar(':'));
-    DEBUGT(uart_put_dec(rtcDateTime.timeMin); uart_putchar(':'));
-    DEBUGT(uart_put_dec(rtcDateTime.timeSec); putstring_nl(""));
   }
 
   // Signal a clock time event only when the previous has not been processed
@@ -530,16 +539,21 @@ SIGNAL(TIMER2_OVF_vect)
         rtcDateTime.timeMin == mcAlarmM && rtcDateTime.timeHour == mcAlarmH)
     {
       // The active alarm time is tripped
-      DEBUGP("Alarm -> Tripped");
+      DEBUGP("Alarm -> Begin");
       almAlarming = MC_TRUE;
+      if (almAlarmEvent == MC_FALSE)
+        almAlarmEvent = MC_TRUE;
       almTickerAlarm = ALM_TICK_ALARM_SEC;
     }
     else if (almAlarming == MC_TRUE && almTickerAlarm == 0)
     {
       // Audible alarm has timed out (some may not wake up by an alarm) or
       // someone pressed the Menu button while alarming/snoozing
-      DEBUGP("Alarm -> Timeout");
+      DEBUGP("Alarm -> End");
       almAlarming = MC_FALSE;
+      almSnoozing = MC_FALSE;
+      if (almAlarmEvent == MC_FALSE)
+        almAlarmEvent = MC_TRUE;
       almTickerSnooze = 0;
       almTickerAlarm = -1;
     }
@@ -587,6 +601,10 @@ static void almSnoozeSet(void)
 {
   DEBUGP("Alarm -> Snooze");
   almTickerSnooze = ALM_TICK_SNOOZE_SEC;
+  if (almSnoozeEvent == MC_FALSE)
+    almSnoozeEvent = MC_TRUE;
+  almSnoozing = MC_TRUE;
+  mcTickerSnooze = almTickerSnooze;
   almTickerAlarm = ALM_TICK_ALARM_SEC + ALM_TICK_SNOOZE_SEC;
   TCCR1B = 0;
   // Turn off piezo
@@ -633,6 +651,7 @@ void almStateSet(void)
         // If there is audible alarm turn it off
         DEBUGP("Alarm -> Off");
         almAlarming = MC_FALSE;
+        almSnoozing = MC_FALSE;
         TCCR1B = 0;
         // Turn off piezo
         PIEZO_PORT &= ~_BV(PIEZO);
@@ -828,7 +847,7 @@ void rtcTimeInit(void)
 
   rtcTimeRead();
 
-  DEBUG(putstring("\nread "));
+  DEBUG(putstring("Read "));
   DEBUG(uart_put_dec(rtcDateTime.timeHour); uart_putchar(':'));
   DEBUG(uart_put_dec(rtcDateTime.timeMin); uart_putchar(':'));
   DEBUG(uart_put_dec(rtcDateTime.timeSec); uart_putchar('\t'));

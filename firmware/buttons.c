@@ -186,7 +186,7 @@ SIGNAL(ADC_vect)
         {
           // Button press-hold was released; signal a single-press
           btnLastState = BTN_NONE;
-          DEBUGP("b3");
+          DEBUGP("b+");
           btnPressed = BTN_PLUS;
           btnTickerConv = BTN_TICK_CONV_FAST_MS;
           return;
@@ -212,7 +212,7 @@ SIGNAL(ADC_vect)
         btnTickerConv = BTN_TICK_CONV_FAST_MS;
         return;
       }
-      DEBUGP("b2");
+      DEBUGP("bS");
       btnPressed = BTN_SET;
     }
     btnLastState = BTN_SET;
@@ -232,7 +232,7 @@ SIGNAL(ADC_vect)
         btnTickerConv = BTN_TICK_CONV_FAST_MS;
         return;
       }
-      DEBUGP("b1");
+      DEBUGP("bM");
       btnPressed = BTN_MENU;
     }
     btnLastState = BTN_MENU;

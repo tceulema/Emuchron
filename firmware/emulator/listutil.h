@@ -9,17 +9,22 @@
 #include "../avrlibtypes.h"
 #include "interpreter.h"
 
-// mchron interpreter command line/list execution functions
-u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput);
-u08 cmdListExecute(cmdLine_t *cmdLineRoot, char *source);
+// Command list echo request options
+#define LIST_ECHO_ECHO		0
+#define LIST_ECHO_INHERIT	1
+#define LIST_ECHO_SILENT	2
 
-// mchron interpreter command list execution statistics functions
-void cmdListStatsInit(void);
-void cmdListStatsPrint(void);
-
-// mchron command line/list functions
+// mchron single command line execution functions
+void cmdLineCleanup(cmdLine_t *cmdLine);
 cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot);
-void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot);
-u08 cmdListFileLoad(cmdLine_t **cmdLineRoot, cmdPcCtrl_t **cmdPcCtrlRoot,
-  char *argName, char *fileName, int fileExecDepth);
+u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput);
+
+// mchron command list stack functions
+void cmdStackCleanup(void);
+void cmdStackInit(void);
+u08 cmdStackIsActive(void);
+void cmdStackPrintSet(u08 enable);
+u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
+  cmdInput_t *cmdInput);
+u08 cmdStackResume(void);
 #endif

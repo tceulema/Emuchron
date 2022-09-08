@@ -26,10 +26,6 @@
 #define READLINE_HISFILE	"/history"
 #define READLINE_MAXHISTORY	250
 
-// External data from expression evaluator
-extern double exprValue;
-extern u08 exprAssign;
-
 // Functional name of mchron command
 extern char *mchronCmdName;
 
@@ -53,7 +49,7 @@ static char *rlHistoryFile = NULL;
 // Local function prototypes
 static char *cmdArgCreate(char *arg, int len, int isExpr);
 static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char *argValue);
-static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue);
+static u08 cmdArgValidateNum(cmdArg_t *cmdArg, argInfo_t *argInfo);
 static u08 cmdArgValidateRegex(cmdArg_t *cmdArg, char *argValue);
 static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue);
 
@@ -68,19 +64,19 @@ void cmdArgCleanup(cmdLine_t *cmdLine)
 
   // Anything to clean?
   cmdLine->initialized = MC_FALSE;
-  if (cmdLine->args == NULL)
+  if (cmdLine->argInfo == NULL)
     return;
 
-  // Clean each of the command argument values
+  // Clean each of the command argument values and the array itself
   for (i = 0; i < cmdLine->cmdCommand->argCount; i++)
   {
-    if (cmdLine->args[i] != NULL)
-      free(cmdLine->args[i]);
+    if (cmdLine->argInfo[i].arg != NULL)
+      free(cmdLine->argInfo[i].arg);
   }
+  free(cmdLine->argInfo);
 
-  // Clean the argument array
-  free(cmdLine->args);
-  cmdLine->args = NULL;
+  // Cleanup complete
+  cmdLine->argInfo = NULL;
 }
 
 //
@@ -163,6 +159,7 @@ u08 cmdArgInit(char **input, cmdLine_t *cmdLine)
     if (cmdLine->cmdCommand == NULL)
       return CMD_RET_ERROR;
   }
+
   return CMD_RET_OK;
 }
 
@@ -179,8 +176,10 @@ u08 cmdArgPublish(cmdLine_t *cmdLine)
 {
   cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
   int argCount = cmdLine->cmdCommand->argCount;
+  argInfo_t *argInfo;
   int i = 0;
   u08 argType;
+  u08 exprConstPre;
 
   // Reset the argument array pointers and set number of args to publish
   argCharIdx = 0;
@@ -195,26 +194,28 @@ u08 cmdArgPublish(cmdLine_t *cmdLine)
   for (i = 0; i < argCount; i++)
   {
     argType = cmdArg[i].argType;
+    argInfo = &cmdLine->argInfo[i];
     if (argType == ARG_CHAR)
     {
-      argChar[argCharIdx] = cmdLine->args[i][0];
+      argChar[argCharIdx] = argInfo->arg[0];
       argCharIdx++;
     }
     else if (argType == ARG_NUM)
     {
-      // Evaluate expression and validate numeric type and expression value
-      if (exprEvaluate(cmdArg[i].argName, cmdLine->args[i]) != CMD_RET_OK)
+      // Evaluate expression and validate numeric type and expression value.
+      // For constant value expressions we need to validate only once.
+      exprConstPre = argInfo->exprConst;
+      if (exprEvaluate(cmdArg[i].argName, argInfo) != CMD_RET_OK)
         return CMD_RET_ERROR;
-      if (cmdArgValidateNum(&cmdArg[i], exprValue) != CMD_RET_OK)
+      if (exprConstPre == MC_FALSE &&
+          cmdArgValidateNum(&cmdArg[i], argInfo) != CMD_RET_OK)
         return CMD_RET_ERROR;
-
-      // Publish the resulting value of the expression
-      argDouble[argDoubleIdx] = exprValue;
+      argDouble[argDoubleIdx] = argInfo->exprValue;
       argDoubleIdx++;
     }
     else if (argType == ARG_STRING)
     {
-      argString[argStringIdx] = cmdLine->args[i];
+      argString[argStringIdx] = argInfo->arg;
       argStringIdx++;
     }
     else
@@ -237,21 +238,28 @@ u08 cmdArgPublish(cmdLine_t *cmdLine)
 //
 u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
 {
+  cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
+  int argCount = cmdLine->cmdCommand->argCount;
+  argInfo_t *argInfo;
   char *workPtr = input;
   char c;
-  cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
   u08 argType;
   u08 domType;
-  int argCount = cmdLine->cmdCommand->argCount;
   int i = 0;
   int j = 0;
 
-  // Allocate and init pointer array for split-up command line arguments
+  // Allocate and init an array of split-up command line arguments and numeric
+  // expression evaluation result properties
   if (argCount > 0)
   {
-    cmdLine->args = malloc(sizeof(cmdLine->args) * argCount);
-    for (j = 0; j < argCount; j++)
-      cmdLine->args[j] = NULL;
+    cmdLine->argInfo = malloc(sizeof(argInfo_t) * argCount);
+    for (i = 0; i < argCount; i++)
+    {
+      cmdLine->argInfo[i].arg = NULL;
+      cmdLine->argInfo[i].exprAssign = MC_FALSE;
+      cmdLine->argInfo[i].exprConst = MC_FALSE;
+      cmdLine->argInfo[i].exprValue = 0;
+    }
   }
 
   // Scan each command argument
@@ -260,6 +268,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
     c = *workPtr;
     argType = cmdArg[i].argType;
     domType = cmdArg[i].cmdDomain->domType;
+    argInfo = &cmdLine->argInfo[i];
 
     // Verify unexpected end-of-string
     if (domType != DOM_STRING_OPT && c == '\0')
@@ -273,8 +282,8 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
     {
       // Scan and validate a single char argument
       j = strcspn(workPtr, " \t");
-      cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_FALSE);
-      if (cmdArgValidateChar(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
+      cmdLine->argInfo[i].arg = cmdArgCreate(workPtr, j, MC_FALSE);
+      if (cmdArgValidateChar(&cmdArg[i], argInfo->arg) != CMD_RET_OK)
         return CMD_RET_ERROR;
     }
     else if (argType == ARG_NUM)
@@ -282,7 +291,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
       // Copy the flex/bison expression argument up to next delimeter.
       // Validation is done at runtime when the expression is evaluated.
       j = strcspn(workPtr, " \t");
-      cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_TRUE);
+      argInfo->arg = cmdArgCreate(workPtr, j, MC_TRUE);
     }
     else if (argType == ARG_STRING)
     {
@@ -291,23 +300,23 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
       {
         // Copy the word argument up to next delimeter and validate value
         j = strcspn(workPtr, " \t");
-        cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_FALSE);
-        if (cmdArgValidateWord(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
+        argInfo->arg = cmdArgCreate(workPtr, j, MC_FALSE);
+        if (cmdArgValidateWord(&cmdArg[i], argInfo->arg) != CMD_RET_OK)
           return CMD_RET_ERROR;
       }
       else if (domType == DOM_WORD_REGEX)
       {
         // Copy the word argument up to next delimeter and validate value
         j = strcspn(workPtr, " \t");
-        cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_FALSE);
-        if (cmdArgValidateRegex(&cmdArg[i], cmdLine->args[i]) != CMD_RET_OK)
+        argInfo->arg = cmdArgCreate(workPtr, j, MC_FALSE);
+        if (cmdArgValidateRegex(&cmdArg[i], argInfo->arg) != CMD_RET_OK)
           return CMD_RET_ERROR;
       }
       else if (domType == DOM_STRING || domType == DOM_STRING_OPT)
       {
         // Copy the remainder of the input string (that may be empty)
         j = strlen(workPtr);
-        cmdLine->args[i] = cmdArgCreate(workPtr, j, MC_FALSE);
+        argInfo->arg = cmdArgCreate(workPtr, j, MC_FALSE);
       }
       else
       {
@@ -385,7 +394,7 @@ static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char *argValue)
 //
 // Validate a numeric argument with a validation profile
 //
-static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
+static u08 cmdArgValidateNum(cmdArg_t *cmdArg, argInfo_t *argInfo)
 {
   u08 domType = cmdArg->cmdDomain->domType;
 
@@ -400,16 +409,16 @@ static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
   // Validate min/max value while allowing some math rounding errors
   if (domType == DOM_NUM_RANGE)
   {
-    if (argValue <= cmdArg->cmdDomain->domNumMin - 0.1)
+    if (argInfo->exprValue <= cmdArg->cmdDomain->domNumMin - 0.1)
     {
       printf("%s? invalid: ", cmdArg->argName);
-      cmdArgValuePrint(argValue, MC_FALSE, MC_TRUE);
+      cmdArgValuePrint(argInfo->exprValue, MC_FALSE, MC_TRUE);
       return CMD_RET_ERROR;
     }
-    if (argValue >= cmdArg->cmdDomain->domNumMax + 0.1)
+    if (argInfo->exprValue >= cmdArg->cmdDomain->domNumMax + 0.1)
     {
       printf("%s? invalid: ", cmdArg->argName);
-      cmdArgValuePrint(argValue, MC_FALSE, MC_TRUE);
+      cmdArgValuePrint(argInfo->exprValue, MC_FALSE, MC_TRUE);
       return CMD_RET_ERROR;
     }
   }
@@ -417,7 +426,7 @@ static u08 cmdArgValidateNum(cmdArg_t *cmdArg, double argValue)
   // Validate assignment expression
   if (domType == DOM_NUM_ASSIGN)
   {
-    if (exprAssign == MC_FALSE)
+    if (argInfo->exprAssign == MC_FALSE)
     {
       printf("%s? parse error\n", cmdArg->argName);
       return CMD_RET_ERROR;

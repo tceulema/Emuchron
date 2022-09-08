@@ -54,10 +54,8 @@
 #define ANA_MIN_MOVE		1
 
 // Monochron environment variables
-extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
+extern volatile uint8_t mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
-extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
-extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;

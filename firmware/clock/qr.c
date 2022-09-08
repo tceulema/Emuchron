@@ -94,7 +94,7 @@
 #define QR_PIX_FACTOR		2
 
 // Monochron environment variables
-extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
+extern volatile uint8_t mcClockOldTM, mcClockOldTH;
 extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;

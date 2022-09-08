@@ -581,7 +581,7 @@ void ctrlBusyState(void)
 //
 // Function: ctrlControlSelect
 //
-// Select controller in ports and set it as active controller. 
+// Select controller in ports and set it as active controller.
 // Note that this function eerily resembles glcdControlSelect() in ks0108.c
 // [firmware]. So, why not use that function instead?
 // The reason for this is that glcdControlSelect() is a static function (for
@@ -756,6 +756,10 @@ u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 
   // Init the glut pixel double-click event data structure
   ctrlGlcdPixDisable();
+
+  // Clear glcd and controller statistics before use. The stats for each lcd
+  // device are cleared in their respective init method.
+  ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
 
   // Init the ncurses device when requested
   if (useNcurses == MC_TRUE)

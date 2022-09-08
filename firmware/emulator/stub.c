@@ -9,6 +9,7 @@
 #include <string.h>
 #include <math.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/select.h>
 #include <sys/time.h>
@@ -52,7 +53,18 @@
 // short audio pulses are no longer clipped. As such, the prefix pulse length
 // is set to 0, meaning we're no longer using it. If needed switch it on again.
 //
-//#define ALSA_PREFIX_PULSE_MS	95
+// Emuchron v7.1:
+// Audio in VMware Fusion and UTM/QEMU on arm64 is flaky for short pulses. It
+// requires to make to use of the prefix pulse. For VMware Fusion tech preview
+// 22H2 audio may fail regardless.
+
+// - VMware Fusion + VirtualBox on amd64 (no longer needed)
+//#define ALSA_PREFIX_PULSE_MS	95	
+//#define ALSA_PREFIX_ADD_MS	(ALSA_PREFIX_PULSE_MS + 25)
+// - VMware Fusion + UTM/QEMU on arm64
+//#define ALSA_PREFIX_PULSE_MS	190
+//#define ALSA_PREFIX_ADD_MS	(ALSA_PREFIX_PULSE_MS + 25)
+// - Defaults
 #define ALSA_PREFIX_PULSE_MS	0
 #define ALSA_PREFIX_ADD_MS	(ALSA_PREFIX_PULSE_MS + 25)
 
@@ -67,11 +79,12 @@
 #define DEBUG_BUFSIZE		100
 
 // Monochron global data
-extern volatile uint8_t almAlarming;
+extern volatile uint8_t almAlarmEvent, almAlarming;
+extern volatile uint8_t almSnoozeEvent, almSnoozing;
 extern uint16_t almTickerSnooze;
 extern int16_t almTickerAlarm;
 extern volatile rtcDateTime_t rtcDateTime;
-extern volatile uint8_t mcAlarming;
+extern volatile uint8_t mcAlarmEvent, mcAlarming, mcSnoozing, mcSnoozeEvent;
 
 // Monochron config event timeout counter
 extern volatile uint8_t cfgTickerActivity;
@@ -114,8 +127,9 @@ uint8_t PIND = 0;
 
 // Debug output file and debug output buffer
 FILE *stubDebugStream = NULL;
-static unsigned char debugBuffer[DEBUG_BUFSIZE];
+static char debugBuffer[DEBUG_BUFSIZE];
 static u08 debugCount = 0;
+static u08 debugNew = MC_TRUE;
 
 // Keypress hold data
 static u08 hold = MC_FALSE;
@@ -194,7 +208,7 @@ static void alarmPidStart(void)
     if (DEBUGGING)
     {
       char msg[45];
-      sprintf(msg, "playing alarm audio via pid %d", alarmPid);
+      sprintf(msg, "Playing alarm audio via pid %d", alarmPid);
       DEBUGP(msg);
     }
   }
@@ -212,7 +226,7 @@ static void alarmPidStop(void)
   {
     // Kill it...
     char msg[45];
-    sprintf(msg, "stopping alarm audio via pid %d", alarmPid);
+    sprintf(msg, "Stopping alarm audio via pid %d", alarmPid);
     DEBUGP(msg);
     sprintf(msg, "kill -s 9 %d", alarmPid);
     system(msg);
@@ -223,29 +237,21 @@ static void alarmPidStop(void)
 //
 // Function: alarmSoundReset
 //
-// Stub to reset the internal alarm settings. It is needed to prevent the alarm
-// to restart when the clock feed or Monochron command is quit while alarming
-// and is later restarted with the same or different settings.
+// Stub to stop alarming and reset the internal alarm settings and triggers
 //
 void alarmSoundReset(void)
 {
-  mcAlarming = MC_FALSE;
+  alarmPidStop();
+  almAlarmEvent = MC_FALSE;
   almAlarming = MC_FALSE;
+  almSnoozeEvent = MC_FALSE;
+  almSnoozing = MC_FALSE;
   almTickerSnooze = 0;
   almTickerAlarm = -1;
-}
-
-//
-// Function: alarmSoundStop
-//
-// Stub to stop playing the alarm and reset the alarm triggers.
-// Audible alarm may resume later upon request.
-//
-void alarmSoundStop(void)
-{
-  alarmPidStop();
+  mcAlarmEvent = MC_FALSE;
   mcAlarming = MC_FALSE;
-  almTickerSnooze = 0;
+  mcSnoozeEvent = MC_FALSE;
+  mcSnoozing = MC_FALSE;
 }
 
 //
@@ -698,14 +704,14 @@ char stubEventGet(u08 stats)
   monoTimer();
 
   // Do we need to do anything with the alarm sound
-  if (alarmPid == -1 && almAlarming == MC_TRUE && almTickerSnooze == 0 &&
+  if (alarmPid == -1 && almAlarming == MC_TRUE && almSnoozing == MC_FALSE &&
       (eventCycleState == CYCLE_REQ_NOWAIT || eventCycleState == CYCLE_NOWAIT))
   {
     // Start playing the alarm sound
     alarmPidStart();
   }
   else if (alarmPid >= 0 && (almAlarming == MC_FALSE ||
-      almTickerSnooze > 0 || eventCycleState == CYCLE_WAIT))
+      almSnoozing == MC_TRUE || eventCycleState == CYCLE_WAIT))
   {
     // Stop playing the alarm sound
     alarmPidStop();
@@ -762,6 +768,7 @@ char stubEventGet(u08 stats)
     else if (ch == 'm')
     {
       // Menu button
+      DEBUGP("bM");
       btnPressed = BTN_MENU;
     }
     else if (ch == 'p')
@@ -786,6 +793,7 @@ char stubEventGet(u08 stats)
     else if (ch == 's')
     {
       // Set button
+      DEBUGP("bS");
       btnPressed = BTN_SET;
     }
     else if (ch == 't')
@@ -798,9 +806,14 @@ char stubEventGet(u08 stats)
     {
       // + button
       if (hold == MC_FALSE)
+      {
+        DEBUGP("b+");
         btnPressed = BTN_PLUS;
+      }
       else
+      {
         btnHold = BTN_PLUS;
+      }
     }
     else if (ch == '\n')
     {
@@ -818,6 +831,7 @@ char stubEventGet(u08 stats)
     {
       btnHoldRelCfm = MC_TRUE;
       btnHoldRelReq = MC_FALSE;
+      DEBUGP("rlc");
     }
   }
 
@@ -1119,8 +1133,8 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
 // Stub for debug char. Output is redirected to output file as specified on the
 // mchron command line. If no output file is specified, debug info is
 // discarded.
-// The debug char is buffered until a newline is pushed or the buffer is full.
-// Note: To enable debugging set DEBUGGING to 1 in monomain.h
+// The debug char is buffered until a \r is pushed or the buffer is full.
+// Note: To enable debugging set DEBUGGING to 1 in global.h [firmware].
 //
 void stubUartPutChar(void)
 {
@@ -1128,17 +1142,40 @@ void stubUartPutChar(void)
 
   if (stubDebugStream != NULL)
   {
-    // Buffer the debug character
-    debugBuffer[debugCount] = debugChar;
-    debugCount++;
+    // If this is a new log line add system timestamp
+    if (debugNew == MC_TRUE)
+    {
+      struct timeval tv;
+      struct tm *tm;
+      time_t timeClock;
 
-    // Dump buffer when a newline is pushed or the buffer is full
-    if (debugChar == '\n' || debugCount == sizeof(debugBuffer) - 1)
+      debugNew = MC_FALSE;
+      gettimeofday(&tv, NULL);
+      timeClock = tv.tv_sec;
+      tm = localtime(&timeClock);
+      debugCount = sprintf(debugBuffer, "%02d:%02d:%02d.%03d ", tm->tm_hour,
+        tm->tm_min, tm->tm_sec, (int)(tv.tv_usec/1000));
+    }
+
+    // Buffer the debug character but suppress the '\r' in the output since in
+    // Linux we only need the '\n'
+    if (debugChar != '\r')
+    {
+      debugBuffer[debugCount] = debugChar;
+      debugCount++;
+    }
+
+    // Dump buffer when a CR is pushed or the buffer is full
+    if (debugChar == '\r' || debugCount == sizeof(debugBuffer) - 2)
     {
       // Dump and reset buffer
       fprintf(stubDebugStream, "%s", debugBuffer);
       memset(debugBuffer, '\0', debugCount);
       debugCount = 0;
+
+      // Detect a new line in the log
+      if (debugChar == '\r')
+        debugNew = MC_TRUE;
     }
   }
 }

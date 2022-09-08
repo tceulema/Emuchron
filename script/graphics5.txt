@@ -31,11 +31,9 @@ hm --- press 'q' to quit ---
 le
 psf
 wts
-rf null true null
-  rf rad=0 rad<2*pi rad=rad+pi/23
-    rf i=0 i<width i=i+1
-     pb 0 xs+i ys+ydelta*sin(-rad+2*pi*i/width) i 0 1 height
-    rn
-    wte 75
+rf rad=0 true rad=(rad+pi/23)%(2*pi)
+  rf i=0 i<width i=i+1
+    pb 0 xs+i ys+ydelta*sin(-rad+2*pi*i/width) i 0 1 height
   rn
+  wte 75
 rn

@@ -52,7 +52,6 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcClockTimeEvent, mcClockDateEvent;
-extern volatile uint8_t mcAlarmSwitch;
 
 // Common text labels
 extern char animHour[];

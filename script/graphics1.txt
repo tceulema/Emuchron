@@ -78,7 +78,7 @@ w 0
 
 le
 hm
-hm Horizontally rotate the dword image from buffer 2.
+hm Horizontally rotate the dword image from buffer 2
 hm
 hm --- press 'q' to quit ---
 wts

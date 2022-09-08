@@ -47,6 +47,7 @@ Commands:
           Arguments: <echo> <filename>
               echo: 'e' = echo commands, 'i' = inherit, 's' = silent
               filename: full filepath or relative to startup folder mchron
+  'er'  - Resume interrupted execution
   'gbc' - Copy graphics buffer
           Arguments: <from> <to>
               from: 0..9
@@ -113,7 +114,7 @@ Commands:
   'lbs' - Set lcd backlight brightness
           Argument: <backlight>
               backlight: 0..16 (0 = dim .. 16 = bright)
-  'lcr' - Reset controller lcd cursors
+  'lcr' - Reset lcd cursor administration
   'lds' - Switch lcd controller display on/off
           Arguments: <controller-0> <controller-1>
               controller-0: 0 = off, 1 = on
@@ -247,7 +248,7 @@ Commands:
                        4 = inverse, 5 = blank
   'ps'  - Set draw color
           Argument: <color>
-              color: 0, 1 (0 = Off, 1 = On)
+              color: 0, 1 (0 = off (black), 1 = on (white))
   'psb' - Set draw color to background color
   'psf' - Set draw color to foreground color
   'rf'  - Repeat for
@@ -256,6 +257,9 @@ Commands:
               condition: expression determining loop continuation
               post: expression executed after each loop
   'rn'  - Repeat next
+  'sls' - Set list runtime statistics
+          Argument: <enable>
+              enable: 0 = off, 1 = on
   'sp'  - Print application statistics
   'sr'  - Reset application statistics
   'tap' - Set alarm switch position

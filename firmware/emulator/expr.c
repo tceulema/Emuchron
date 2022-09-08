@@ -29,12 +29,9 @@
 // CMD_RET_OK		- Successful evalution of expression
 // CMD_RET_ERROR	- Error in evaluation of expression
 //
-// Global variables containing evaluator results upon successful evaluation:
-// extern double exprValue;	- The resulting expression value
-// extern u08 exprAssign;	- The expression is an assignment
-//				  (MC_FALSE or MC_TRUE)
+// Details of the evaluation are returned in the argInfo structure.
 //
-u08 exprEvaluate(char *argName, char *exprString)
+u08 exprEvaluate(char *argName, argInfo_t *argInfo)
 {
   struct yy_buffer_state *buf;
   int parseResult;
@@ -46,12 +43,18 @@ u08 exprEvaluate(char *argName, char *exprString)
   //extern int yydebug;
   //yydebug = 1;
 
-  // Reset previous error and assignment expression indicator
+  // If this expression was already evaluated and considered to be a constant
+  // value expression we're done as the result is already available
+  if (argInfo->exprConst == MC_TRUE)
+    return CMD_RET_OK;
+
+  // Init evaluation result properties
   varStatus = VAR_OK;
   exprAssign = MC_FALSE;
+  exprConst = MC_TRUE;
 
   // Scan and parse the expression and cleanup flex/bison
-  buf = yy_scan_string(exprString);
+  buf = yy_scan_string(argInfo->arg);
   parseResult = yyparse();
   yy_delete_buffer(buf);
 
@@ -59,7 +62,7 @@ u08 exprEvaluate(char *argName, char *exprString)
   if (varStatus == VAR_NOTINUSE)
   {
     // Inactive variable
-    printf("%s? parse error: %s", argName, exprString);
+    printf("%s? parse error: %s", argName, argInfo->arg);
     return CMD_RET_ERROR;
   }
   else if (varStatus == VAR_OVERFLOW)
@@ -71,22 +74,26 @@ u08 exprEvaluate(char *argName, char *exprString)
   else if (parseResult == 1)
   {
     // Error occured in scanning/parsing the expression string
-    printf("%s? syntax error: %s", argName, exprString);
+    printf("%s? syntax error: %s", argName, argInfo->arg);
     return CMD_RET_ERROR;
   }
   else if (isnan(exprValue) != 0)
   {
     // Result is not a number
-    printf("%s? invalid (NaN): %s", argName, exprString);
+    printf("%s? invalid (NaN): %s", argName, argInfo->arg);
     return CMD_RET_ERROR;
   }
   else if (isfinite(exprValue) == 0)
   {
     // Result is infinite
-    printf("%s? overflow (inf): %s", argName, exprString);
+    printf("%s? overflow (inf): %s", argName, argInfo->arg);
     return CMD_RET_ERROR;
   }
 
   // Successful expression evaluation completed
+  argInfo->exprAssign = exprAssign;
+  argInfo->exprConst = exprConst;
+  argInfo->exprValue = exprValue;
+
   return CMD_RET_OK;
 }

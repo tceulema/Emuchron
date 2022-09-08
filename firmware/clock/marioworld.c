@@ -135,9 +135,7 @@
 
 // Monochron environment variables
 extern volatile u08 mcClockNewTS;
-extern volatile u08 mcClockOldTM, mcClockOldTH;
 extern volatile u08 mcClockNewTM, mcClockNewTH;
-extern volatile u08 mcClockOldDD, mcClockOldDM;
 extern volatile u08 mcClockNewDD, mcClockNewDM;
 extern volatile u08 mcClockInit;
 extern volatile u08 mcAlarming, mcAlarmH, mcAlarmM;

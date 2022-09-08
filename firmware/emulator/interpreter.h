@@ -13,7 +13,7 @@
 #define MCHRON_CONFIG		"/.config/mchron"
 
 // The program counter control block execution logic types
-#define PC_CONTINUE		0
+#define PC_CONTINUE		0  // Non-program counter control block command
 #define PC_REPEAT_FOR		1
 #define PC_REPEAT_NEXT		2
 #define PC_IF			3
@@ -40,32 +40,34 @@
 #define DOM_NUM_ASSIGN		22 // Assignment expression for double
 
 // The command input read methods
-#define CMD_INPUT_READLINELIB	0
-#define CMD_INPUT_MANUAL	1
+#define CMD_INPUT_READLINELIB	0  // Use readline library to create lines
+#define CMD_INPUT_MANUAL	1  // Read and create input lines manually
 
 // The command echo options
-#define CMD_ECHO_NO		0
-#define CMD_ECHO_YES		1
-#define CMD_ECHO_INHERIT	2
+#define CMD_ECHO_NONE		0  // Undefined
+#define CMD_ECHO_NO		1  // Do not echo command
+#define CMD_ECHO_YES		2  // Echo command
 
 // The command return values
-#define CMD_RET_OK		0
-#define CMD_RET_EXIT		1
-#define CMD_RET_ERROR		2
-#define CMD_RET_INTERRUPT	3
-#define CMD_RET_RECOVER		4
-
-// To prevent recursive file loading define a max file depth when executing
-// command files
-#define CMD_FILE_DEPTH_MAX	8
+#define CMD_RET_OK		0  // Success
+#define CMD_RET_EXIT		1  // End-user mchron exit
+#define CMD_RET_ERROR		2  // Error occured (scan/syntax/parse/internal)
+#define CMD_RET_INTERRUPT	3  // End-user interrupt using 'q' keypress
+#define CDM_RET_LOAD_ABORT	4  // Interactive loading of script aborted
+#define CMD_RET_RECOVER		5  // Stack recover from error/interrupt/abort
 
 // The max number of mchron command line arguments per argument type
 #define ARG_TYPE_COUNT_MAX	10
 
-// Generic stack trace header and line
-#define CMD_STACK_TRACE		"--- stack trace ---\n"
-#define CMD_STACK_FMT		"%d:%s:%d:%s\n"
-#define CMD_STACK_ROOT_FMT	"%d:%s:-:%s\n"
+// Definition of a structure holding an argument value and several numeric
+// expression result properties
+typedef struct _argInfo_t
+{
+  char *arg;				// The malloc-ed command argument
+  u08 exprAssign;			// Is argument an assignment expression
+  u08 exprConst;			// Is result a constant numeric value
+  double exprValue;			// The resulting expression value
+} argInfo_t;
 
 // Definition of a structure holding a single command line, originating from
 // the command line prompt or from a command file
@@ -73,7 +75,7 @@ typedef struct _cmdLine_t
 {
   int lineNum;				// Line number
   char *input;				// The malloc-ed command from file/prompt
-  char **args;				// The command arguments
+  argInfo_t *argInfo;			// The malloc-ed command arguments
   u08 initialized;			// Are command arguments initialized
   struct _cmdCommand_t *cmdCommand;	// The associated command dictionary entry
   struct _cmdPcCtrl_t *cmdPcCtrlParent;	// Control block completed by this line
@@ -93,8 +95,8 @@ typedef struct _cmdPcCtrl_t
   struct _cmdPcCtrl_t *next;		// Pointer to next list element
 } cmdPcCtrl_t;
 
-// Definition of a structure holding the parameters for reading input
-// lines from an input stream, being either command line or file
+// Definition of a structure holding the parameters for reading input lines
+// from an input stream, being either command line or file
 typedef struct _cmdInput_t
 {
   FILE *file;				// Input stream (stdin or file)

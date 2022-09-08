@@ -59,6 +59,9 @@
 // Get ncurses brightness greyscale based on display backlight level 0..16
 #define NCUR_BRIGHTNESS(level)	(int)(1000 * (6 + (float)(level)) / 22)
 
+// The string to be used to obtain a single square ncurses lcd pixel
+#define NCUR_PIXEL		"  "
+
 // This is me
 extern const char *__progname;
 
@@ -97,9 +100,6 @@ static WINDOW *winBorder;
 // Backlight support (init=yes) and brightness (init=full brightness)
 static unsigned char lcdUseBacklight = MC_TRUE;
 static unsigned char lcdBacklight = 16;
-
-// An Emuchron ncurses lcd pixel
-static char lcdNcurPixel[] = "  ";
 
 // Statistics counters on ncurses
 static lcdNcurStats_t lcdNcurStats;
@@ -219,7 +219,7 @@ void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data)
       {
         // Switch between draw color and draw pixel
         lcdNcurDrawModeSet(controller, data & GLCD_ON);
-        mvwprintw(lcdNcurCtrl[controller].winCtrl, posY, posX, lcdNcurPixel);
+        mvwprintw(lcdNcurCtrl[controller].winCtrl, posY, posX, NCUR_PIXEL);
       }
     }
 
@@ -385,6 +385,9 @@ unsigned char lcdNcurInit(lcdNcurInitArgs_t *lcdNcurInitArgsSet)
   if (deviceActive == MC_TRUE)
     return MC_TRUE;
 
+  // Reset the ncurses statistics
+  lcdNcurStatsReset();
+
   // Copy ncursus init parameters
   lcdNcurInitArgs = *lcdNcurInitArgsSet;
 
@@ -523,8 +526,7 @@ static void lcdNcurRedraw(unsigned char controller, int startY, int rows)
       {
         // Only draw when needed
         if ((lcdByte & 0x1) == GLCD_ON)
-          mvwprintw(lcdNcurCtrl[controller].winCtrl, posY, x * 2,
-            lcdNcurPixel);
+          mvwprintw(lcdNcurCtrl[controller].winCtrl, posY, x * 2, NCUR_PIXEL);
 
         // Shift to next pixel in byte and line in display
         lcdByte = (lcdByte >> 1);

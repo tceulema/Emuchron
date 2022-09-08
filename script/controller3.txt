@@ -23,10 +23,9 @@ rf ctrl=0 ctrl<2 ctrl=ctrl+1
       lr myLcdByte
       lr myLcdByte
 
-      # Set the cursor back to where we came from and write the inverted byte
+      # Set the x cursor back to where we came from and write the inverted byte
       # back to the lcd
       lxs x
-      lys y
       lw ~myLcdByte&0xff
     rn
   rn
