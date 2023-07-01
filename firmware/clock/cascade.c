@@ -10,14 +10,14 @@
 #include "cascade.h"
 
 // Specifics for cascade clock
-#define CASC_SEC_X_START	73
-#define CASC_MIN_X_START	43
-#define CASC_HOUR_X_START	13
-#define CASC_SNAPSHOT_WIDTH	15
-#define CASC_DELTA_X_OFFSET	(CASC_SNAPSHOT_WIDTH + 1)
-#define CASC_DELTA_WIDTH	13
-#define CASC_VALUE_X_OFFSET	2
-#define CASC_DELTA_VALUE_Y_OFFSET -6
+#define CASC_SEC_X_START		73
+#define CASC_MIN_X_START		43
+#define CASC_HOUR_X_START		13
+#define CASC_SNAPSHOT_WIDTH		15
+#define CASC_DELTA_X_OFFSET		(CASC_SNAPSHOT_WIDTH + 1)
+#define CASC_DELTA_WIDTH		13
+#define CASC_VALUE_X_OFFSET		2
+#define CASC_DELTA_VALUE_Y_OFFSET	-6
 
 // Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
@@ -181,12 +181,15 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
   }
   if (barVal > 9)
   {
-     barValue[barValLen] = (char)(barVal / 10 + '0');
-     barValLen++;
+     animValToStr(barVal, &barValue[barValLen]);
+     barValLen = barValLen + 2;
   }
-  barValue[barValLen] = (char)(barVal % 10 + '0');
-  barValLen++;
-  barValue[barValLen] = '\0';
+  else
+  {
+    barValue[barValLen] = (char)(barVal % 10 + '0');
+    barValLen++;
+    barValue[barValLen] = '\0';
+  }
   barValLen = barValLen * 4 - 1; // Width in pixels
   alignWidth = CASC_DELTA_WIDTH - barValLen;
   glcdPutStr2(x + alignWidth / 2 + (CASC_DELTA_WIDTH % 2 == 0 ? 1 : 0),
@@ -199,8 +202,8 @@ static void spotCascadeDeltaUpdate(u08 x, u08 oldValLeft, u08 newValLeft,
     -CASC_DELTA_VALUE_Y_OFFSET);
 
   // Clear the right side of the bar value
-  glcdFillRectangle(x + alignWidth / 2 + barValLen,
-    newDeltaYStart + CASC_DELTA_VALUE_Y_OFFSET, alignWidth / 2,
+  glcdFillRectangle(x + alignWidth / 2 + (CASC_DELTA_WIDTH % 2 == 0 ? 1 : 0) +
+    barValLen, newDeltaYStart + CASC_DELTA_VALUE_Y_OFFSET, alignWidth / 2,
     -CASC_DELTA_VALUE_Y_OFFSET);
 
   // If there are no changes in barheights there's no need to clear anything

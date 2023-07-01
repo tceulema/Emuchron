@@ -70,6 +70,7 @@ u08 ctrlGlcdPixGet(u08 *x, u08 *y);
 void ctrlLcdBacklightSet(u08 brightness);
 void ctrlLcdFlush(void);
 void ctrlLcdGlutGrSet(u08 bezel, u08 grid);
-void ctrlLcdHighlight(u08 highlight, u08 x, u08 y);
+void ctrlLcdGlutHlSet(u08 highlight, u08 x, u08 y);
+void ctrlLcdGlutSizeSet(char axis, u16 size);
 void ctrlLcdNcurGrSet(u08 backlight);
 #endif

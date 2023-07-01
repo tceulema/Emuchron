@@ -9,6 +9,9 @@
 #include "../avrlibtypes.h"
 #include "interpreter.h"
 
+// Generic name for an mchron command
+#define CMD_CMD_NAME		"command"
+
 // The command property to search for
 #define CMD_SEARCH_NAME		0
 #define CMD_SEARCH_DESCR	1

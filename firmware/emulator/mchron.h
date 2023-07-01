@@ -15,6 +15,7 @@
 // Standard command handler function prototypes
 u08 doBeep(cmdLine_t *cmdLine);
 u08 doClockFeed(cmdLine_t *cmdLine);
+u08 doClockPrint(cmdLine_t *cmdLine);
 u08 doClockSelect(cmdLine_t *cmdLine);
 u08 doComments(cmdLine_t *cmdLine);
 u08 doEepromPrint(cmdLine_t *cmdLine);
@@ -42,8 +43,9 @@ u08 doLcdDisplaySet(cmdLine_t *cmdLine);
 u08 doLcdErase(cmdLine_t *cmdLine);
 u08 doLcdGlutEdit(cmdLine_t *cmdLine);
 u08 doLcdGlutGrSet(cmdLine_t *cmdLine);
-u08 doLcdHlReset(cmdLine_t *cmdLine);
-u08 doLcdHlSet(cmdLine_t *cmdLine);
+u08 doLcdGlutSizeSet(cmdLine_t *cmdLine);
+u08 doLcdGlutHlReset(cmdLine_t *cmdLine);
+u08 doLcdGlutHlSet(cmdLine_t *cmdLine);
 u08 doLcdInverse(cmdLine_t *cmdLine);
 u08 doLcdNcurGrSet(cmdLine_t *cmdLine);
 u08 doLcdPrint(cmdLine_t *cmdLine);

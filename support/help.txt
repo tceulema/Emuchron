@@ -34,6 +34,7 @@ Commands:
   'cf'  - Feed clock with time and keyboard events
           Argument: <mode>
               mode: 'c' = start in single cycle mode, 'n' = start normal
+  'cp'  - Print overview of available clocks for command 'cs'
   'cs'  - Select clock
           Argument: <clock>
               clock: 0 = [detach], 1 = example, 2 = analogHMS, 3 = analogHM,
@@ -42,7 +43,7 @@ Commands:
                      12 = speed, 13 = spider, 14 = thermometer, 15 = traffic,
                      16 = bar, 17 = cross, 18 = line, 19 = pie, 20 = bigdigOne,
                      21 = bigdigTwo, 22 = qrHMS, 23 = qrHM, 24 = marioworld,
-                     25 = wave, 26 = perftest
+                     25 = wave, 26 = dali, 27 = perftest
   'e'   - Execute commands from file
           Arguments: <echo> <filename>
               echo: 'e' = echo commands, 'i' = inherit, 's' = silent
@@ -125,6 +126,10 @@ Commands:
           Arguments: <pixelbezel> <gridlines>
               pixelbezel: 0 = off, 1 = on
               gridlines: 0 = off, 1 = on
+  'lgs' - Set glut window size
+          Arguments: <axis> <size>
+              axis: 'w','h' (w = width, h = height)
+              size: 66..2080 (width-range = 130..2080, height-range = 66..1056)
   'lhr' - Reset glut glcd pixel highlight
   'lhs' - Set glut glcd pixel highlight
           Arguments: <x> <y>

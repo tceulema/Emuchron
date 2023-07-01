@@ -41,5 +41,6 @@ void lcdGlutDisplaySet(unsigned char controller, unsigned char display);
 void lcdGlutGraphicsSet(unsigned char bezel, unsigned char grid);
 void lcdGlutHighlightSet(unsigned char highlight, unsigned char x,
   unsigned char y);
+void lcdGlutSizeSet(unsigned char axis, unsigned int size);
 void lcdGlutStartLineSet(unsigned char controller, unsigned char startline);
 #endif

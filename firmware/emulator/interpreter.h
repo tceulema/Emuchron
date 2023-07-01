@@ -109,6 +109,7 @@ typedef struct _cmdInput_t
 typedef struct _cmdDomain_t
 {
   char *domName;			// Domain structure name
+  char *domTypeName;			// Domain type name
   u08 domType;				// Domain type
   char *domTextList;			// Char/word/regex value list
   double domNumMin;			// Numeric domain min value
@@ -119,6 +120,7 @@ typedef struct _cmdDomain_t
 // Definition of a structure holding a command line argument
 typedef struct _cmdArg_t
 {
+  char *argTypeName;			// Argument type name
   u08 argType;				// Argument type
   char *argName;			// Argument name
   cmdDomain_t *cmdDomain;		// Argument domain
@@ -129,7 +131,8 @@ typedef struct _cmdArg_t
 typedef struct _cmdCommand_t
 {
   char *cmdName;			// The mchron command name
-  u08 cmdPcCtrlType;			// Program counter control block type
+  char *cmdPcCtrlTypeName;		// Program counter ctrl block type name
+  u08 cmdPcCtrlType;			// Program counter ctrl block type
   char *cmdArgName;			// Argument structure name
   cmdArg_t *cmdArg;			// Array of command argument profiles
   int argCount;				// Profile argument count

@@ -331,27 +331,27 @@ void lcdNcurFlush(void)
 //
 // Enable/disable variable backlight
 //
-void lcdNcurGraphicsSet(unsigned char backlight)
+void lcdNcurGraphicsSet(unsigned char useBacklight)
 {
   unsigned char refresh = MC_FALSE;
   int brightness;
   unsigned char i;
 
   // No need to update when brightness support is unchanged
-  if (lcdUseBacklight == backlight)
+  if (lcdUseBacklight == useBacklight)
     return;
 
   // Sync brightness support
-  lcdUseBacklight = backlight;
+  lcdUseBacklight = useBacklight;
 
   // Depending on support value set new controller window brightness
-  if (backlight == MC_FALSE && lcdBacklight != 16)
+  if (useBacklight == MC_FALSE && lcdBacklight != 16)
   {
     // When unsupported fall back to full brightness
     brightness = NCUR_BRIGHTNESS(16);
     refresh = MC_TRUE;
   }
-  else if (backlight == MC_TRUE && lcdBacklight != 16)
+  else if (useBacklight == MC_TRUE && lcdBacklight != 16)
   {
     // When supported use the current backlight
     brightness = NCUR_BRIGHTNESS(lcdBacklight);

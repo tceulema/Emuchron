@@ -521,12 +521,12 @@ void glcdFillCircle2(u08 xCenter, u08 yCenter, u08 radius, u08 fillType)
           drawSize = 2 * drawSize;
         glcdFillRectangle2(xCenter - x, yCenter - y, drawSize + 1, y * 2 + 1,
           ALIGN_AUTO, fillType);
-        if (x != 0)
+        if (x != 0 || radius == 1)
           glcdFillRectangle2(xCenter + y, yCenter - x, 1, x * 2 + 1,
             ALIGN_AUTO, fillType);
       }
     }
-    if (x != 0)
+    if (x != 0 || radius < 2)
     {
       if (tswitch >= 0 && firstDraw == MC_FALSE)
         glcdFillRectangle2(xCenter + x - drawSize, yCenter - y, drawSize + 1,

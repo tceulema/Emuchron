@@ -232,7 +232,7 @@ static void cfgMenuAlarmShow(void)
   uint8_t i;
 
   DEBUGP("Display alarm menu");
-  glcdSetAddress(0, 0);
+  glcdSetAddress(1, 0);
   glcdColorSetFg();
   glcdPutStr("Alarm Setup Menu");
 
@@ -253,9 +253,6 @@ static void cfgMenuAlarmShow(void)
   glcdSetAddress(CFG_MENU_INDENT, 5);
   glcdPutStr("Select Alarm:     ");
   glcdPrintNumber(almAlarmSelect + 1);
-
-  // Clear the arrow area
-  glcdFillRectangle2(0, 8, CFG_MENU_INDENT - 1, 40, ALIGN_AUTO, FILL_BLANK);
 }
 
 //
@@ -338,10 +335,11 @@ static void cfgMenuMainShow(char *line1, char *line2)
 {
   DEBUGP("Display menu");
 
-  glcdSetAddress(0, 0);
   glcdColorSetFg();
+  glcdFillRectangle2(0, 0, 1, 64, ALIGN_AUTO, FILL_BLANK);
+  glcdFillRectangle2(127, 0, 1, 64, ALIGN_AUTO, FILL_BLANK);
+  glcdSetAddress(1, 0);
   glcdPutStr("Configuration Menu   ");
-  glcdFillRectangle2(126, 0, 2, 8, ALIGN_AUTO, FILL_BLANK);
   glcdSetAddress(CFG_MENU_INDENT, 1);
   glcdPutStr("Alarm:         Setup");
   glcdSetAddress(CFG_MENU_INDENT, 2);
@@ -356,10 +354,6 @@ static void cfgMenuMainShow(char *line1, char *line2)
   glcdPrintNumber(OCR2B >> OCR2B_BITSHIFT);
 #endif
   cfgPrintInstruct1(line1, line2);
-  glcdFillRectangle2(126, 48, 2, 16, ALIGN_AUTO, FILL_BLANK);
-
-  // Clear the arrow area
-  glcdFillRectangle2(0, 8, CFG_MENU_INDENT, 40, ALIGN_AUTO, FILL_BLANK);
 }
 
 //
@@ -522,11 +516,12 @@ static void cfgPrintAlarm(uint8_t line, uint8_t hour, uint8_t min,
 //
 // Function: cfgPrintArrow
 //
-// Print an arrow in front of a menu item
+// Clear arrow area and next print an arrow in front of a menu item
 //
 static void cfgPrintArrow(u08 y)
 {
-  glcdFillRectangle(0, y, CFG_MENU_INDENT - 1, 1);
+  glcdFillRectangle2(1, 8, CFG_MENU_INDENT - 1, 40, ALIGN_AUTO, FILL_BLANK);
+  glcdFillRectangle(1, y, CFG_MENU_INDENT - 2, 1);
   glcdRectangle(CFG_MENU_INDENT - 3, y - 1, 1, 3);
   glcdRectangle(CFG_MENU_INDENT - 4, y - 2, 1, 5);
 }
@@ -589,11 +584,11 @@ static void cfgPrintDisplay(uint8_t color)
 //
 static void cfgPrintInstruct1(char *line1, char *line2)
 {
-  glcdSetAddress(0, 6);
+  glcdSetAddress(1, 6);
   glcdPutStr(line1);
   if (line2 != 0)
   {
-    glcdSetAddress(0, 7);
+    glcdSetAddress(1, 7);
     glcdPutStr(line2);
   }
 }
@@ -605,10 +600,10 @@ static void cfgPrintInstruct1(char *line1, char *line2)
 //
 static void cfgPrintInstruct2(char *line1b, char *line2b)
 {
-  glcdSetAddress(0, 6);
+  glcdSetAddress(1, 6);
   glcdPutStr(CFG_INSTR_PREFIX_CHANGE);
   glcdPutStr(line1b);
-  glcdSetAddress(0, 7);
+  glcdSetAddress(1, 7);
   glcdPutStr(CFG_INSTR_PREFIX_SET);
   glcdPutStr(line2b);
   if (line2b[3] == '\0')

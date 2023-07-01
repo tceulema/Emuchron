@@ -6,6 +6,7 @@
 // Everything we need for running this thing in Linux
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include <pthread.h>
 #include <sys/select.h>
 #include <sys/time.h>
@@ -66,6 +67,7 @@
 
 // The hor/vert aspect ratio of the glut lcd display (almost 2:1)
 #define GLUT_ASPECTRATIO	((float)GLUT_XPIXELS / GLUT_YPIXELS)
+#define GLUT_ASPECTRATIO2	((double)GLUT_XPIXELS / GLUT_YPIXELS)
 
 // The lcd frame and gridline brightness
 #define GLUT_FRAME_BRIGHTNESS	0.5
@@ -93,6 +95,7 @@
 #define GLUT_CMD_STARTLINE	4
 #define GLUT_CMD_OPTIONS	5
 #define GLUT_CMD_HIGHLIGHT	6
+#define GLUT_CMD_WINSIZE	7
 
 // Definition of an lcd message to process for our glut window.
 // Structure is populated depending on the message command:
@@ -103,6 +106,7 @@
 // cmd = GLUT_CMD_STARTLINE	- arg1 = controller, arg2 = startline value
 // cmd = GLUT_CMD_OPTIONS	- arg1 = pixel bezel, arg2 = gridlines
 // cmd = GLUT_CMD_HIGHLIGHT	- arg1 = highlight, arg2 = x, arg3 = y
+// cmd = GLUT_CMD_WINSIZE	- arg1 = axis, arg2 = sizeHigh, ag3 = sizeLow
 typedef struct _lcdGlutMsg_t
 {
   unsigned char cmd;		// Message command (draw, backlight (etc))
@@ -175,18 +179,20 @@ static unsigned char winResize = MC_FALSE;
 static unsigned char winShowWinSize = MC_FALSE;
 static struct timeval tvWinReshapeLast;
 
-// Identifiers right-button down event and pixel highlight location
+// Identifiers right-button down event, pixel highlight location and winsize
 static unsigned char winRButtonEvent = MC_FALSE;
 static int winRButtonX = 0;
 static int winRButtonY = 0;
 static unsigned char winPixHighlight = MC_FALSE;
 static int winPixGlcdX = 0;
 static int winPixGlcdY = 0;
+static int winReqWidth = 0;
+static int winReqHeight = 0;
 
 // Identifiers left-button double-click event
 lcdGlutGlcdPix_t lcdGlutGlcdPix;
 static struct timeval tvWinLeftMouseLastHit;
-static unsigned char winLButtonEvent = MC_TRUE;
+static unsigned char winL2ButtonEvent = MC_TRUE;
 static int winLButtonX = 0;
 static int winLButtonY = 0;
 
@@ -529,7 +535,7 @@ static void lcdGlutMouse(int button, int state, int x, int y)
     if (timeDiff / 1000 < GLUT_DBLCLICK_MS)
     {
       // Registered a double-click
-      winLButtonEvent = MC_TRUE;
+      winL2ButtonEvent = MC_TRUE;
       winLButtonX = x;
       winLButtonY = y;
     }
@@ -715,6 +721,26 @@ static void lcdGlutMsgQueueProcess(void)
         winRedraw = MC_TRUE;
       }
     }
+    else if (lcdGlutMsg->cmd == GLUT_CMD_WINSIZE)
+    {
+      // Set glut window size. We set the width and height size obeying the
+      // window aspect ratio.
+      if (lcdGlutMsg->arg1 == 'w')
+      {
+        // Set width and get the height using the window aspect ratio
+        // that is upper rounded
+        winReqWidth = (lcdGlutMsg->arg2 << 8) + lcdGlutMsg->arg3;
+        winReqHeight = (int)ceil((double)winReqWidth / GLUT_ASPECTRATIO);
+      }
+      else
+      {
+        // Set height and get the width using the window aspect ratio
+        // that is upper rounded
+        winReqHeight = (lcdGlutMsg->arg2 << 8) + lcdGlutMsg->arg3;
+        winReqWidth = (int)ceil((double)winReqHeight * GLUT_ASPECTRATIO);
+      }
+      winRedraw = MC_TRUE;
+    }
     else if (lcdGlutMsg->cmd == GLUT_CMD_EXIT)
     {
       // Signal to exit glut thread (when queue is processed)
@@ -794,37 +820,53 @@ static void lcdGlutRender(void)
 {
   int winWidth = glutGet(GLUT_WINDOW_WIDTH);
   int winHeight = glutGet(GLUT_WINDOW_HEIGHT);
-  float arView = (float)winWidth / winHeight;
+  float arView;
   float arX, arY;
 
-  // We need to set the projection of our display to maintain the glut lcd
-  // display aspect ratio of (almost) 2:1
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-
-  // Set the projection orthogonal aspect ratio's
-  if (arView < GLUT_ASPECTRATIO)
+  // Apply a window resize when the resize command has been issued
+  if (winReqWidth != 0)
   {
-    // Shrink drawing area on the y-axis
-    glOrtho(-1, 1, -GLUT_ASPECTRATIO / arView, GLUT_ASPECTRATIO / arView, -1,
-      1);
-    arX = 1;
-    arY = GLUT_ASPECTRATIO / arView;
+    winWidth = winReqWidth;
+    winHeight = winReqHeight;
+    glutReshapeWindow(winWidth, winHeight);
+    glViewport(0, 0, winWidth, winHeight);
+    glutPostRedisplay();
   }
-  else
+  winReqWidth = 0;
+
+  // Do prework for redraw or left double-click
+  if (winRedraw == MC_TRUE || winL2ButtonEvent == MC_TRUE)
   {
-    // Shrink drawing area on the x-axis
-    glOrtho(-arView / GLUT_ASPECTRATIO, arView / GLUT_ASPECTRATIO, -1, 1, -1,
-      1);
-    arX = arView / GLUT_ASPECTRATIO;
-    arY = 1;
+    // We need to set the projection of our display to maintain the glut lcd
+    // display aspect ratio of (almost) 2:1
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+
+    // Set the projection orthogonal aspect ratio's
+    arView = (float)winWidth / winHeight;
+    if (arView < GLUT_ASPECTRATIO)
+    {
+      // Shrink drawing area on the y-axis
+      glOrtho(-1, 1, -GLUT_ASPECTRATIO / arView, GLUT_ASPECTRATIO / arView, -1,
+        1);
+      arX = 1;
+      arY = GLUT_ASPECTRATIO / arView;
+    }
+    else
+    {
+      // Shrink drawing area on the x-axis
+      glOrtho(-arView / GLUT_ASPECTRATIO, arView / GLUT_ASPECTRATIO, -1, 1, -1,
+        1);
+      arX = arView / GLUT_ASPECTRATIO;
+      arY = 1;
+    }
   }
 
   // Get data for a left double-click event
-  if (winLButtonEvent == MC_TRUE)
+  if (winL2ButtonEvent == MC_TRUE)
   {
     lcdGlutPixelExtract(arX, arY, winWidth, winHeight);
-    winLButtonEvent = MC_FALSE;
+    winL2ButtonEvent = MC_FALSE;
   }
 
   // Only do a redraw when requested
@@ -1341,7 +1383,7 @@ static void lcdGlutRenderSize(float arX, float arY, int winWidth,
 //
 // Function: lcdGlutReshape
 //
-// Event handler for glut window end-user resize event.
+// Event handler for glut window mouse resize event or resize command.
 // A resize event triggers displaying window pixel size info in a textbox.
 //
 void lcdGlutReshape(int x, int y)
@@ -1358,7 +1400,7 @@ void lcdGlutReshape(int x, int y)
     winResize = MC_TRUE;
   }
 
-  // Default glut behavior for dealing with window resize by end-user
+  // Default glut behavior for dealing with window resize
   glViewport(0, 0, x, y);
   glutPostRedisplay();
 }
@@ -1394,6 +1436,17 @@ void lcdGlutReshapeProcess(void)
       winRedraw = MC_TRUE;
     }
   }
+}
+
+//
+// Function: lcdGlutSizeSet
+//
+// Sleep amount in time (in msec)
+//
+void lcdGlutSizeSet(unsigned char axis, unsigned int size)
+{
+  // Add msg to queue to set the glut window size
+  lcdGlutMsgQueueAdd(GLUT_CMD_WINSIZE, axis, (size >> 8) & 0xff, size & 0xff);
 }
 
 //

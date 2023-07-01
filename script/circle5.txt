@@ -38,14 +38,14 @@ rf true x<=y true
       ien
       hm draw type 1
       prf xCenter-x yCenter-y drawSize+1 y*2+1 2 0
-      iif x!=0
+      iif x!=0||radius==1
         hm draw type 2
         prf xCenter+y yCenter-x 1 x*2+1 2 0
       ien
     ien
   ien
 
-  iif x!=0
+  iif x!=0||radius<2
     iif tswitch>=0&&firstDraw==false
       hm draw type 3
       prf xCenter+x-drawSize yCenter-y drawSize+1 y*2+1 2 0

@@ -49,20 +49,27 @@ SRC = $(BASE) \
 #  clock/linechart.c clock/piechart.c clock/speeddial.c clock/spiderplot.c \
 #  clock/thermometer.c clock/trafficlight.c
 
-# Monochron clocks - 5 - glcd performance test (that uses analog clock code)
+# Monochron clocks - 5
+#SRC = $(BASE) \
+#  clock/dali.c clock/example.c
+
+# Monochron clocks - 6 - glcd performance test (that uses analog clock code)
 #SRC = $(BASE) \
 #  clock/perftest.c clock/analog.c
 
-# Monochron clocks - 6 - all clocks
-# Note: This will build a much too big firmware file but serves as a test to
-# verify whether everything will build cleanly
+# Monochron clocks - 7 - all clocks
+# Note: This clock set will (attempt to) build all clocks. You will see linker
+# failures though to indicate that the text object size is too large. Ignore
+# these errors as this build serves only as a test to verify whether all
+# individual clock modules will build cleanly.
 #SRC = $(BASE) \
-#  clock/analog.c clock/bigdigit.c clock/digital.c clock/example.c \
-#  clock/marioworld.c clock/mosquito.c clock/nerd.c clock/perftest.c \
-#  clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c clock/slider.c \
-#  clock/wave.c clock/spotfire.c clock/barchart.c clock/cascade.c \
-#  clock/crosstable.c clock/linechart.c clock/piechart.c clock/speeddial.c \
-#  clock/spiderplot.c clock/thermometer.c clock/trafficlight.c
+#  clock/analog.c clock/bigdigit.c clock/dali.c clock/digital.c \
+#  clock/example.c clock/marioworld.c clock/mosquito.c clock/nerd.c \
+#  clock/perftest.c clock/pong.c clock/puzzle.c clock/qr.c clock/qrencode.c \
+#  clock/slider.c clock/wave.c clock/spotfire.c clock/barchart.c \
+#  clock/cascade.c clock/crosstable.c clock/linechart.c clock/piechart.c \
+#  clock/speeddial.c clock/spiderplot.c clock/thermometer.c \
+#  clock/trafficlight.c
 
 # List Assembler source files here.
 # Make them always end in a capital .S. Files ending in a lowercase .s will not

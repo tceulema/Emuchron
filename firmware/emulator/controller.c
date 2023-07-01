@@ -14,13 +14,11 @@
 #include "mchronutil.h"
 #include "controller.h"
 
-// The glut glcd pixel double-click event data
-extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
-
 //
 // Our Monochron 128x64 pixel lcd display image is implemented as follows:
 // Two ks0108 controllers, each controlling 64x64 lcd pixels (= 512 byte).
-//  <- 64 px -><- 64 px->
+//    Ctrl 0     Ctrl 1
+//  <- 64 px -><- 64 px ->
 //  ^          ^
 //  |  64 px   |  64 px
 //  v          v
@@ -238,6 +236,9 @@ typedef struct _ctrlStateEvent_t
 // Definition of a structure holding the controller state-event diagram
 typedef ctrlStateEvent_t ctrlSEDiagram_t[CTRL_EVENT_MAX][CTRL_STATE_MAX];
 
+// The glut glcd pixel double-click event data
+extern lcdGlutGlcdPix_t lcdGlutGlcdPix;
+
 // Local finite state machine state-event function prototypes
 static u08 ctrlCursorX(ctrlController_t *ctrlController, u08 payload);
 static u08 ctrlCursorY(ctrlController_t *ctrlController, u08 payload);
@@ -248,7 +249,7 @@ static u08 ctrlStartline(ctrlController_t *ctrlController, u08 payload);
 static u08 ctrlWrite(ctrlController_t *ctrlController, u08 payload);
 
 // Define the controller state-event diagram
-static ctrlSEDiagram_t ctrlSEDiagram =
+static const ctrlSEDiagram_t ctrlSEDiagram =
 {
   [CTRL_EVENT_CURSOR_X] =
   {
@@ -847,15 +848,26 @@ void ctrlLcdGlutGrSet(u08 bezel, u08 grid)
 }
 
 //
-// Function: ctrlLcdHighlight
+// Function: ctrlLcdGlutHlSet
 //
-// Set/reset glcd pixel highlight (glut only)
+// Set/reset glut glcd pixel highlight
 //
-void ctrlLcdHighlight(u08 highlight, u08 x, u08 y)
+void ctrlLcdGlutHlSet(u08 highlight, u08 x, u08 y)
 {
   if (useGlut == MC_TRUE)
     lcdGlutHighlightSet((unsigned char)highlight, (unsigned char)x,
       (unsigned char)y);
+}
+
+//
+// Function: ctrlLcdGlutSizeSet
+//
+// Set glut window size
+//
+void ctrlLcdGlutSizeSet(char axis, u16 size)
+{
+  if (useGlut == MC_TRUE)
+    lcdGlutSizeSet((unsigned char)axis, (unsigned int)size);
 }
 
 //
@@ -894,6 +906,7 @@ void ctrlRegPrint(void)
   ctrlRegister_t *ctrlRegister;
   char *state;
 
+  printf("controllers:\n");
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
   {
     // Indicator for selected controller

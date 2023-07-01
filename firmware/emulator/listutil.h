@@ -26,5 +26,5 @@ u08 cmdStackIsActive(void);
 void cmdStackPrintSet(u08 enable);
 u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
   cmdInput_t *cmdInput);
-u08 cmdStackResume(void);
+u08 cmdStackResume(char *cmdName);
 #endif

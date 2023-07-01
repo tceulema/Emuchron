@@ -2,19 +2,18 @@
 # ncurses terminal and the Gede gdb debugger gui
 
 # 1 - Command to use in the Monochron terminal profile (copy/paste)
-bash -c "tty > ~/.config/mchron/tty; echo -ne '\033]0\073Monochron (ncurses)\007'; bash --noprofile --norc"
+bash -c "tty > ~/.config/mchron/tty; bash --noprofile --norc"
 
 # 2 - Command to use in the Monochron ncurses terminal main menu program
 #     launcher (copy/paste)
-gnome-terminal --window-with-profile=Monochron --hide-menubar
+gnome-terminal --window-with-profile=Monochron --hide-menubar --title 'Monochron (ncurses)'
 
 # 3 - Command to use to start a Monochron ncurses terminal in a command
 #     shell (copy/paste)
-gnome-terminal --window-with-profile=Monochron --hide-menubar 1>/dev/null
+gnome-terminal --window-with-profile=Monochron --hide-menubar --title 'Monochron (ncurses)' 1>/dev/null
 
 # 4 - Command to use in the Gede main menu program launcher (copy/paste)
 /usr/local/bin/gede
 
 # 5 - Command to use to start Gede in a command shell (copy/paste)
-gede 1>/dev/null
-
+gede 1>/dev/null &

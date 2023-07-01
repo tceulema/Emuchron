@@ -20,6 +20,7 @@
 #include "clock/bigdigit.h"
 #include "clock/cascade.h"
 #include "clock/crosstable.h"
+#include "clock/dali.h"
 #include "clock/digital.h"
 #include "clock/example.h"
 #include "clock/linechart.h"
@@ -185,6 +186,7 @@ clockDriver_t monochron[] =
   //,{CHRON_QR_HM,       DRAW_INIT_PARTIAL, qrInit,             qrCycle,             0}
   //,{CHRON_SLIDER,      DRAW_INIT_FULL,    sliderInit,         sliderCycle,         0}
   //,{CHRON_WAVE,        DRAW_INIT_FULL,    waveInit,           waveCycle,           0}
+  //,{CHRON_DALI,        DRAW_INIT_FULL,    daliInit,           daliCycle,           daliButton}
 };
 
 // Runtime pointer to active clockdriver array and the index in the array

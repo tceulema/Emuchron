@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Filename  : 'pong.c'
-// Title     : Main animation and drawing code for MONOCHRON pong clock
+// Title     : Animation code for MONOCHRON pong clock
 //*****************************************************************************
 
 #include <math.h>
@@ -69,10 +69,10 @@
 #define COLL_CONF		2
 
 // Time in app cycles (representing ~3 secs) for non-time info to be displayed
-#define COUNTDOWN_SCORE		(u08)(1000L / ANIM_TICK_CYCLE_MS * 3 + 0.5)
+#define COUNTDOWN_SCORE		(u08)(1000L * 3 / ANIM_TICK_CYCLE_MS)
 
 // Time in app cycles (representing ~2 sec) to pauze before starting a new game
-#define COUNTDOWN_GAME		(u08)(1000L / ANIM_TICK_CYCLE_MS * 2 + 0.5)
+#define COUNTDOWN_GAME		(u08)(1000L * 2 / ANIM_TICK_CYCLE_MS)
 
 // Uncomment this if you want to keep the ball always in the vertical centre
 // of the display. Give it a try and you'll see what I mean...

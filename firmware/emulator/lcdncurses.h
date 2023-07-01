@@ -27,9 +27,9 @@ void lcdNcurStatsPrint(void);
 void lcdNcurStatsReset(void);
 
 // Lcd device content methods
-void lcdNcurGraphicsSet(unsigned char backlight);
 void lcdNcurBacklightSet(unsigned char backlight);
 void lcdNcurDataWrite(unsigned char x, unsigned char y, unsigned char data);
 void lcdNcurDisplaySet(unsigned char controller, unsigned char display);
+void lcdNcurGraphicsSet(unsigned char useBacklight);
 void lcdNcurStartLineSet(unsigned char controller, unsigned char startline);
 #endif

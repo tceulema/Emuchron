@@ -37,7 +37,7 @@ void _delay_ms(int x);
 void i2cInit(void);
 u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data);
 u08 i2cMasterSendNI(u08 deviceAddr, u08 length, u08* data);
-u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
+u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   uint8_t mon, uint8_t yr);
 
 // UART (debug) output stub

@@ -186,8 +186,8 @@ void spotBarUpdate(u08 x, u08 width, u08 oldVal, u08 newVal, s08 valXOffset,
   glcdPutStr2(x + valXOffset, SPOT_BAR_Y_START - newBarHeight +
     SPOT_BAR_VAL_Y_OFFSET, FONT_5X7M, barValue);
 
-  glcdColorSetBg();
   // Clear the first line between the bar and the bar value
+  glcdColorSetBg();
   glcdFillRectangle(x, SPOT_BAR_Y_START - newBarHeight - 1, width, 1);
 
   // Clear the space left and right of the bar value

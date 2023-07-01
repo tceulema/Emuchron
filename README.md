@@ -1,7 +1,7 @@
 ## Project Emuchron
 ### What is Emuchron
 Emuchron is a lightweight [Adafruit Monochron](http://www.adafruit.com/product/204)
-(product discontinued) emulator for Debian Linux 10 and 11.\
+(product discontinued) emulator for Debian Linux 11 and 12.\
 It features a test and debugging platform for Monochron clocks and high level
 glcd graphics functions, and a software framework for clock plugins.
 
@@ -62,6 +62,10 @@ The core functionality to encode a QR in the Emuchron QR clocks uses code from
 - Techninja (James T) and Super-Awesome Sylvia\
 The Emuchron MarioWorld clock is based on code from
 [MarioChron](https://github.com/techninja/MarioChron).
+- Jamie Zawinski and CaitSith2\
+The Emuchron Dali clock is based on [xdaliclock](https://www.jwz.org/xdaliclock)
+code that is later integrated in Monochron
+[Multichron](https://github.com/CaitSith2/monochron/tree/MultiChron/firmware) code.
 
 ### Using and distributing Emuchron
 The Emuchron project and its contents is provided as-is and is distributed

@@ -62,9 +62,6 @@ typedef struct _cmdStack_t
 // The current command echo state
 u08 cmdEcho = CMD_ECHO_YES;
 
-// Functional name of mchron command
-extern char *mchronCmdName;
-
 // This is me
 extern const char *__progname;
 
@@ -232,9 +229,8 @@ u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
   {
     // All other control block types are invalid on the command line as they
     // need to link to either a repeat-for or if-then command. As such, they
-    // can only be entered via multi line keyboard input or a command file.
-    printf("%s? cannot match this command \"%s\"\n", mchronCmdName,
-      cmdCommand->cmdName);
+    // can only be entered via multiline keyboard input or a command file.
+    printf("%s? cannot match this command\n", cmdCommand->cmdName);
     retVal = CMD_RET_ERROR;
   }
 
@@ -954,8 +950,8 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
   if (cmdStack.level + 1 >= CMD_STACK_DEPTH_MAX)
   {
     // Verify too deep nested list commands (prevent potential recursive call)
-    printf("%s: max stack level exceeded (max=%d)\n", mchronCmdName,
-      CMD_STACK_DEPTH_MAX - 1);
+    printf("%s: max stack level exceeded (max=%d)\n",
+      cmdLine->cmdCommand->cmdName, CMD_STACK_DEPTH_MAX - 1);
     return CMD_RET_ERROR;
   }
 
@@ -1058,14 +1054,14 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
 //
 // Resume execution of the stack where it's been left off
 //
-u08 cmdStackResume(void)
+u08 cmdStackResume(char *cmdName)
 {
   cmdStackLevel_t *cmdStackLevel;
   u08 retVal = CMD_RET_OK;
 
   if (cmdStack.allowResume == MC_FALSE)
   {
-    printf("%s: no resume command stack available\n", mchronCmdName);
+    printf("%s: no resume command stack available\n", cmdName);
     return CMD_RET_ERROR;
   }
 

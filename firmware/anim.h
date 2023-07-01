@@ -36,6 +36,7 @@
 #define CHRON_THERMOMETER	24
 #define CHRON_MARIOWORLD	25
 #define CHRON_WAVE		26
+#define CHRON_DALI		27
 
 // Define how visualizations draw themselves
 #define DRAW_INIT_NONE		0

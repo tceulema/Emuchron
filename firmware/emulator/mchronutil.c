@@ -19,8 +19,30 @@
 #include "../ks0108.h"
 #include "../monomain.h"
 
-// Dedicated clock defines
+// All Monochron clocks
+#include "../clock/analog.h"
+#include "../clock/barchart.h"
+#include "../clock/bigdigit.h"
+#include "../clock/cascade.h"
+#include "../clock/crosstable.h"
+#include "../clock/dali.h"
+#include "../clock/digital.h"
+#include "../clock/example.h"
+#include "../clock/linechart.h"
+#include "../clock/marioworld.h"
+#include "../clock/mosquito.h"
+#include "../clock/nerd.h"
+#include "../clock/perftest.h"
+#include "../clock/piechart.h"
+#include "../clock/pong.h"
+#include "../clock/puzzle.h"
 #include "../clock/qr.h"
+#include "../clock/slider.h"
+#include "../clock/speeddial.h"
+#include "../clock/spiderplot.h"
+#include "../clock/thermometer.h"
+#include "../clock/trafficlight.h"
+#include "../clock/wave.h"
 
 // Emuchron utilities
 #include "dictutil.h"
@@ -30,7 +52,10 @@
 #include "mchronutil.h"
 
 // Avoid typos in eeprom item name when printing the eeprom contents
-#define EEPNAME(a)	{ a, #a }
+#define EEPNAME(a)	a, #a
+
+// Avoid typos in clock id name when printing the clock dictionary contents
+#define CLOCKNAME(a)	a, #a
 
 // The max size of a malloc-ed graphics data buffer.
 // Technically the firmware supports a progmem buffer size up to 64KB. The
@@ -47,6 +72,18 @@ typedef struct _eepDict_t
   uint8_t eepItemId;		// The eeprom item id
   char *eepItemName;		// The eeprom item id as a string
 } eepDict_t;
+
+// Definition of a clock dictionary used to build the mchron clock pool and
+// print an overview of available clocks
+typedef struct _emuClockDict_t
+{
+  uint8_t clockId;		// The clock id
+  char *clockName;		// The clock id as a string
+  void (*init)(u08);		// Clock init method
+  void (*cycle)(void);		// Clock loop cycle (=update) method
+  void (*button)(u08);		// Clock button event handler method (optional)
+  char *clockDesc;		// The short description of the clock
+} emuClockDict_t;
 
 // Monochron defined data
 extern volatile rtcDateTime_t rtcDateTime;
@@ -74,24 +111,61 @@ extern const char *__progname;
 // the proper id order.
 static eepDict_t eepDict[] =
 {
-  EEPNAME(EE_INIT),
-  EEPNAME(EE_BRIGHT),
-  EEPNAME(EE_VOLUME),
-  EEPNAME(EE_REGION),
-  EEPNAME(EE_TIME_FORMAT),
-  EEPNAME(EE_SNOOZE),
-  EEPNAME(EE_BGCOLOR),
-  EEPNAME(EE_ALARM_SELECT),
-  EEPNAME(EE_ALARM_HOUR1),
-  EEPNAME(EE_ALARM_MIN1),
-  EEPNAME(EE_ALARM_HOUR2),
-  EEPNAME(EE_ALARM_MIN2),
-  EEPNAME(EE_ALARM_HOUR3),
-  EEPNAME(EE_ALARM_MIN3),
-  EEPNAME(EE_ALARM_HOUR4),
-  EEPNAME(EE_ALARM_MIN4)
+  { EEPNAME(EE_INIT) }
+ ,{ EEPNAME(EE_BRIGHT) }
+ ,{ EEPNAME(EE_VOLUME) }
+ ,{ EEPNAME(EE_REGION) }
+ ,{ EEPNAME(EE_TIME_FORMAT) }
+ ,{ EEPNAME(EE_SNOOZE) }
+ ,{ EEPNAME(EE_BGCOLOR) }
+ ,{ EEPNAME(EE_ALARM_SELECT) }
+ ,{ EEPNAME(EE_ALARM_HOUR1) }
+ ,{ EEPNAME(EE_ALARM_MIN1) }
+ ,{ EEPNAME(EE_ALARM_HOUR2) }
+ ,{ EEPNAME(EE_ALARM_MIN2) }
+ ,{ EEPNAME(EE_ALARM_HOUR3) }
+ ,{ EEPNAME(EE_ALARM_MIN3) }
+ ,{ EEPNAME(EE_ALARM_HOUR4) }
+ ,{ EEPNAME(EE_ALARM_MIN4) }
 };
-static int eepCount = sizeof(eepDict)/sizeof(eepDict_t);
+static int eepDictCount = sizeof(eepDict) / sizeof(eepDict_t);
+
+// The emuchron clock dictionary. It is used to build the mchron clock pool
+// and print available mchron clocks. The sequence of the clocks in this
+// dictionary impacts commands 'cs' and 'cp'. Add a new clock in here in the
+// desired location.
+static emuClockDict_t emuClockDict[] =
+{
+  { CLOCKNAME(CHRON_NONE),		0,                  0,                   0,		"[detach from active clock]" }
+ ,{ CLOCKNAME(CHRON_EXAMPLE),		exampleInit,        exampleCycle,        0,		"example" }
+ ,{ CLOCKNAME(CHRON_ANALOG_HMS),	analogHmsInit,      analogCycle,         0,		"analog format hms" }
+ ,{ CLOCKNAME(CHRON_ANALOG_HM),		analogHmInit,       analogCycle,         0,		"analog format hm" }
+ ,{ CLOCKNAME(CHRON_DIGITAL_HMS),	digitalHmsInit,     digitalCycle,        0,		"digital format hms" }
+ ,{ CLOCKNAME(CHRON_DIGITAL_HM),	digitalHmInit,      digitalCycle,        0,		"digital format hm" }
+ ,{ CLOCKNAME(CHRON_MOSQUITO),		mosquitoInit,       mosquitoCycle,       0,		"mosquito" }
+ ,{ CLOCKNAME(CHRON_NERD),		nerdInit,           nerdCycle,           0,		"nerd" }
+ ,{ CLOCKNAME(CHRON_PONG),		pongInit,           pongCycle,           pongButton,	"pong" }
+ ,{ CLOCKNAME(CHRON_PUZZLE),		puzzleInit,         puzzleCycle,         puzzleButton,	"puzzle" }
+ ,{ CLOCKNAME(CHRON_SLIDER),		sliderInit,         sliderCycle,         0,		"slider" }
+ ,{ CLOCKNAME(CHRON_CASCADE),		spotCascadeInit,    spotCascadeCycle,    0,		"spotfire cascade" }
+ ,{ CLOCKNAME(CHRON_SPEEDDIAL),		spotSpeedDialInit,  spotSpeedDialCycle,  0,		"spotfire speeddial" }
+ ,{ CLOCKNAME(CHRON_SPIDERPLOT),	spotSpiderPlotInit, spotSpiderPlotCycle, 0,		"spotfire spider" }
+ ,{ CLOCKNAME(CHRON_THERMOMETER),	spotThermInit,      spotThermCycle,      0,		"spotfire thermometer" }
+ ,{ CLOCKNAME(CHRON_TRAFLIGHT),		spotTrafLightInit,  spotTrafLightCycle,  0,		"spotfire trafficlight" }
+ ,{ CLOCKNAME(CHRON_BARCHART),		spotBarChartInit,   spotBarChartCycle,   0,		"spotfire barchart" }
+ ,{ CLOCKNAME(CHRON_CROSSTABLE),	spotCrossTableInit, spotCrossTableCycle, 0,		"spotfire crosstable" }
+ ,{ CLOCKNAME(CHRON_LINECHART),		spotLineChartInit,  spotLineChartCycle,  0,		"spotfire linechart" }
+ ,{ CLOCKNAME(CHRON_PIECHART),		spotPieChartInit,   spotPieChartCycle,   0,		"spotfire piechart" }
+ ,{ CLOCKNAME(CHRON_BIGDIG_ONE),	bigDigInit,         bigDigCycle,         bigDigButton,	"big digit format one" }
+ ,{ CLOCKNAME(CHRON_BIGDIG_TWO),	bigDigInit,         bigDigCycle,         bigDigButton,	"big digit format two" }
+ ,{ CLOCKNAME(CHRON_QR_HMS),		qrInit,             qrCycle,             0,		"qr format hms" }
+ ,{ CLOCKNAME(CHRON_QR_HM),		qrInit,             qrCycle,             0,		"qr format hm" }
+ ,{ CLOCKNAME(CHRON_MARIOWORLD),	marioInit,          marioCycle,          0,		"marioworld" }
+ ,{ CLOCKNAME(CHRON_WAVE),		waveInit,           waveCycle,           0,		"wave banner" }
+ ,{ CLOCKNAME(CHRON_DALI),		daliInit,           daliCycle,           daliButton,	"dali" }
+ ,{ CLOCKNAME(CHRON_PERFTEST),		perfInit,           perfCycle,           0,		"performance test" }
+};
+static int emuClockDictCount = sizeof(emuClockDict) / sizeof(emuClockDict_t);
 
 // Flags indicating active state upon exit
 u08 invokeExit = MC_FALSE;
@@ -291,7 +365,7 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     if (home == NULL)
     {
       printf("%s: cannot get $HOME\n", __progname);
-      printf("- use switch \"-t <tty>\" to set lcd output device\n");
+      printf("- Use switch \"-t <tty>\" to set lcd output device\n");
       return MC_FALSE;
     }
     fullPath = malloc(strlen(home) + strlen(MCHRON_CONFIG) +
@@ -305,8 +379,8 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     {
       printf("%s: cannot open file \"%s%s%s\".\n", __progname, "~",
         MCHRON_CONFIG, NCURSES_TTYFILE);
-      printf("- manually create folder ~%s\n", MCHRON_CONFIG);
-      printf("- start a new monochron ncurses terminal or use switch \"-t <tty>\" to set\n");
+      printf("- Manually create folder ~%s\n", MCHRON_CONFIG);
+      printf("- Start a new monochron ncurses terminal or use switch \"-t <tty>\" to set\n");
       printf("  mchron ncurses terminal tty\n");
       return MC_FALSE;
     }
@@ -336,6 +410,75 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 }
 
 //
+// Function: emuClockPoolInit
+//
+// Build the mchron clock pool based on emuClockDict[]
+//
+clockDriver_t *emuClockPoolInit(int *count)
+{
+  int i;
+  clockDriver_t *clockDriver;
+
+  // Get space for the mchron clock driver pool
+  clockDriver = malloc(sizeof(clockDriver_t) * emuClockDictCount);
+  for (i = 0; i < emuClockDictCount; i++)
+  {
+    // Copy clock dictionary info to the clock driver pool
+    clockDriver[i].clockId = emuClockDict[i].clockId;
+    // In the mchron clock pool all clocks must do a full init except the
+    // detach (null) clock
+    if (emuClockDict[i].clockId == CHRON_NONE)
+      clockDriver[i].initType = DRAW_INIT_NONE;
+    else
+      clockDriver[i].initType = DRAW_INIT_FULL;
+    clockDriver[i].init = emuClockDict[i].init;
+    clockDriver[i].cycle = emuClockDict[i].cycle;
+    clockDriver[i].button = emuClockDict[i].button;
+  }
+
+  // Return the pool size and the pool itself
+  *count = emuClockDictCount;
+  return clockDriver;
+}
+
+//
+// Function: emuClockPoolReset
+//
+// Release the emuMonochron clock pool
+//
+void emuClockPoolReset(clockDriver_t *clockDriver)
+{
+  free(clockDriver);
+}
+
+//
+// Function: emuClockPrint
+//
+// Print an overview of all clocks in the Emuchron clock dictionary
+//
+void emuClockPrint(void)
+{
+  int i;
+  char active;
+
+  // All Emuchron clocks
+  printf("clocks:\n");
+  printf("clock clockId              description\n");
+
+  // Do this per entry
+  for (i = 0; i < emuClockDictCount; i++)
+  {
+    // Is this the active clock
+    if (i == mcMchronClock)
+      active = '*';
+    else
+      active = ' ';
+    printf("%2d%c   %-20s %s\n", i, active, emuClockDict[i].clockName,
+        emuClockDict[i].clockDesc);
+  }
+}
+
+//
 // Function: emuClockRelease
 //
 // Release a selected clock
@@ -361,8 +504,8 @@ void emuClockRelease(u08 echoCmd)
 // However, consider the QR clock. This clock requires multiple clock cycles
 // to update its layout due to the above average computing power needed to do
 // so.
-// For specific clocks, like the QR clock, this function generates multiple
-// clock cycles, enough to update its layout.
+// For specific clocks, like the QR and dali clock, this function generates
+// multiple clock cycles, enough to update its layout.
 // By default for any other clock, only a single clock cycle is generated,
 // which should suffice.
 //
@@ -372,13 +515,20 @@ void emuClockUpdate(void)
   if (mcClockPool[mcMchronClock].clockId == CHRON_NONE)
     return;
 
-  // We have specific draw requirements for the QR clock
+  // We have specific draw requirements for the QR and dali clock
   if (mcClockPool[mcMchronClock].clockId == CHRON_QR_HM ||
       mcClockPool[mcMchronClock].clockId == CHRON_QR_HMS)
   {
     // Generate the clock cycles needed to display a new QR
     u08 i;
     for (i = 0; i < QR_GEN_CYCLES; i++)
+      animClockDraw(DRAW_CYCLE);
+  }
+  else if (mcClockPool[mcMchronClock].clockId == CHRON_DALI)
+  {
+    // Generate the clock cycles needed to display a dali transition
+    u08 i;
+    for (i = 0; i <= DALI_GEN_CYCLES; i++)
       animClockDraw(DRAW_CYCLE);
   }
   else
@@ -502,9 +652,9 @@ void emuEepromPrint(void)
   int i;
   uint8_t value;
   eepDict_t *myDict;
-  eepDict_t *dictSort[eepCount];
+  eepDict_t *dictSort[eepDictCount];
   u08 allSorted = MC_FALSE;
-  int eepIdx = eepCount;
+  int eepIdx = eepDictCount;
 
   printf("eeprom:\n");
 
@@ -525,7 +675,7 @@ void emuEepromPrint(void)
   printf("byte address name            value\n");
 
   // Copy all id's, sort them and then print them
-  for (i = 0; i < eepCount; i++)
+  for (i = 0; i < eepDictCount; i++)
     dictSort[i] = &eepDict[i];
   while (allSorted == MC_FALSE)
   {
@@ -542,7 +692,7 @@ void emuEepromPrint(void)
     }
     eepIdx--;
   }
-  for (i = 0; i < eepCount; i++)
+  for (i = 0; i < eepDictCount; i++)
   {
     value = eeprom_read_byte((uint8_t *)(size_t)dictSort[i]->eepItemId);
     printf("%2d   0x%03x   %-15s %3d (0x%02x)\n",

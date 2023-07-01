@@ -22,6 +22,7 @@
 #include "../monomain.h"
 #include "../buttons.h"
 #include "../config.h"
+#include "controller.h"
 #include "mchronutil.h"
 #include "scanutil.h"
 #include "stub.h"
@@ -57,6 +58,11 @@
 // Audio in VMware Fusion and UTM/QEMU on arm64 is flaky for short pulses. It
 // requires to make to use of the prefix pulse. For VMware Fusion tech preview
 // 22H2 audio may fail regardless.
+//
+// Emuchron v7.2:
+// Audio in VMware Fusion on arm64 is not yet fully optimized. Refer to manual
+// section 3.9.2 how to correct this. When applied, it is expected that no
+// further actions are to be taken.
 
 // - VMware Fusion + VirtualBox on amd64 (no longer needed)
 //#define ALSA_PREFIX_PULSE_MS	95	
@@ -78,7 +84,7 @@
 // Debug output buffer size
 #define DEBUG_BUFSIZE		100
 
-// Monochron global data
+// Monochron defined data
 extern volatile uint8_t almAlarmEvent, almAlarming;
 extern volatile uint8_t almSnoozeEvent, almSnoozing;
 extern uint16_t almTickerSnooze;
@@ -397,15 +403,15 @@ u08 i2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
   else if (length == 8)
   {
     // Assume it is a request to set the RTC time
-    uint8_t sec, min, hr, date, mon, yr;
+    uint8_t sec, min, hr, day, mon, yr;
 
-    sec = ((data[1] >> 4) & 0xf) * 10 + (data[1] & 0xf);
-    min = ((data[2] >> 4) & 0xf) * 10 + (data[2] & 0xf);
-    hr = ((data[3] >> 4) & 0xf) * 10 + (data[3] & 0xf);
-    date = ((data[5] >> 4) & 0xf) * 10 + (data[5] & 0xf);
-    mon = ((data[6] >> 4) & 0xf) * 10 + (data[6] & 0xf);
-    yr = ((data[7] >> 4) & 0xf) * 10 + (data[7] & 0xf);
-    stubTimeSet(sec, min, hr, date, mon, yr);
+    sec = bcdDecode(data[1], 0xf);
+    min = bcdDecode(data[2], 0xf);
+    hr = bcdDecode(data[3], 0xf);
+    day = bcdDecode(data[5], 0xf);
+    mon = bcdDecode(data[6], 0xf);
+    yr = bcdDecode(data[7], 0xf);
+    stubTimeSet(sec, min, hr, day, mon, yr);
     retVal = 0;
   }
   else
@@ -936,8 +942,8 @@ u08 stubLogfileOpen(char fileName[])
   if (!DEBUGGING)
   {
     printf("%s: -d: master debugging is off\n", __progname);
-    printf("assign value 1 to \"#define DEBUGGING\" in global.h [firmware] and rebuild\n");
-    printf("mchron.\n");
+    printf("- Assign value 1 to \"#define DEBUGGING\" in global.h [firmware] and rebuild\n");
+    printf("  mchron.\n");
     return MC_FALSE;
   }
   else
@@ -1005,12 +1011,12 @@ void stubStatsReset(void)
 //
 // Set mchron time
 //
-// Values for respectively sec (for time) / date (for date):
+// Values for respectively sec (for time) / day (for date):
 // DT_TIME_KEEP / DT_DATE_KEEP = keep time or date as-is
 // DT_TIME_RESET / DT_DATE_RESET = reset time or date to <now>
 // other = use parameters for new time or date
 //
-u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
+u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t day,
   uint8_t mon, uint8_t yr)
 {
   double timeDeltaNew = 0L;
@@ -1053,17 +1059,17 @@ u08 stubTimeSet(uint8_t sec, uint8_t min, uint8_t hr, uint8_t date,
   // else DT_TIME_RESET -> default back to system time as currently populated
 
   // Verify what to do with date
-  if (date == DT_DATE_KEEP)
+  if (day == DT_DATE_KEEP)
   {
     // Keep current date offset
     tmNewCopy.tm_mday = rtcDateTime.dateDay;
     tmNewCopy.tm_mon = rtcDateTime.dateMon - 1;
     tmNewCopy.tm_year = rtcDateTime.dateYear + 100;
   }
-  else if (date != DT_DATE_RESET)
+  else if (day != DT_DATE_RESET)
   {
     // Overide on dmy
-    tmNewCopy.tm_mday = date;
+    tmNewCopy.tm_mday = day;
     tmNewCopy.tm_mon = mon - 1;
     tmNewCopy.tm_year = yr + 100;
   }

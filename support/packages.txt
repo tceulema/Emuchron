@@ -10,92 +10,35 @@
 # - Connect and upload firmware to Monochron via the FTDI port
 # - Read Monochron debug strings from the FTDI port
 # - Debug clock and high-level graphics code
-# - Interrupt/halt debugger in Debian without being warned or prompted about
-#   certain libc sourcefiles not being found
-# - Create main menu program lauchers
+# - Create main menu program launchers
 #
 
 # Compilers and compiler tools
-apt-get install gcc
-apt-get install make
-apt-get install flex
-apt-get install byacc
-apt-get install bison
+apt-get --yes install gcc make flex byacc bison
 
 # AVR environment
-apt-get install libusb-dev
-apt-get install avr-libc
-apt-get install gcc-avr
-apt-get install avrdude
+apt-get --yes install libusb-dev avr-libc gcc-avr avrdude
 
 # GDB debugger
-apt-get install gdb
+apt-get --yes install gdb
 
 # GDB gui front-ends and IDE's
 # This script no longer installs GDB gui front-ends and/or IDE's.
 # For more information refer to section 3.5 of the Emuchron pdf manual.
 
 # LCD device stubs
-apt-get install libncurses5-dev
-apt-get install freeglut3-dev
+apt-get --yes install libncurses5-dev freeglut3-dev
 
 # Piezo (audio) device stub
-apt-get install sox
+apt-get --yes install sox
 
 # Readline library
-apt-get install libreadline-dev
+apt-get --yes install libreadline-dev
 
 # Read Monochron debug strings from FTDI port
-apt-get install minicom
+apt-get --yes install minicom
 
 # Main menu editor and program launcher utility
-apt-get install alacarte
-
-# Debian 10/11 require specific glibc source files for a non-annoying debugging
-# experience in some gdb front-end gui's. The files that are referenced are
-# usually syscall-template.S and pselect.c.
-# For more info refer to section 3.9.2 of the Emuchron pdf manual.
-myDebianVersion=`lsb_release -c`
-
-# Obtaining glibc sources for Debian 10 (Buster)
-if [[ $myDebianVersion == *"buster"* ]];
-then
-  if [ -f /build/glibc/glibc-2.28/sysdeps/unix/syscall-template.S ];
-  then
-    echo "glibc sources already present"
-  else
-    echo "installing/replacing glibc sources in /build/glibc"
-    apt-get install dpkg-dev
-    mkdir -p /build/glibc
-    rm -rf /build/glibc/glibc-2.28
-    cd /build/glibc
-    apt-get source glibc
-    cd -
-  fi
-  echo "installing/replacing glibc source symbolic links"
-  # When needed add new symbolic link entries below
-  for i in d2N3Ld vjB4T1
-  do
-    rm -f /build/glibc-$i
-    ln -s /build/glibc /build/glibc-$i
-  done
-fi
-
-# Obtaining glibc sources for Debian 11 (Bullseye)
-if [[ $myDebianVersion == *"bullseye"* ]];
-then
-  if [ -f /build/glibc/glibc-2.31/sysdeps/unix/syscall-template.S ];
-  then
-    echo "glibc sources already present"
-  else
-    echo "installing/replacing glibc sources in /build/glibc"
-    apt-get install dpkg-dev
-    mkdir -p /build/glibc
-    rm -rf /build/glibc/glibc-2.31
-    cd /build/glibc
-    apt-get source glibc
-    cd -
-  fi
-fi
+apt-get --yes install alacarte
 
 echo "done"

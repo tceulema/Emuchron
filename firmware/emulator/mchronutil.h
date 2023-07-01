@@ -9,6 +9,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include "../avrlibtypes.h"
+#include "../anim.h"
 #include "interpreter.h"
 #include "controller.h"
 
@@ -77,6 +78,9 @@ void emuSigSetup(void);
 void emuShutdown(void);
 
 // mchron interpreter support functions
+clockDriver_t *emuClockPoolInit(int *count);
+void emuClockPoolReset(clockDriver_t *clockDriver);
+void emuClockPrint(void);
 void emuClockRelease(u08 echoCmd);
 void emuClockUpdate(void);
 void emuEepromPrint(void);

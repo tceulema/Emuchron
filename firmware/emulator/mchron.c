@@ -14,40 +14,16 @@
 // Monochron defines
 #include "../global.h"
 #include "../glcd.h"
-#include "../anim.h"
 #include "../monomain.h"
 #include "../ks0108.h"
 #include "../ks0108conf.h"
 #include "../config.h"
 #include "../buttons.h"
 
-// Monochron clocks
-#include "../clock/analog.h"
-#include "../clock/barchart.h"
-#include "../clock/bigdigit.h"
-#include "../clock/cascade.h"
-#include "../clock/crosstable.h"
-#include "../clock/digital.h"
-#include "../clock/example.h"
-#include "../clock/linechart.h"
-#include "../clock/marioworld.h"
-#include "../clock/mosquito.h"
-#include "../clock/nerd.h"
-#include "../clock/perftest.h"
-#include "../clock/piechart.h"
-#include "../clock/pong.h"
-#include "../clock/puzzle.h"
-#include "../clock/qr.h"
-#include "../clock/slider.h"
-#include "../clock/speeddial.h"
-#include "../clock/spiderplot.h"
-#include "../clock/thermometer.h"
-#include "../clock/trafficlight.h"
-#include "../clock/wave.h"
-
 // Emuchron defines and utilities
-#include "expr.h"
+#include "controller.h"
 #include "dictutil.h"
+#include "expr.h"
 #include "listutil.h"
 #include "mchronutil.h"
 #include "scanutil.h"
@@ -119,37 +95,8 @@ static u08 emuBacklight = 16;
 // Note that Monochron will have its own implemented array of supported clocks
 // in anim.c [firmware]. So, we need to switch between the two arrays when
 // appropriate.
-static clockDriver_t emuMonochron[] =
-{
-  {CHRON_NONE,        DRAW_INIT_NONE, 0,                  0,                   0},
-  {CHRON_EXAMPLE,     DRAW_INIT_FULL, exampleInit,        exampleCycle,        0},
-  {CHRON_ANALOG_HMS,  DRAW_INIT_FULL, analogHmsInit,      analogCycle,         0},
-  {CHRON_ANALOG_HM,   DRAW_INIT_FULL, analogHmInit,       analogCycle,         0},
-  {CHRON_DIGITAL_HMS, DRAW_INIT_FULL, digitalHmsInit,     digitalCycle,        0},
-  {CHRON_DIGITAL_HM,  DRAW_INIT_FULL, digitalHmInit,      digitalCycle,        0},
-  {CHRON_MOSQUITO,    DRAW_INIT_FULL, mosquitoInit,       mosquitoCycle,       0},
-  {CHRON_NERD,        DRAW_INIT_FULL, nerdInit,           nerdCycle,           0},
-  {CHRON_PONG,        DRAW_INIT_FULL, pongInit,           pongCycle,           pongButton},
-  {CHRON_PUZZLE,      DRAW_INIT_FULL, puzzleInit,         puzzleCycle,         puzzleButton},
-  {CHRON_SLIDER,      DRAW_INIT_FULL, sliderInit,         sliderCycle,         0},
-  {CHRON_CASCADE,     DRAW_INIT_FULL, spotCascadeInit,    spotCascadeCycle,    0},
-  {CHRON_SPEEDDIAL,   DRAW_INIT_FULL, spotSpeedDialInit,  spotSpeedDialCycle,  0},
-  {CHRON_SPIDERPLOT,  DRAW_INIT_FULL, spotSpiderPlotInit, spotSpiderPlotCycle, 0},
-  {CHRON_THERMOMETER, DRAW_INIT_FULL, spotThermInit,      spotThermCycle,      0},
-  {CHRON_TRAFLIGHT,   DRAW_INIT_FULL, spotTrafLightInit,  spotTrafLightCycle,  0},
-  {CHRON_BARCHART,    DRAW_INIT_FULL, spotBarChartInit,   spotBarChartCycle,   0},
-  {CHRON_CROSSTABLE,  DRAW_INIT_FULL, spotCrossTableInit, spotCrossTableCycle, 0},
-  {CHRON_LINECHART,   DRAW_INIT_FULL, spotLineChartInit,  spotLineChartCycle,  0},
-  {CHRON_PIECHART,    DRAW_INIT_FULL, spotPieChartInit,   spotPieChartCycle,   0},
-  {CHRON_BIGDIG_ONE,  DRAW_INIT_FULL, bigDigInit,         bigDigCycle,         bigDigButton},
-  {CHRON_BIGDIG_TWO,  DRAW_INIT_FULL, bigDigInit,         bigDigCycle,         bigDigButton},
-  {CHRON_QR_HMS,      DRAW_INIT_FULL, qrInit,             qrCycle,             0},
-  {CHRON_QR_HM,       DRAW_INIT_FULL, qrInit,             qrCycle,             0},
-  {CHRON_MARIOWORLD,  DRAW_INIT_FULL, marioInit,          marioCycle,          0},
-  {CHRON_WAVE,        DRAW_INIT_FULL, waveInit,           waveCycle,           0},
-  {CHRON_PERFTEST,    DRAW_INIT_FULL, perfInit,           perfCycle,           0}
-};
-static int emuMonochronCount = sizeof(emuMonochron) / sizeof(clockDriver_t);
+static clockDriver_t *emuClockPool;
+static int emuClockPoolCount = 0;
 
 //
 // Function: main
@@ -230,8 +177,9 @@ int main(int argc, char *argv[])
       emuArgcArgv.ctrlDeviceArgs.lcdNcurInitArgs.tty);
   printf("\n");
 
-  // Init the clock pool supported in mchron command line mode
-  mcClockPool = emuMonochron;
+  // Init the mchron and system clock pool
+  emuClockPool = emuClockPoolInit(&emuClockPoolCount);
+  mcClockPool = emuClockPool;
 
   // Init the stubbed alarm switch to 'Off' and clear audible alarm
   alarmSwitchSet(MC_FALSE, MC_FALSE);
@@ -297,8 +245,10 @@ int main(int argc, char *argv[])
   cmdInputCleanup(&cmdInput);
   cmdStackCleanup();
 
-  // Shutdown gracefully by killing audio, stopping the controller and lcd
-  // device(s), and cleaning up the named variables and graphics buffers
+  // Shutdown gracefully by releasing the mchron clock pool, killing audio,
+  // stopping the controller and lcd device(s), and cleaning up the named
+  // variables and graphics buffers
+  emuClockPoolReset(emuClockPool);
   alarmSoundReset();
   ctrlCleanup();
   varReset();
@@ -405,6 +355,28 @@ u08 doClockFeed(cmdLine_t *cmdLine)
 }
 
 //
+// Function: doClockPrint
+//
+// Print available clocks in the mchron clock dictionary
+//
+u08 doClockPrint(cmdLine_t *cmdLine)
+{
+  u08 retVal = CMD_RET_OK;
+
+  if (cmdStackIsActive() == MC_TRUE)
+  {
+    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+  else
+  {
+    emuClockPrint();
+  }
+
+  return retVal;
+}
+
+//
 // Function: doClockSelect
 //
 // Select clock from list of available clocks
@@ -414,9 +386,10 @@ u08 doClockSelect(cmdLine_t *cmdLine)
   uint8_t clock;
 
   clock = TO_UINT8_T(argDouble[0]);
-  if (clock > emuMonochronCount - 1)
+  if (clock >= emuClockPoolCount)
   {
-    // Requested clock is beyond max value
+    // Requested clock is beyond max value. The mchron clock dictionary and
+    // command dictionary domain domNumClock don't match. Correct this.
     printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[0].argName, clock);
     return CMD_RET_ERROR;
   }
@@ -528,7 +501,7 @@ u08 doExecResume(cmdLine_t *cmdLine)
   }
   else
   {
-    retVal = cmdStackResume();
+    retVal = cmdStackResume(cmdLine->cmdCommand->cmdName);
   }
 
   return retVal;
@@ -1166,31 +1139,68 @@ u08 doLcdGlutGrSet(cmdLine_t *cmdLine)
 }
 
 //
-// Function: doLcdHlReset
+// Function: doLcdGlutHlReset
 //
 // Reset (clear) glcd pixel highlight (glut only)
 //
-u08 doLcdHlReset(cmdLine_t *cmdLine)
+u08 doLcdGlutHlReset(cmdLine_t *cmdLine)
 {
   // Disable glcd pixel highlight
-  ctrlLcdHighlight(MC_FALSE, 0, 0);
+  ctrlLcdGlutHlSet(MC_FALSE, 0, 0);
   ctrlLcdFlush();
 
   return CMD_RET_OK;
 }
 
 //
-// Function: doLcdHlSet
+// Function: doLcdGlutHlSet
 //
 // Enable glcd pixel highlight (glut only)
 //
-u08 doLcdHlSet(cmdLine_t *cmdLine)
+u08 doLcdGlutHlSet(cmdLine_t *cmdLine)
 {
   // Enable glcd pixel highlight
-  ctrlLcdHighlight(MC_TRUE, TO_U08(argDouble[0]), TO_U08(argDouble[1]));
+  ctrlLcdGlutHlSet(MC_TRUE, TO_U08(argDouble[0]), TO_U08(argDouble[1]));
   ctrlLcdFlush();
 
   return CMD_RET_OK;
+}
+
+//
+// Function: doLcdGlutSizeSet
+//
+// Set glut window pixel size
+//
+u08 doLcdGlutSizeSet(cmdLine_t *cmdLine)
+{
+  u16 size = TO_U16(argDouble[0]);
+  u08 retVal = CMD_RET_OK;
+
+  if (cmdStackIsActive() == MC_TRUE)
+  {
+    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+  else
+  {
+    // The size argument has a different value range depending on whether it is
+    // used for width or height.
+    if (argChar[0] == 'w' && size < 130)
+    {
+      printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[1].argName,
+        (int)size);
+      return CMD_RET_ERROR;
+    }
+    else if (argChar[0] == 'h' && size > 1056)
+    {
+      printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[1].argName,
+        (int)size);
+      return CMD_RET_ERROR;
+    }
+    ctrlLcdGlutSizeSet(argChar[0], size);
+  }
+
+  return retVal;
 }
 
 //
@@ -1343,7 +1353,7 @@ u08 doLcdXCursorSet(cmdLine_t *cmdLine)
 }
 
 //
-// Function: doLcdCursorYSet
+// Function: doLcdYCursorSet
 //
 // Send y cursor position to active lcd controller
 //
@@ -1392,12 +1402,14 @@ u08 doMonochron(cmdLine_t *cmdLine)
   // Clear the screen so we won't see any flickering upon changing the
   // backlight later on
   glcdClearScreen();
+  ctrlLcdFlush();
 
   // Set the backlight as stored in the eeprom
   eepInit();
   myBacklight = (eeprom_read_byte((uint8_t *)EE_BRIGHT) % 17) >>
     OCR2B_BITSHIFT;
   ctrlLcdBacklightSet(myBacklight);
+  ctrlLcdFlush();
 
   // Init stub event handler used in Monochron
   stubEventInit(startWait, MC_TRUE, stubHelpMonochron);
@@ -1407,7 +1419,8 @@ u08 doMonochron(cmdLine_t *cmdLine)
 
   // We're done. Reset audible alarm and restore the mchron clock pool.
   alarmSoundReset();
-  mcClockPool = emuMonochron;
+  mcClockPool = emuClockPool;
+  mcMchronClock = 0;
 
   // Restore alarm, foreground/background color and backlight as they were
   // prior to starting Monochron
@@ -1446,6 +1459,9 @@ u08 doMonoConfig(cmdLine_t *cmdLine)
   if (myKbMode == KB_MODE_LINE)
     kbModeSet(KB_MODE_SCAN);
 
+  // Clear active clock (if any) that also resets audible alarm and data
+  emuClockRelease(CMD_ECHO_NO);
+
   // Set essential Monochron startup data
   alarmSoundReset();
   mcClockTimeEvent = MC_FALSE;
@@ -1455,12 +1471,14 @@ u08 doMonoConfig(cmdLine_t *cmdLine)
   // Clear the screen so we won't see any flickering upon changing the
   // backlight later on
   glcdClearScreen();
+  ctrlLcdFlush();
 
   // Misc eeprom-based initialization
   eepInit();
   myBacklight = (eeprom_read_byte((uint8_t *)EE_BRIGHT) % 17) >>
     OCR2B_BITSHIFT;
   ctrlLcdBacklightSet(myBacklight);
+  ctrlLcdFlush();
   mcBgColor = eeprom_read_byte((uint8_t *)EE_BGCOLOR) % 2;
   mcFgColor = (mcBgColor == GLCD_OFF ? GLCD_ON : GLCD_OFF);
   almAlarmSelect = eeprom_read_byte((uint8_t *)EE_ALARM_SELECT) % 4;
@@ -1480,7 +1498,7 @@ u08 doMonoConfig(cmdLine_t *cmdLine)
 
   // Restore clock pool, alarm, foreground/background color and backlight as
   // they were prior to starting Monochron config.
-  mcClockPool = emuMonochron;
+  mcClockPool = emuClockPool;
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
   mcBgColor = emuBgColor;

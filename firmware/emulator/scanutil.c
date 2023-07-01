@@ -26,9 +26,6 @@
 #define READLINE_HISFILE	"/history"
 #define READLINE_MAXHISTORY	250
 
-// Functional name of mchron command
-extern char *mchronCmdName;
-
 // This is me
 extern const char *__progname;
 
@@ -338,7 +335,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
   // Verify end-of-line
   if (*workPtr != '\0')
   {
-    printf("%s? too many arguments\n", mchronCmdName);
+    printf("%s? too many arguments\n", cmdLine->cmdCommand->cmdName);
     return CMD_RET_ERROR;
   }
 
