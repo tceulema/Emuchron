@@ -413,8 +413,12 @@ u08 dictVerify(void)
         else if (cmdDomain->domType == DOM_WORD_REGEX)
         {
           // Validate regex pattern
-          if (regcomp(&regex, cmdDomain->domTextList,
-              REG_EXTENDED | REG_NOSUB) != 0)
+          char errMsg[100];
+          int retVal = 0;
+
+          retVal = regcomp(&regex, cmdDomain->domTextList,
+            REG_EXTENDED | REG_NOSUB);
+          if (retVal != 0)
           {
             printf("%s: dict: invalid regex domain validation info\n",
               __progname);
@@ -423,6 +427,8 @@ u08 dictVerify(void)
             printf("  info: argName = '%s', domName = '%s'\n",
               cmdCommand->cmdArgName, cmdDomain->domName);
             printf("        domType = '%s'\n", cmdDomain->domTypeName);
+            regerror(retVal, &regex, errMsg, 100);
+            printf("        error = %s\n", errMsg);
             issueCount++;
           }
           regfree(&regex);

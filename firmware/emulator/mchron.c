@@ -109,7 +109,7 @@ int main(int argc, char *argv[])
   char *prompt;
   emuArgcArgv_t emuArgcArgv;
   int i;
-  u08 retVal;
+  u08 retVal = CMD_RET_OK;
   u08 success;
 
   // Verify integrity of the command dictionary
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
 
   // Init graphics data buffers
   for (i = 0; i < GRAPHICS_BUFFERS; i++)
-    grBufInit(&emuGrBufs[i], MC_FALSE);
+    grBufInit(&emuGrBufs[i]);
 
   // Open debug logfile when requested
   if (emuArgcArgv.argDebug != 0)
@@ -236,7 +236,7 @@ int main(int argc, char *argv[])
 
   // Done: caused by 'x' or ^D
   if (retVal != CMD_RET_EXIT)
-    printf("\n<ctrl>d - exit\n");
+    printf("<ctrl>d - exit\n");
 
   // Cleanup command line, command line read interface and command stack
   free(prompt);
@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
   ctrlCleanup();
   varReset();
   for (i = 0; i < GRAPHICS_BUFFERS; i++)
-    grBufInit(&emuGrBufs[i], MC_TRUE);
+    grBufReset(&emuGrBufs[i]);
 
   // Stop debug output
   DEBUGP("**** logging stopped");
@@ -323,7 +323,7 @@ u08 doClockFeed(cmdLine_t *cmdLine)
   rtcMchronTimeInit();
 
   // Init stub event handler used in main loop below and get first event
-  stubEventInit(startWait, MC_TRUE, stubHelpClockFeed);
+  stubEventInit(startWait, MC_TRUE, EMU_CLOCK);
   ch = stubEventGet(MC_TRUE);
 
   // Run clock until 'q'
@@ -341,11 +341,12 @@ u08 doClockFeed(cmdLine_t *cmdLine)
     ch = stubEventGet(MC_TRUE);
   }
 
+  // We're done. Cleanup stub event handler and kill/reset alarm (if needed).
+  stubEventCleanup();
+  alarmSoundReset();
+
   // Flush any pending updates in the lcd device
   ctrlLcdFlush();
-
-  // Kill alarm (if sounding anyway) and reset it
-  alarmSoundReset();
 
   // Return to line mode if needed
   if (myKbMode == KB_MODE_LINE)
@@ -665,7 +666,7 @@ u08 doGrLoadFileImg(cmdLine_t *cmdLine)
   {
     printf("file data incomplete: elements read = %d, elements expected = %d\n",
       emuGrBuf->bufElmCount, elmExpected);
-    grBufInit(emuGrBuf, MC_TRUE);
+    grBufReset(emuGrBuf);
     return CMD_RET_ERROR;
   }
 
@@ -717,7 +718,7 @@ u08 doGrLoadFileSpr(cmdLine_t *cmdLine)
   {
     printf("file data incomplete: elements read = %d, elements expected = %d\n",
       emuGrBuf->bufElmCount, width * ((int)frames + 1));
-    grBufInit(emuGrBuf, MC_TRUE);
+    grBufReset(emuGrBuf);
     return CMD_RET_ERROR;
   }
 
@@ -746,12 +747,12 @@ u08 doGrReset(cmdLine_t *cmdLine)
 
   if (bufferId >= 0)
   {
-    grBufInit(&emuGrBufs[bufferId], MC_TRUE);
+    grBufReset(&emuGrBufs[bufferId]);
   }
   else
   {
     for (i = 0; i < GRAPHICS_BUFFERS; i++)
-      grBufInit(&emuGrBufs[i], MC_TRUE);
+      grBufReset(&emuGrBufs[i]);
     if (cmdEcho == CMD_ECHO_YES)
       printf("buffers reset\n");
   }
@@ -877,7 +878,7 @@ u08 doIf(cmdLine_t **cmdProgCounter)
   {
     // Make the if-then block active and continue on next line
     cmdPcCtrlChild->active = MC_TRUE;
-    *cmdProgCounter = (*cmdProgCounter)->next;
+    *cmdProgCounter = cmdLine->next;
   }
   else
   {
@@ -911,7 +912,7 @@ u08 doIfElse(cmdLine_t **cmdProgCounter)
   {
     // Make if-else block active and continue on next line
     cmdPcCtrlChild->active = MC_TRUE;
-    *cmdProgCounter = (*cmdProgCounter)->next;
+    *cmdProgCounter = cmdLine->next;
   }
 
   return CMD_RET_OK;
@@ -935,8 +936,7 @@ u08 doIfElseIf(cmdLine_t **cmdProgCounter)
   {
     // Deactivate preceding block and jump to end-if
     cmdPcCtrlParent->active = MC_FALSE;
-    while ((*cmdProgCounter)->cmdCommand->cmdPcCtrlType != PC_IF_END)
-      *cmdProgCounter = (*cmdProgCounter)->cmdPcCtrlChild->cmdLineChild;
+    *cmdProgCounter = cmdPcCtrlParent->cmdLineGrpTail;
   }
   else
   {
@@ -949,7 +949,7 @@ u08 doIfElseIf(cmdLine_t **cmdProgCounter)
     {
       // Make the if-else-if block active and continue on the next line
       cmdPcCtrlChild->active = MC_TRUE;
-      *cmdProgCounter = (*cmdProgCounter)->next;
+      *cmdProgCounter = cmdLine->next;
     }
     else
     {
@@ -973,7 +973,7 @@ u08 doIfEnd(cmdLine_t **cmdProgCounter)
 
   // Deactivate preceding control block (if anyway) and continue on next line
   cmdPcCtrlParent->active = MC_FALSE;
-  *cmdProgCounter = (*cmdProgCounter)->next;
+  *cmdProgCounter = cmdLine->next;
 
   return CMD_RET_OK;
 }
@@ -1086,7 +1086,7 @@ u08 doLcdGlutEdit(cmdLine_t *cmdLine)
     return CMD_RET_OK;
 
   // Give instructions
-  printf("<glut double-click left button = toggle pixel, q = quit> ");
+  printf("<edit: double-click left button = toggle pixel, q = quit> ");
   fflush(stdout);
 
   // Prepare for keyboard scan and timer loop, and enable double-click events
@@ -1273,21 +1273,22 @@ u08 doLcdPrint(cmdLine_t *cmdLine)
 u08 doLcdRead(cmdLine_t *cmdLine)
 {
   char *varName;
-  int varId;
   u08 lcdByte;
+  u08 retVal = CMD_RET_OK;
 
   // Read data from controller lcd buffer
   ctrlExecute(CTRL_METHOD_READ);
   lcdByte = (GLCD_DATAH_PIN & 0xf0) | (GLCD_DATAL_PIN & 0x0f);
 
+  // Skip varname assignment when varname 'null' is provided
+  if (strcmp(argString[1], "null") == 0)
+    return retVal;
+
   // Assign the lcd byte value to the variable
-  varId = varIdGet(argString[1], MC_TRUE);
-  if (varId < 0)
-  {
-    printf("%s? internal error\n", cmdLine->cmdCommand->cmdArg[1].argName);
-    return CMD_RET_ERROR;
-  }
-  varValSet(varId, (double)lcdByte);
+  retVal = exprVarSetU08(cmdLine->cmdCommand->cmdArg[1].argName, argString[1],
+    lcdByte);
+  if (retVal != CMD_RET_OK)
+    return retVal;
 
   // Print the variable holding the lcd byte
   if (cmdEcho == CMD_ECHO_YES)
@@ -1298,7 +1299,7 @@ u08 doLcdRead(cmdLine_t *cmdLine)
     free(varName);
   }
 
-  return CMD_RET_OK;
+  return retVal;
 }
 
 //
@@ -1412,18 +1413,19 @@ u08 doMonochron(cmdLine_t *cmdLine)
   ctrlLcdFlush();
 
   // Init stub event handler used in Monochron
-  stubEventInit(startWait, MC_TRUE, stubHelpMonochron);
+  stubEventInit(startWait, MC_TRUE, EMU_MONOCHRON);
 
   // Start Monochron and witness the magic :-)
   monoMain();
 
-  // We're done. Reset audible alarm and restore the mchron clock pool.
+  // We're done. Cleanup stub event handler and kill/reset alarm (if needed).
+  stubEventCleanup();
   alarmSoundReset();
+
+  // Restore mchron clock pool, alarm, foreground/background color and
+  // backlight as they were prior to starting Monochron
   mcClockPool = emuClockPool;
   mcMchronClock = 0;
-
-  // Restore alarm, foreground/background color and backlight as they were
-  // prior to starting Monochron
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
   mcBgColor = emuBgColor;
@@ -1485,19 +1487,33 @@ u08 doMonoConfig(cmdLine_t *cmdLine)
   almTimeGet(almAlarmSelect, &mcAlarmH, &mcAlarmM);
 
   // Init stub event handler used in Monochron
-  stubEventInit(startWait, TO_U08(argDouble[0]), stubHelpMonochron);
+  stubEventInit(startWait, TO_U08(argDouble[0]), EMU_MONOCHRON);
 
   // (Re)start Monochron configuration menu pages until a quit keypress
-  // occurred or regular menu exit is considered as final
-  do
+  // occurred or a regular menu exit is considered as final
+  while (MC_TRUE)
+  {
     cfgMenuMain();
-  while (stubEventQuitGet() == MC_FALSE && restart == MC_TRUE);
+    if (stubEventQuitGet() == MC_TRUE)
+    {
+      // The quit key was pressed
+      break;
+    }
+    else if (restart == MC_FALSE)
+    {
+      // We may not restart and we got here due to a regular menu exit or a
+      // keypress timeout. The next mchron prompt must start on a newline.
+      printf("\n");
+      break;
+    }
+  }
 
-  // We're done. Kill alarm (if sounding anyway) and reset it.
+  // We're done. Cleanup event handler and kill/reset alarm (if needed).
+  stubEventCleanup();
   alarmSoundReset();
 
   // Restore clock pool, alarm, foreground/background color and backlight as
-  // they were prior to starting Monochron config.
+  // they were prior to starting Monochron config
   mcClockPool = emuClockPool;
   mcAlarmH = emuAlarmH;
   mcAlarmM = emuAlarmM;
@@ -1724,14 +1740,22 @@ u08 doPaintNumber(cmdLine_t *cmdLine)
   u08 len = 0;
   u08 orientation;
   u08 font;
-  char *valString;
+  char *valString = NULL;
 
   // Get color, orientation and font from commandline text values
   orientation = emuOrientationGet(argChar[0]);
   font = emuFontGet(argString[1]);
 
-  // Get output string
+  // Get output string and verify we actually got output. Note that the use of
+  // an inappropriate format specifier may make asprintf() internally fail on a
+  // segmentation fault. Example: "%d".
   asprintf(&valString, argString[2], argDouble[4]);
+  if (valString == NULL)
+  {
+    printf("%s? invalid: \"%s\"\n", cmdLine->cmdCommand->cmdArg[7].argName,
+      argString[2]);
+    return CMD_RET_ERROR;
+  }
 
   // Paint ascii based on text orientation
   if (orientation == ORI_HORIZONTAL)
@@ -1831,6 +1855,61 @@ u08 doPaintSetFg(cmdLine_t *cmdLine)
 }
 
 //
+// Function: doRepeatBreak
+//
+// Break out of a repeat loop
+//
+u08 doRepeatBreak(cmdLine_t **cmdProgCounter)
+{
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlHead =
+    cmdLine->cmdPcCtrlChild->cmdLineGrpHead->cmdPcCtrlChild;
+  cmdPcCtrl_t *cmdPcCtrlClean = cmdLine->cmdPcCtrlChild->prev;
+
+  // Since we need to break the repeat, deactivate its associated repeat-for
+  cmdPcCtrlHead->active = MC_FALSE;
+
+  // Deactivate any preceding active block in-between this break and associated
+  // repeat-for
+  while (cmdPcCtrlClean != cmdPcCtrlHead)
+  {
+    cmdPcCtrlClean->active = MC_FALSE;
+    cmdPcCtrlClean = cmdPcCtrlClean->prev;
+  }
+
+  // Then jump to associated repeat-next (and from there exit loop)
+  *cmdProgCounter = cmdLine->cmdPcCtrlChild->cmdLineGrpTail;
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doRepeatCont
+//
+// Continue with next repeat loop iteration
+//
+u08 doRepeatCont(cmdLine_t **cmdProgCounter)
+{
+  cmdLine_t *cmdLine = *cmdProgCounter;
+  cmdPcCtrl_t *cmdPcCtrlHead =
+    cmdLine->cmdPcCtrlChild->cmdLineGrpHead->cmdPcCtrlChild;
+  cmdPcCtrl_t *cmdPcCtrlClean = cmdLine->cmdPcCtrlChild->prev;
+
+  // Deactivate any preceding active block in-between this continue and
+  // associated repeat-for
+  while (cmdPcCtrlClean != cmdPcCtrlHead)
+  {
+    cmdPcCtrlClean->active = MC_FALSE;
+    cmdPcCtrlClean = cmdPcCtrlClean->prev;
+  }
+
+  // Then jump to associated repeat-next (and from there continue loop)
+  *cmdProgCounter = cmdLine->cmdPcCtrlChild->cmdLineGrpTail;
+
+  return CMD_RET_OK;
+}
+
+//
 // Function: doRepeatFor
 //
 // Initiate a new or continue a repeat loop
@@ -1866,13 +1945,13 @@ u08 doRepeatFor(cmdLine_t **cmdProgCounter)
   if (cmdLine->argInfo[1].exprValue != 0)
   {
     // Continue at next line
-    *cmdProgCounter = (*cmdProgCounter)->next;
+    *cmdProgCounter = cmdLine->next;
   }
   else
   {
-    // End of loop; make it inactive and jump to repeat next
+    // End of loop; make it inactive and jump to its associated repeat-next
     cmdPcCtrlChild->active = MC_FALSE;
-    *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+    *cmdProgCounter = cmdPcCtrlChild->cmdLineGrpTail;
   }
 
   return CMD_RET_OK;
@@ -1886,19 +1965,20 @@ u08 doRepeatFor(cmdLine_t **cmdProgCounter)
 u08 doRepeatNext(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
+  cmdLine_t *cmdLineHead = cmdLine->cmdPcCtrlParent->cmdLineGrpHead;
+  cmdPcCtrl_t *cmdPcCtrlHead = cmdLineHead->cmdPcCtrlChild;
 
   // Decide where to go depending on whether the loop is still active
-  if (cmdPcCtrlParent->active == MC_TRUE)
+  if (cmdPcCtrlHead->active == MC_TRUE)
   {
-    // Jump back to top of repeat (and evaluate there whether the repeat loop
-    // will continue)
-    *cmdProgCounter = cmdPcCtrlParent->cmdLineParent;
+    // Jump back to the associated repeat-for and evaluate there whether the
+    // repeat loop will continue
+    *cmdProgCounter = cmdLineHead;
   }
   else
   {
     // End of repeat loop; continue at next line
-    *cmdProgCounter = (*cmdProgCounter)->next;
+    *cmdProgCounter = cmdLine->next;
   }
 
   return CMD_RET_OK;
@@ -1916,8 +1996,8 @@ u08 doStatsPrint(cmdLine_t *cmdLine)
   // Print stub statistics
   stubStatsPrint();
 
-  // Print glcd interface and lcd performance statistics
-  ctrlStatsPrint(CTRL_STATS_ALL);
+  // Print aggregated display related statistics
+  ctrlStatsPrint(CTRL_STATS_AGGREGATE);
 
   return CMD_RET_OK;
 }
@@ -2163,6 +2243,44 @@ u08 doTimeFlush(cmdLine_t *cmdLine)
 }
 
 //
+// Function: doTimeGet
+//
+// Get the mchron time and put it in variables
+//
+u08 doTimeGet(cmdLine_t *cmdLine)
+{
+  cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
+  u08 clockData[7];
+  u08 clockVal;
+  u08 i;
+  u08 retVal = CMD_RET_OK;
+
+  // Get the mchron time
+  i2cMasterReceiveNI(0xd0, 7, clockData);
+
+  // Assign the time elements to the variable names
+  for (i = 1; i <= 6; i++)
+  {
+    // Skip varname assignment when varname 'null' is provided
+    if (strcmp(argString[i], "null") == 0)
+      continue;
+
+    // Get the related mchron time element
+    if (i < 4)
+      clockVal = bcdDecode(clockData[7 - i], 0xf);
+    else
+      clockVal = bcdDecode(clockData[6 - i], 0xf);
+
+    // Assign the time element value to the variable
+    retVal = exprVarSetU08(cmdArg[i - 1].argName, argString[i], clockVal);
+    if (retVal != CMD_RET_OK)
+      return retVal;
+  }
+
+  return retVal;
+}
+
+//
 // Function: doTimePrint
 //
 // Report current date/time/alarm
@@ -2250,35 +2368,28 @@ u08 doVarPrint(cmdLine_t *cmdLine)
 //
 // Function: doVarReset
 //
-// Clear one or all used named variables
+// Clear all or a single used named variables
 //
 u08 doVarReset(cmdLine_t *cmdLine)
 {
-  int varId;
   int varInUse;
-  u08 retVal;
+  u08 retVal = CMD_RET_OK;
 
-  // Clear all variables
   if (strcmp(argString[1], ".") == 0)
   {
+    // Clear all variables
     varInUse = varReset();
     if (cmdEcho == CMD_ECHO_YES)
       printf("reset variables: %d\n", varInUse);
-    return CMD_RET_OK;
   }
-
-  // Clear the single variable
-  varId = varIdGet(argString[1], MC_FALSE);
-  if (varId < 0)
+  else
   {
-    printf("%s? not in use: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
-      argString[1]);
-    return CMD_RET_ERROR;
+    // Clear a single variable
+    retVal = varResetVar(argString[1]);
+    if (retVal != CMD_RET_OK)
+      printf("%s? not in use: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
+        argString[1]);
   }
-  retVal = varClear(varId);
-  if (retVal != CMD_RET_OK)
-    printf("%s? not in use: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
-      argString[1]);
 
   return retVal;
 }
@@ -2308,6 +2419,11 @@ u08 doWait(cmdLine_t *cmdLine)
   int delay = 0;
   char ch = '\0';
 
+  // If the stack is active disable its 100 msec keyboard scan timer to make
+  // it not interfere with different wait timer mechanisms below
+  if (cmdStackIsActive() == MC_TRUE)
+     cmdStackTimerSet(LIST_TIMER_DISARM);
+
   delay = TO_INT(argDouble[0]);
   if (delay == 0)
   {
@@ -2322,6 +2438,11 @@ u08 doWait(cmdLine_t *cmdLine)
     // Wait delay*0.001 sec
     ch = waitDelay(delay);
   }
+
+  // If the stack is active re-enable its 100 msec timer for subsequent list
+  // commands
+  if (cmdStackIsActive() == MC_TRUE)
+     cmdStackTimerSet(LIST_TIMER_ARM);
 
   // A 'q' will interrupt any command execution
   if (ch == 'q' && cmdStackIsActive() == MC_TRUE)
@@ -2343,9 +2464,19 @@ u08 doWaitTimerExpiry(cmdLine_t *cmdLine)
   int delay = 0;
   char ch = '\0';
 
+  // If the stack is active disable its 100 msec keyboard scan timer to make
+  // it not interfere with different wait timer mechanisms below
+  if (cmdStackIsActive() == MC_TRUE)
+     cmdStackTimerSet(LIST_TIMER_DISARM);
+
   // Wait for timer expiry (if not already expired)
   delay = TO_INT(argDouble[0]);
   ch = waitTimerExpiry(&tvTimer, delay, MC_TRUE, NULL);
+
+  // If the stack is active re-enable its 100 msec timer for subsequent list
+  // commands
+  if (cmdStackIsActive() == MC_TRUE)
+     cmdStackTimerSet(LIST_TIMER_ARM);
 
   // A 'q' will interrupt any command execution
   if (ch == 'q' && cmdStackIsActive() == MC_TRUE)

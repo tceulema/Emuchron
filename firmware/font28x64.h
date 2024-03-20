@@ -19,7 +19,7 @@
 // aaaaa bbbbb ccccc ddddd   phase 0
 // eeeee fffff ggggg hhhhh   phase 1
 //
-// 765 43210 (bit 0..8)
+// 765 43210 (bit 0..7)
 // ---------
 // ccc aaaaa (byte 0)
 // ccd bbbbb (byte 1)

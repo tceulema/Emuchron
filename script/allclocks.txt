@@ -15,7 +15,7 @@ rf clock=1 clock<=maxClock clock=clock+1
     hm
     vp ^clock$
     cs clock
-    cf n
+    cf r
   ien
 rn
 cs 0

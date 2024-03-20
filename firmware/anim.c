@@ -79,14 +79,14 @@ volatile uint8_t mcAlarmSwitch;
 
 // Indicates whether the alarm switch has changed since last check. It will
 // also turn true upon clock initialization.
-volatile uint8_t mcUpdAlarmSwitch = MC_FALSE;
+volatile uint8_t mcAlarmSwitchEvent = MC_FALSE;
 
 // Indicates whether the clock alarming state has changed since last check and
 // its current alarming state.
 // Note the following:
 // - mcAlarmEvent turns true when the clock starts alarming or stops alarming
 //   due to alarm timeout or by pressing the 'M' button. Upon flipping the
-//   alarm switch while alarming/snoozing, it is caught by mcUpdAlarmSwitch.
+//   alarm switch while alarming/snoozing, it is caught by mcAlarmSwitchEvent.
 // - mcAlarming indicates whether the clock is currently alarming/snoozing.
 //   Use in combination with mcSnoozing to discriminate between audible alarm
 //   and silent snoozing.
@@ -98,7 +98,7 @@ volatile uint8_t mcAlarming = MC_FALSE;
 // Note the following:
 // - mcSnoozeEvent turns true when the clock starts snoozing or stops snoozing
 //   due to snooze timeout. When stopping alarming while snoozing it is caught
-//   by either mcAlarmEvent (press 'M' button) or mcUpdAlarmSwitch (alarm
+//   by either mcAlarmEvent (press 'M' button) or mcAlarmSwitchEvent (alarm
 //   switch flipped to off).
 // - mcSnoozing indicates whether the clock is currently snoozing.
 //   Note that mcSnoozing can only be true when mcAlarming is true.
@@ -276,7 +276,7 @@ void animADAreaUpdate(u08 x, u08 y, u08 type)
       pxDone = glcdPutStr2(x, y, FONT_5X5P, msg);
 
       // Clean up any trailing remnants of a date string
-      if (type == AD_AREA_ALM_DATE && mcUpdAlarmSwitch == MC_TRUE)
+      if (type == AD_AREA_ALM_DATE && mcAlarmSwitchEvent == MC_TRUE)
       {
         glcdColorSetBg();
         glcdFillRectangle(x + pxDone, y, AD_AREA_AD_WIDTH - pxDone, 5);
@@ -286,14 +286,14 @@ void animADAreaUpdate(u08 x, u08 y, u08 type)
     // Sync on/off state
     almDisplayState = newAlmDisplayState;
   }
-  else if (mcUpdAlarmSwitch == MC_TRUE || mcClockDateEvent == MC_TRUE ||
+  else if (mcAlarmSwitchEvent == MC_TRUE || mcClockDateEvent == MC_TRUE ||
     mcAlarmEvent == MC_TRUE)
   {
     // Show either alarm time, current date or clear area
     almDisplayState = MC_FALSE;
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {
-      if (mcUpdAlarmSwitch == MC_TRUE || mcAlarmEvent == MC_TRUE)
+      if (mcAlarmSwitchEvent == MC_TRUE || mcAlarmEvent == MC_TRUE)
       {
         // Show alarm time
         DEBUGP("Update AD 2");
@@ -344,7 +344,7 @@ static void animAlarmSwitchCheck(void)
       // Init alarm switch value, or the alarm switch has been switched on
       DEBUGP("Alarm info -> Alarm");
       mcAlarmSwitch = ALARM_SWITCH_ON;
-      mcUpdAlarmSwitch = MC_TRUE;
+      mcAlarmSwitchEvent = MC_TRUE;
       almDisplayState = MC_FALSE;
     }
   }
@@ -356,7 +356,7 @@ static void animAlarmSwitchCheck(void)
       // Init alarm switch value, or the alarm switch has been switched off
       DEBUGP("Alarm info -> Other");
       mcAlarmSwitch = ALARM_SWITCH_OFF;
-      mcUpdAlarmSwitch = MC_TRUE;
+      mcAlarmSwitchEvent = MC_TRUE;
     }
   }
 }
@@ -438,7 +438,7 @@ void animClockDraw(u08 mode)
         mcSnoozeEvent = MC_FALSE;
         almSnoozeEvent = MC_FALSE;
       }
-      mcUpdAlarmSwitch = MC_FALSE;
+      mcAlarmSwitchEvent = MC_FALSE;
       mcClockInit = MC_FALSE;
     }
     else // DRAW_INIT_FULL or DRAW_INIT_PARTIAL

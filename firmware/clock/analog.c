@@ -59,7 +59,7 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcUpdAlarmSwitch;
+extern volatile uint8_t mcAlarmSwitchEvent;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 
@@ -281,7 +281,7 @@ static void analogAlarmAreaUpdate(void)
   u08 newAlmDisplayState = MC_FALSE;
 
   // Detect change in displaying alarm
-  if (mcUpdAlarmSwitch == MC_TRUE)
+  if (mcAlarmSwitchEvent == MC_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {

@@ -8,8 +8,13 @@
 
 # Compiler/linker/tool settings
 CC = gcc
-CFLAGS = -g -std=gnu99 -Wall -MMD
-EVALFLAGS = -g -MMD
+# GDBMETA: Select gcc level of object debug metadata for gdb (and its gui)
+#   -g: default metadata level 2 (which is already great)
+#   -ggdb3: extended metadata level 3 for #define expansion in most cases
+#GDBMETA = -g
+GDBMETA = -ggdb3
+CFLAGS = $(GDBMETA) -std=gnu99 -Wall -MMD
+EVALFLAGS = $(GDBMETA) -MMD
 CLIB = -lm -lncurses -lreadline -lglut -lGLU -lGL -lrt -lpthread
 FLEX = flex
 FLIB = -lfl

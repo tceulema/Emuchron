@@ -6,7 +6,7 @@
 # Note: Due to graphics speed limitations use either the glut device
 # (recommended) or the ncurses device, but NOT both or be prepared to see lots
 # of graphic glitches. Even if you do use only the glut or ncurses lcd device
-# you may still see some occasional graphic glitch.
+# you may still see an occasional graphic glitch.
 # Don't adjust your tv set for this, it's just the way ncurses works and how
 # the glut lcd device is implemented.
 #
@@ -16,8 +16,8 @@ hm --- press 'q' to quit ---
 psf
 cs 8
 
-# Move inverted circle from left to right to left (etc...) while
-# inverting the display after each cycle
+# Move inverted circle from left to right to left (etc...) while inverting the
+# display after each cycle
 wts
 vs delta=1
 vs x=29

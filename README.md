@@ -2,7 +2,7 @@
 ### What is Emuchron
 Emuchron is a lightweight [Adafruit Monochron](http://www.adafruit.com/product/204)
 (product discontinued) emulator for Debian Linux 11 and 12.\
-It features a test and debugging platform for Monochron clocks and high level
+It features a test and debugging platform for Monochron clocks and high-level
 glcd graphics functions, and a software framework for clock plugins.
 
 ### Why does Emuchron exist
@@ -40,7 +40,7 @@ evaluation for numeric command arguments.
 ### What comes extra with Emuchron
 Compared to the original Monochron [firmware](https://github.com/adafruit/monochron),
 Emuchron includes functional enhancements and draw speed optimizations in the
-high level glcd graphics library, modified clock configuration pages, many
+high-level glcd graphics library, modified clock configuration pages, many
 example clocks, a graphics performance test module, a two-tone and Mario melody
 alarm, and demo and test scripts.
 

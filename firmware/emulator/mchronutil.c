@@ -11,6 +11,8 @@
 #include <ctype.h>
 #include <signal.h>
 #include <unistd.h>
+#include <time.h>
+#include <errno.h>
 
 // Monochron defines
 #include "../global.h"
@@ -570,19 +572,32 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   {
     // Error in the controller interface
     printf("\n*** invalid controller api request in %s()\n", location);
-    printf("api info (method/data)= %d\n", arg1);
+    printf("api info (method/data) = %d\n", arg1);
   }
   else if (origin == CD_EEPROM)
   {
     // Error in the eeprom interface
     printf("\n*** invalid eeprom api request in %s()\n", location);
-    printf("api info (address)= %d\n", arg1);
+    printf("api info (address) = %d\n", arg1);
   }
   else if (origin == CD_VAR)
   {
     // Error in the named variable interface
     printf("\n*** invalid var api request in %s()\n", location);
     printf("api info (bucket, index, count) = (%d:%d:%d)\n", arg1, arg2, arg3);
+  }
+  else if (origin == CD_CLOCK)
+  {
+    // Error in the clock interface
+    printf("\n*** invalid clock api request in %s()\n", location);
+    printf("api info (device, length) = (%d:%d)\n", arg1, arg2);
+  }
+  else
+  {
+    // Unknown error origin
+    printf("\n*** invalid api request in %s()\n", location);
+    printf("api info (arg1, arg1, arg3, arg4) = (%d:%d:%d:%d)\n", arg1, arg2,
+      arg3, arg4);
   }
 
   // Dump all Monochron variables. Might be useful.
@@ -811,14 +826,13 @@ void emuShutdown(void)
 // Main signal handler wrapper. Used for system timers and signals to implement
 // a graceful shutdown (preventing a screwed up bash terminal and killing alarm
 // audio).
+// For signals that should make the application quit, switch back to keyboard
+// line mode and kill audio before we actually exit.
 //
 static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
 {
   //printf("signo=%d\n", siginfo->si_signo);
-  //printf("sigcode=%d\n", siginfo->si_code);
 
-  // For signals that should make the application quit, switch back to
-  // keyboard line mode and kill audio before we actually exit
   if (sig == SIGVTALRM)
   {
     // Recurring system timer expiry.
@@ -857,8 +871,8 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context)
     }
 
     // Let's abort and optionally coredump. Note that in order to get a
-    // coredump it requires to run shell command "ulimit -c unlimited"
-    // once in the mchron shell prior to starting mchron.
+    // coredump it requires to run shell command "ulimit -c unlimited" once in
+    // the mchron shell prior to starting mchron.
     abort();
   }
   else if (sig == SIGQUIT)
@@ -919,54 +933,14 @@ u08 emuStartModeGet(char startId)
 {
   if (startId == 'c')
     return MC_TRUE;
-  else // startId == 'n'
+  else // startId == 'r'
     return MC_FALSE;
-}
-
-//
-// Function: emuSysTimerStart
-//
-// Start a repeating msec realtime interval timer
-//
-void emuSysTimerStart(timer_t *timer, int interval, void (*handler)(void))
-{
-  struct itimerspec iTimer;
-  struct sigevent sEvent;
-
-  // Setup repeating timer generating signal SIGVTALRM
-  iTimer.it_value.tv_sec = interval / 1000;
-  iTimer.it_value.tv_nsec = (interval % 1000) * 1E6;
-  iTimer.it_interval.tv_sec = iTimer.it_value.tv_sec;
-  iTimer.it_interval.tv_nsec = iTimer.it_value.tv_nsec;
-  sEvent.sigev_notify = SIGEV_SIGNAL;
-  sEvent.sigev_signo = SIGVTALRM;
-  sEvent.sigev_value.sival_ptr = handler;
-
-  // Make timer timeout on realtime and start it
-  timer_create(CLOCK_REALTIME, &sEvent, timer);
-  timer_settime(*timer, 0, &iTimer, NULL);
-}
-
-//
-// Function: emuSysTimerStop
-//
-// Stop (disarm) repeating msec realtime interval timer
-//
-void emuSysTimerStop(timer_t *timer)
-{
-  struct itimerspec iTimer;
-
-  iTimer.it_value.tv_sec = 0;
-  iTimer.it_value.tv_nsec = 0;
-  iTimer.it_interval.tv_sec = 0;
-  iTimer.it_interval.tv_nsec = 0;
-  timer_settime(*timer, 0, &iTimer, NULL);
 }
 
 //
 // Function: emuTimePrint
 //
-// Print the time/date/alarm
+// Print the time/date and optional alarm
 //
 void emuTimePrint(u08 type)
 {
@@ -976,9 +950,10 @@ void emuTimePrint(u08 type)
     rtcDateTime.dateMon, rtcDateTime.dateYear + 2000);
   if (type == ALM_EMUCHRON)
     printf("alarm  : %02d:%02d (hh:mm)\n", emuAlarmH, emuAlarmM);
-  else
+  else if (type == ALM_MONOCHRON)
     printf("alarm  : %02d:%02d (hh:mm)\n", mcAlarmH, mcAlarmM);
-  alarmSwitchShow();
+  if (type != ALM_NONE)
+    alarmSwitchShow();
 }
 
 //
@@ -1001,8 +976,12 @@ void emuTimeSync(void)
 //
 u08 grBufCopy(emuGrBuf_t *emuGrBufFrom, emuGrBuf_t *emuGrBufTo)
 {
+  // Omit copy if we copy into oneself
+  if (emuGrBufFrom == emuGrBufTo)
+    return CMD_RET_OK;
+
   // Reset target buffer
-  grBufInit(emuGrBufTo, MC_TRUE);
+  grBufReset(emuGrBufTo);
 
   // Copy buffer but make fresh copy of origin string and buffer data
   *emuGrBufTo = *emuGrBufFrom;
@@ -1029,14 +1008,20 @@ u08 grBufCopy(emuGrBuf_t *emuGrBufFrom, emuGrBuf_t *emuGrBufTo)
 //
 void grBufInfoPrint(emuGrBuf_t *emuGrBuf)
 {
+  char tmString[25];
+  struct tm* tmInfo;
+
   if (emuGrBuf->bufElmFormat == ELM_NULL)
   {
     printf("buffer is empty\n");
     return;
   }
 
-  // Buffer origin, data type and byte size per element
+  // Buffer origin and time, data type and byte size per element
   printf("data origin     : %s\n", emuGrBuf->bufOrigin);
+  tmInfo = localtime(&emuGrBuf->bufCreate);
+  strftime(tmString, 25, "%Y-%m-%d %H:%M:%S", tmInfo);
+  printf("data loaded at  : %s\n", tmString);
   printf("data format     : ");
   if (emuGrBuf->bufElmFormat == ELM_BYTE)
     printf("byte ");
@@ -1079,17 +1064,8 @@ void grBufInfoPrint(emuGrBuf_t *emuGrBuf)
 //
 // Initialize a graphics buffer
 //
-void grBufInit(emuGrBuf_t *emuGrBuf, u08 reset)
+void grBufInit(emuGrBuf_t *emuGrBuf)
 {
-  // Clear malloc-ed buffer origin info, when requested
-  if (reset == MC_TRUE)
-  {
-    if (emuGrBuf->bufOrigin != NULL)
-      free(emuGrBuf->bufOrigin);
-    if (emuGrBuf->bufData != NULL)
-      free(emuGrBuf->bufData);
-  }
-
   // Clear and init buffer contents
   memset(emuGrBuf, 0, sizeof(emuGrBuf_t));
   emuGrBuf->bufType = GRAPH_NULL;
@@ -1123,7 +1099,7 @@ void grBufLoadCtrl(u08 x, u08 y, u08 width, u08 height, char formatName,
   u08 formatBits;
 
   // Setup for loading graphics data
-  grBufInit(emuGrBuf, MC_TRUE);
+  grBufReset(emuGrBuf);
   format = emuFormatGet(formatName, &formatBytes, &formatBits);
 
   // Split up requested image in frames and reserve buffer space
@@ -1208,6 +1184,7 @@ void grBufLoadCtrl(u08 x, u08 y, u08 width, u08 height, char formatName,
   emuGrBuf->bufElmByteSize = formatBytes;
   emuGrBuf->bufElmBitSize = formatBits;
   emuGrBuf->bufElmCount = count;
+  emuGrBuf->bufCreate = time(NULL);
 }
 
 //
@@ -1228,7 +1205,7 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
   u08 formatBits;
 
   // Setup for loading graphics data
-  grBufInit(emuGrBuf, MC_TRUE);
+  grBufReset(emuGrBuf);
   format = emuFormatGet(formatName, &formatBytes, &formatBits);
 
   // Open graphics data file
@@ -1303,8 +1280,24 @@ u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
   emuGrBuf->bufElmByteSize = formatBytes;
   emuGrBuf->bufElmBitSize = formatBits;
   emuGrBuf->bufElmCount = readCount;
+  emuGrBuf->bufCreate = time(NULL);
 
   return CMD_RET_OK;
+}
+
+//
+// Function: grBufReset
+//
+// Reset a graphics buffer
+//
+void grBufReset(emuGrBuf_t *emuGrBuf)
+{
+  // Clear malloc-ed buffer and origin info and initialize the buffer itself
+  if (emuGrBuf->bufOrigin != NULL)
+    free(emuGrBuf->bufOrigin);
+  if (emuGrBuf->bufData != NULL)
+    free(emuGrBuf->bufData);
+  grBufInit(emuGrBuf);
 }
 
 //
@@ -1400,10 +1393,11 @@ u08 grBufSaveFile(char *argName, u08 lineElements, char *fileName,
 char waitDelay(int delay)
 {
   char ch = '\0';
-  struct timeval tvWait;
   struct timeval tvNow;
   struct timeval tvEnd;
   suseconds_t timeDiff;
+  struct timespec timeSleep = { 0, 250000000 };
+  struct timespec timeRem = { 0, 0 };
   u08 myKbMode = KB_MODE_LINE;
 
   // Set offset for wait period
@@ -1424,12 +1418,9 @@ char waitDelay(int delay)
   while (ch != 'q' && timeDiff > 500)
   {
     // Split time to delay up in parts of max 250 msec
-    tvWait.tv_sec = 0;
-    if (timeDiff >= 250000)
-      tvWait.tv_usec = 250000;
-    else
-      tvWait.tv_usec = timeDiff;
-    select(0, NULL, NULL, NULL, &tvWait);
+    if (timeDiff < 250000)
+      timeSleep.tv_nsec = timeDiff * 1000;
+    nanosleep(&timeSleep, &timeRem);
 
     // Scan keyboard
     ch = kbKeypressScan(MC_TRUE);
@@ -1496,15 +1487,16 @@ char waitKeypress(u08 allowQuit)
 //
 // Function: waitSleep
 //
-// Sleep amount of time (in msec) without keyboard interaction
+// Sleep amount of time (in msec) without keyboard interaction with a max value
+// of 999 msec
 //
 void waitSleep(int sleep)
 {
-  struct timeval tvWait;
+  struct timespec timeSleep;
 
-  tvWait.tv_sec = 0;
-  tvWait.tv_usec = sleep * 1000;
-  select(0, NULL, NULL, NULL, &tvWait);
+  timeSleep.tv_sec = 0;
+  timeSleep.tv_nsec = sleep * 1000000;
+  nanosleep(&timeSleep, NULL);
 }
 
 //
@@ -1523,7 +1515,7 @@ char waitTimerExpiry(struct timeval *tvTimer, int expiry, u08 allowQuit,
 {
   char ch = '\0';
   struct timeval tvNow;
-  struct timeval tvWait;
+  struct timespec timeSleep;
   suseconds_t timeDiff;
 
   // Get the total time to wait based on timer expiry
@@ -1553,9 +1545,9 @@ char waitTimerExpiry(struct timeval *tvTimer, int expiry, u08 allowQuit,
     }
     else
     {
-      tvWait.tv_sec = timeDiff / 1E6;
-      tvWait.tv_usec = timeDiff % (int)1E6;
-      select(0, NULL, NULL, NULL, &tvWait);
+      timeSleep.tv_sec = timeDiff / 1E6;
+      timeSleep.tv_nsec = (timeDiff % (int)1E6) * 1000;
+      nanosleep(&timeSleep, NULL);
     }
 
     // Get next timer offset by adding expiry to current timer offset

@@ -56,12 +56,15 @@ typedef struct _varBucket_t
 static varBucket_t varBucket[VAR_BUCKETS];
 static int varCount = 0;
 
+// Local function prototypes
+static u08 varClear(int varId);
+
 //
 // Function: varClear
 //
-// Clear a variable
+// Clear a variable using its id
 //
-u08 varClear(int varId)
+static u08 varClear(int varId)
 {
   int bucketId;
   int bucketListId;
@@ -107,7 +110,7 @@ u08 varClear(int varId)
 //
 // Get the id of a named variable using its name. When the name is scanned by
 // the flex lexer it is guaranteed to consist of any combination of [a-zA-Z_]
-// characters. When used in commmands 'lr' and 'vr' the command line scanner
+// characters. When used in commmands 'lr'/'tg'/'vr' the command line scanner
 // and command handler functions are responsible for checking whether the var
 // name consists of [a-zA-Z_] chars.
 // Argument create defines whether to create new id when the var name is not
@@ -375,6 +378,22 @@ int varReset(void)
   varCount = 0;
 
   return varInUse;
+}
+
+//
+// Function: varResetVar
+//
+// Clear a variable using a variable name
+//
+u08 varResetVar(char *varName)
+{
+  int varId;
+
+  // Clear the single variable
+  varId = varIdGet(varName, MC_FALSE);
+  if (varId < 0)
+    return CMD_RET_ERROR;
+  return varClear(varId);
 }
 
 //

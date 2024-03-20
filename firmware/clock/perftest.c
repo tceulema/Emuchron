@@ -166,7 +166,7 @@ extern volatile uint8_t mcClockInit;
 // Functional alarm variables
 extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcAlarming;
-extern volatile uint8_t mcUpdAlarmSwitch;
+extern volatile uint8_t mcAlarmSwitchEvent;
 
 // Functional color variables
 extern volatile uint8_t mcBgColor, mcFgColor;
@@ -705,7 +705,7 @@ static u08 perfTestLine(void)
     glcdClearScreen();
     perfTestTimeInit();
     analogHmsInit(DRAW_INIT_FULL);
-    mcUpdAlarmSwitch = MC_TRUE;
+    mcAlarmSwitchEvent = MC_TRUE;
     mcAlarmSwitch = MC_TRUE;
 
     // Draw lines using the analog clock layout
@@ -729,7 +729,7 @@ static u08 perfTestLine(void)
         break;
       }
       mcClockInit = MC_FALSE;
-      mcUpdAlarmSwitch = MC_FALSE;
+      mcAlarmSwitchEvent = MC_FALSE;
 
       // Do statistics
       testStats.loopsDone++;

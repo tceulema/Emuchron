@@ -18,10 +18,12 @@
 #define CD_CTRL		1
 #define CD_EEPROM	2
 #define CD_VAR		3
+#define CD_CLOCK	4
 
-// The active alarm type
-#define ALM_MONOCHRON	0
-#define ALM_EMUCHRON	1
+// The active alarm type for reporting purposes
+#define ALM_NONE	0	// Do not use/show
+#define ALM_MONOCHRON	1	// Show monochron eeprom based alarm time
+#define ALM_EMUCHRON	2	// Show emuchron emulator based alarm time
 
 // The graphics data buffer usage type
 #define GRAPH_NULL	0	// Not initialized
@@ -48,6 +50,7 @@ typedef struct _emuArgcArgv_t
 typedef struct _emuGrBuf_t
 {
   u08 bufType;			// Graphics data type: null, raw, image, sprite
+  time_t bufCreate;             // Creation timestamp of data in buffer
   char *bufOrigin;		// Origin of buffer data (malloc-ed)
   void *bufData;		// Graphics data elements buffer (malloc-ed)
   u16 bufElmCount;		// Number of elements in data buffer
@@ -87,10 +90,6 @@ void emuEepromPrint(void);
 void emuTimePrint(u08 type);
 void emuTimeSync(void);
 
-// mchron system interval timer functions
-void emuSysTimerStart(timer_t *timer, int interval, void (*handler)(void));
-void emuSysTimerStop(timer_t *timer);
-
 // mchron delay, sleep and timer functions
 char waitDelay(int delay);
 char waitKeypress(u08 allowQuit);
@@ -102,11 +101,12 @@ void waitTimerStart(struct timeval *tvTimer);
 // mchron graphics buffer data functions
 u08 grBufCopy(emuGrBuf_t *emuGrBufFrom, emuGrBuf_t *emuGrBufTo);
 void grBufInfoPrint(emuGrBuf_t *emuGrBuf);
-void grBufInit(emuGrBuf_t *emuGrBuf, u08 reset);
+void grBufInit(emuGrBuf_t *emuGrBuf);
 void grBufLoadCtrl(u08 x, u08 y, u08 width, u08 height, char formatName,
   emuGrBuf_t *emuGrBuf);
 u08 grBufLoadFile(char *argName, char formatName, u16 maxElements,
   char *fileName, emuGrBuf_t *emuGrBuf);
+void grBufReset(emuGrBuf_t *emuGrBuf);
 u08 grBufSaveFile(char *argName, u08 lineElements, char *fileName,
   emuGrBuf_t *emuGrBuf);
 #endif

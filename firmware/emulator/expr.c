@@ -4,6 +4,7 @@
 //*****************************************************************************
 
 // Everything we need for running this thing in Linux
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -96,4 +97,36 @@ u08 exprEvaluate(char *argName, argInfo_t *argInfo)
   argInfo->exprValue = exprValue;
 
   return CMD_RET_OK;
+}
+
+//
+// Function: exprVarSetU08
+//
+// Set a variable via the expression evaluator. Yes, we can also do this
+// manually via the varutil api, but the problem is that via that api we can
+// assign a value to a variable name with a reserved keyword, such as 'cos'.
+// And no, we can't (easily) rule out those reserved keywords via the
+// command dictionary regex for a varname, as posix rexeg doesn't support
+// negative lookahead constructs.
+//
+u08 exprVarSetU08(char *argName, char *varName, u08 value)
+{
+  argInfo_t argInfo;
+  char *arg;
+  u08 retVal;
+
+  // Print the assignment expression, and prepare the interface towards the
+  // expression evaluator
+  arg = malloc(strlen(varName) + 6);
+  sprintf(arg, "%s=%d\n", varName, (int)value);
+  argInfo.arg = arg;
+  argInfo.exprAssign = MC_FALSE;
+  argInfo.exprConst = MC_FALSE;
+  argInfo.exprValue = 0;
+
+  // Evaluate the assignment expression and cleanup
+  retVal = exprEvaluate(argName, &argInfo);
+  free(arg);
+
+  return retVal;
 }

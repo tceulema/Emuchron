@@ -15,11 +15,13 @@
 // The program counter control block execution logic types
 #define PC_CONTINUE		0  // Non-program counter control block command
 #define PC_REPEAT_FOR		1
-#define PC_REPEAT_NEXT		2
-#define PC_IF			3
-#define PC_IF_ELSE_IF		4
-#define PC_IF_ELSE		5
-#define PC_IF_END		6
+#define PC_REPEAT_BRK		2
+#define PC_REPEAT_CONT		3
+#define PC_REPEAT_NEXT		4
+#define PC_IF			5
+#define PC_IF_ELSE_IF		6
+#define PC_IF_ELSE		7
+#define PC_IF_END		8
 
 // The command argument publishing types
 #define ARG_CHAR		0  // A char in argChar[]
@@ -91,6 +93,8 @@ typedef struct _cmdPcCtrl_t
   u08 active;				// Is current block the active code block
   cmdLine_t *cmdLineParent;		// Pointer to associated parent command
   cmdLine_t *cmdLineChild;		// Pointer to associated child command
+  cmdLine_t *cmdLineGrpHead;		// Pointer to head of ctrl group command
+  cmdLine_t *cmdLineGrpTail;		// Pointer to tail of ctrl group command
   struct _cmdPcCtrl_t *prev;		// Pointer to previous list element
   struct _cmdPcCtrl_t *next;		// Pointer to next list element
 } cmdPcCtrl_t;

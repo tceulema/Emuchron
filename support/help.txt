@@ -32,8 +32,8 @@ Commands:
               frequency: 150..10000 (Hz)
               duration: 1..255 (msec)
   'cf'  - Feed clock with time and keyboard events
-          Argument: <mode>
-              mode: 'c' = start in single cycle mode, 'n' = start normal
+          Argument: <startmode>
+              startmode: 'c' = single cycle, 'r' = run
   'cp'  - Print overview of available clocks for command 'cs'
   'cs'  - Select clock
           Argument: <clock>
@@ -135,14 +135,14 @@ Commands:
           Arguments: <x> <y>
               x: 0..127
               y: 0..63
-  'li'  - Inverse lcd display
+  'li'  - Inverse lcd display and draw colors
   'lng' - Set ncurses graphics options
           Argument: <backlight>
               backlight: 0 = off, 1 = on
   'lp'  - Print controller state/registers
   'lr'  - Read data from active lcd controller
           Argument: <variable>
-              variable: word of [a-zA-Z_] characters
+              variable: word of [a-zA-Z_] characters, 'null' = ignore
   'lss' - Set controller lcd start line
           Arguments: <controller-0> <controller-1>
               controller-0: 0..63
@@ -157,11 +157,11 @@ Commands:
           Argument: <yline>
               yline: 0..7
   'm'   - Run Monochron application
-          Argument: <mode>
-              mode: 'c' = start in single cycle mode, 'n' = start normal
+          Argument: <startmode>
+              startmode: 'c' = single cycle, 'r' = run
   'mc'  - Run Monochron configuration
-          Arguments: <mode> <timeout> <restart>
-              mode: 'c' = start in single cycle mode, 'n' = start normal
+          Arguments: <startmode> <timeout> <restart>
+              startmode: 'c' = single cycle, 'r' = run
               timeout: 0 = off, 1 = on
               restart: 0 = off, 1 = on
   'mep' - Print Monochron eeprom settings
@@ -236,6 +236,7 @@ Commands:
               yscale: 1..32
               number: expression
               format: 'c'-style format string containing '%f', '%e' or '%g'
+                      Other format strings such as '%d' may crash mchron
   'pr'  - Paint rectangle
           Arguments: <x> <y> <xsize> <ysize>
               x: 0..127
@@ -256,6 +257,8 @@ Commands:
               color: 0, 1 (0 = off (black), 1 = on (white))
   'psb' - Set draw color to background color
   'psf' - Set draw color to foreground color
+  'rb'  - Repeat break
+  'rc'  - Repeat continue
   'rf'  - Repeat for
           Arguments: <init> <condition> <post>
               init: expression executed once at initialization
@@ -282,6 +285,14 @@ Commands:
               month: 1..12
               year: 0..99 (year in 20xx)
   'tf'  - Flush Monochron time and date to active clock
+  'tg'  - Get date/time
+          Arguments: <varday> <varmonth> <varyear> <varhour> <varmin> <varsec>
+              varyear: word of [a-zA-Z_] characters, 'null' = ignore
+              varmonth: word of [a-zA-Z_] characters, 'null' = ignore
+              varday: word of [a-zA-Z_] characters, 'null' = ignore
+              varhour: word of [a-zA-Z_] characters, 'null' = ignore
+              varmin: word of [a-zA-Z_] characters, 'null' = ignore
+              varsec: word of [a-zA-Z_] characters, 'null' = ignore
   'tp'  - Print time/date/alarm
   'tr'  - Reset time to system time
   'ts'  - Set time

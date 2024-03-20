@@ -79,6 +79,7 @@ u08 doTimeAlarmToggle(cmdLine_t *cmdLine);
 u08 doTimeDateSet(cmdLine_t *cmdLine);
 u08 doTimeDateReset(cmdLine_t *cmdLine);
 u08 doTimeFlush(cmdLine_t *cmdLine);
+u08 doTimeGet(cmdLine_t *cmdLine);
 u08 doTimePrint(cmdLine_t *cmdLine);
 u08 doTimeReset(cmdLine_t *cmdLine);
 u08 doTimeSet(cmdLine_t *cmdLine);
@@ -94,6 +95,8 @@ u08 doIf(cmdLine_t **cmdProgCounter);
 u08 doIfElse(cmdLine_t **cmdProgCounter);
 u08 doIfElseIf(cmdLine_t **cmdProgCounter);
 u08 doIfEnd(cmdLine_t **cmdProgCounter);
+u08 doRepeatBreak(cmdLine_t **cmdProgCounter);
+u08 doRepeatCont(cmdLine_t **cmdProgCounter);
 u08 doRepeatFor(cmdLine_t **cmdProgCounter);
 u08 doRepeatNext(cmdLine_t **cmdProgCounter);
 #endif

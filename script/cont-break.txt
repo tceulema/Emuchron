@@ -1,0 +1,60 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Test nested rb (repeat-break) and rc (repeat-continue) commands.
+#
+# Without break/continue logic this script results in c = 10^4 = 10000.
+# With current break/continue logic this script calculates c via loops in k, l,
+# m and n as:
+# c = 10^4 * 0.8 (k) * 0.7 (l) * 0.5 (m) * 0.6 (n) = 1680
+#
+
+# Clear display and variables
+le
+vr .
+
+# Do a loop of four nested repeats loops that are interrupted by continue and
+# break statements
+vs c=0
+rf k=0 k<10 k=k+1
+  rf l=0 l<10 l=l+1
+    # Cutoff 30% of all l values
+    iif l==1
+      rc
+    ien
+    iif l<3
+      rc
+    ien
+    rf m=0 m<10 m=m+1
+      rf n=0 n<10 n=n+1
+        # Cutoff 40% of all n values
+        iif n==3
+          rc
+        ien
+        iif n>6
+          rc
+        iel
+          vs c=c+1
+        ien
+      rn
+      # Cutoff 50% of all m values
+      iif m==8
+        rb
+      ien
+      iif m>=4
+        rb
+      ien
+    rn
+  rn
+  # Cutoff 20% of all k values
+  iif k>8
+    rb
+  iei k==7
+    rb
+  ien
+rn
+
+# All done. Print end result on lcd and on command line.
+pn 1 1 5x7m h 1 1 c Result:   %.0f
+pa 1 9 5x7m h 1 1 Expected: 1680
+vp ^c$

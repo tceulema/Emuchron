@@ -21,6 +21,9 @@
 // command files
 #define CMD_STACK_DEPTH_MAX	8
 
+// The command stack keyboard scan interval (msec)
+#define CMD_STACK_SCAN_MSEC	100
+
 // The command stack pop scope
 #define CMD_STACK_POP_ALL	0	// Pop all levels (clear stack)
 #define CMD_STACK_POP_LVL	1	// Pop current stack level only
@@ -52,7 +55,7 @@ typedef struct _cmdStackLevel_t
 typedef struct _cmdStack_t
 {
   s08 level;			// Current stack run level (-1 = free)
-  s08 allowResume;		// Allow execution resume on stack level
+  s08 levelResume;		// Execution resume stack level (-1 = no)
   cmdLine_t *cmdLineInvoke;	// Command line that initiates stack
   cmdLine_t *cmdProgCtrIntr;	// Interrupted command line upon completion
   cmdStackStats_t cmdStackStats; // Stack runtime statistics
@@ -66,7 +69,7 @@ u08 cmdEcho = CMD_ECHO_YES;
 extern const char *__progname;
 
 // System timer data for command list 100 msec keyboard scan
-static timer_t kbTimerId;
+static timer_t kbTimer;
 static u08 kbTimerTripped;
 
 // Command list stack and execution statistics
@@ -162,7 +165,7 @@ cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
   }
   if (cmdLineLast != NULL)
   {
-    // Not the first list elemant
+    // Not the first list element
     cmdLineLast->next = cmdLine;
   }
 
@@ -273,7 +276,7 @@ static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
   {
     if (cmdCommand->cmdPcCtrlType == PC_REPEAT_NEXT)
     {
-      // We must find a repeat-for command to associate with
+      // We must find a repeat for/break/cont command to associate with
       lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
     }
     else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR)
@@ -281,6 +284,26 @@ static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
       // Create new control block and link it to the repeat command
       *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
         cmdLine);
+    }
+    else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_BRK)
+    {
+      // We must find a repeat for/break/cont to associate with
+      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
+
+      // Create new control block and link it to repeat break command
+      if (lineNumErr == 0)
+        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
+          cmdLine);
+    }
+    else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_CONT)
+    {
+      // We must find a repeat for/break/cont to associate with
+      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
+
+      // Create new control block and link it to repeat continue command
+      if (lineNumErr == 0)
+        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
+          cmdLine);
     }
     else if (cmdCommand->cmdPcCtrlType == PC_IF_ELSE_IF)
     {
@@ -645,15 +668,14 @@ static u08 cmdListKeyboardLoad(cmdInput_t *cmdInput)
     // Create a prompt that includes the linenumber
     lineNumDigits = (int)(log10f((float)lineNum)) + 1;
     prompt = malloc(lineNumDigits + 5);
-    sprintf(prompt, "%d", lineNum);
-    strcat(prompt, ">> ");
+    sprintf(prompt, "%d>> ", lineNum);
 
     // Get the next keyboard input line
     cmdInputRead(prompt, cmdInput);
     free(prompt);
     if (cmdInput->input == NULL)
     {
-      printf("\n<ctrl>d - abort\n");
+      printf("<ctrl>d - abort\n");
       return CDM_RET_LOAD_ABORT;
     }
   }
@@ -723,6 +745,17 @@ static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
   cmdPcCtrl->cmdLineChild = NULL;
   cmdPcCtrl->prev = cmdPcCtrlLast;
   cmdPcCtrl->next = NULL;
+  // The head of the control group is the start command (repeat or if) and is
+  // copied down to each other member of the control group
+  if (cmdPcCtrl->cmdPcCtrlType == PC_REPEAT_FOR ||
+      cmdPcCtrl->cmdPcCtrlType == PC_IF)
+    cmdPcCtrl->cmdLineGrpHead = cmdLine;
+  else
+    cmdPcCtrl->cmdLineGrpHead = cmdLine->cmdPcCtrlParent->cmdLineGrpHead;
+  // The tail of the control group is only known when the control group is
+  // completed (repeat-next or if-end) and must then be copied into each
+  // control group member
+  cmdPcCtrl->cmdLineGrpTail = NULL;
 
   // Link the program counter control block to the current command line
   cmdLine->cmdPcCtrlChild = cmdPcCtrl;
@@ -741,44 +774,84 @@ static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
 //
 static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
 {
-  cmdPcCtrl_t *cmdPcCtrlSearch = cmdPcCtrlLast;
+  cmdPcCtrl_t *cmdCtrlFind = cmdPcCtrlLast;
   u08 cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
-  u08 searchPcCtrlType;
+  u08 cmdFindType;
 
-  while (cmdPcCtrlSearch != NULL)
+  while (cmdCtrlFind != NULL)
   {
-    if (cmdPcCtrlSearch->cmdLineChild == NULL)
+    cmdFindType = cmdCtrlFind->cmdPcCtrlType;
+
+    // Check the block to verify vs unlinked control block members we find in
+    // the linked list. Some combinations must be skipped, some are invalid and
+    // some will result in a valid combination.
+    if (cmdCtrlFind->cmdLineChild == NULL &&
+        (cmdPcCtrlType == PC_IF_ELSE_IF || cmdPcCtrlType == PC_IF_ELSE ||
+         cmdPcCtrlType == PC_IF_END) &&
+        (cmdFindType == PC_REPEAT_BRK || cmdFindType == PC_REPEAT_CONT))
     {
-      // Found an unlinked control block. Verify if its control block type is
-      // compatible with the control block type of the command line.
-      searchPcCtrlType = cmdPcCtrlSearch->cmdPcCtrlType;
-      if (cmdPcCtrlType == PC_REPEAT_NEXT && searchPcCtrlType != PC_REPEAT_FOR)
-        return cmdPcCtrlSearch->cmdLineParent->lineNum;
-      else if (cmdPcCtrlType == PC_IF_ELSE_IF && searchPcCtrlType != PC_IF &&
-          searchPcCtrlType != PC_IF_ELSE_IF)
-        return cmdPcCtrlSearch->cmdLineParent->lineNum;
-      else if (cmdPcCtrlType == PC_IF_ELSE && searchPcCtrlType != PC_IF &&
-          searchPcCtrlType != PC_IF_ELSE_IF)
-        return cmdPcCtrlSearch->cmdLineParent->lineNum;
-      else if (cmdPcCtrlType == PC_IF_END && searchPcCtrlType != PC_IF &&
-          searchPcCtrlType != PC_IF_ELSE_IF && searchPcCtrlType != PC_IF_ELSE)
-        return cmdPcCtrlSearch->cmdLineParent->lineNum;
+      // Skip combination if blocks vs repeat break/cont blocks, so go backward
+      cmdCtrlFind = cmdCtrlFind->prev;
+    }
+    else if (cmdCtrlFind->cmdLineChild == NULL &&
+        (cmdPcCtrlType == PC_REPEAT_BRK || cmdPcCtrlType == PC_REPEAT_CONT) &&
+        (cmdFindType == PC_IF || cmdFindType == PC_IF_ELSE_IF ||
+         cmdFindType == PC_IF_ELSE || cmdFindType == PC_IF_END))
+    {
+      // Skip combination repeat break/cont blocks vs if blocks, so go backward
+      cmdCtrlFind = cmdCtrlFind->prev;
+    }
+    else if (cmdCtrlFind->cmdLineChild == NULL)
+    {
+      // Found an unlinked control block that is to be validated. Verify if its
+      // control block type is compatible with the control block type of the
+      // command line.
+      if (cmdPcCtrlType == PC_REPEAT_BRK && cmdFindType != PC_REPEAT_FOR &&
+          cmdFindType != PC_REPEAT_BRK && cmdFindType != PC_REPEAT_CONT)
+        return cmdCtrlFind->cmdLineParent->lineNum;
+      if (cmdPcCtrlType == PC_REPEAT_CONT && cmdFindType != PC_REPEAT_FOR &&
+          cmdFindType != PC_REPEAT_BRK && cmdFindType != PC_REPEAT_CONT)
+        return cmdCtrlFind->cmdLineParent->lineNum;
+      if (cmdPcCtrlType == PC_REPEAT_NEXT && cmdFindType != PC_REPEAT_FOR &&
+          cmdFindType != PC_REPEAT_BRK && cmdFindType != PC_REPEAT_CONT)
+        return cmdCtrlFind->cmdLineParent->lineNum;
+      else if (cmdPcCtrlType == PC_IF_ELSE_IF && cmdFindType != PC_IF &&
+          cmdFindType != PC_IF_ELSE_IF)
+        return cmdCtrlFind->cmdLineParent->lineNum;
+      else if (cmdPcCtrlType == PC_IF_ELSE && cmdFindType != PC_IF &&
+          cmdFindType != PC_IF_ELSE_IF)
+        return cmdCtrlFind->cmdLineParent->lineNum;
+      else if (cmdPcCtrlType == PC_IF_END && cmdFindType != PC_IF &&
+          cmdFindType != PC_IF_ELSE_IF && cmdFindType != PC_IF_ELSE)
+        return cmdCtrlFind->cmdLineParent->lineNum;
 
       // There's a valid match between the control block types of the current
-      // command and the last open control block. Make a cross link between the
-      // two.
-      cmdLine->cmdPcCtrlParent = cmdPcCtrlSearch;
-      cmdPcCtrlSearch->cmdLineChild = cmdLine;
+      // command and the found open control block. Make a cross link between
+      // the two.
+      cmdLine->cmdPcCtrlParent = cmdCtrlFind;
+      cmdCtrlFind->cmdLineChild = cmdLine;
+
+      // Fill in the tail of a complete ctrl group over all its members
+      if (cmdPcCtrlType == PC_REPEAT_NEXT || cmdPcCtrlType == PC_IF_END)
+      {
+        cmdCtrlFind->cmdLineGrpTail = cmdLine;
+        while (cmdCtrlFind->cmdPcCtrlType != PC_REPEAT_FOR &&
+              cmdCtrlFind->cmdPcCtrlType != PC_IF)
+        {
+          cmdCtrlFind = cmdCtrlFind->cmdLineParent->cmdPcCtrlParent;
+          cmdCtrlFind->cmdLineGrpTail = cmdLine;
+        }
+      }
       return 0;
     }
     else
     {
       // Search not done yet, go backward
-      cmdPcCtrlSearch = cmdPcCtrlSearch->prev;
+      cmdCtrlFind = cmdCtrlFind->prev;
     }
   }
 
-  // Could not find an unlinked control block in entire list.
+  // Could not find a valid unlinked control block in entire list.
   // Report error on line 1.
   return 1;
 }
@@ -786,24 +859,27 @@ static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
 //
 // Function: cmdStackCleanup
 //
-// Cleanup the stack
+// Cleanup the stack and scan timer
 //
 void cmdStackCleanup(void)
 {
   cmdStackPop(CMD_STACK_POP_ALL);
+  timer_delete(kbTimer);
 }
 
 //
 // Function: cmdStackInit
 //
-// Initialize the stack and its statistics
+// Initialize the stack and its statistics and scan timer
 //
 void cmdStackInit(void)
 {
+  struct sigevent sEvent;
   u08 i;
 
+  // Init the command stack
   cmdStack.level = -1;
-  cmdStack.allowResume = MC_FALSE;
+  cmdStack.levelResume = -1;
   cmdStack.cmdLineInvoke = NULL;
   cmdStack.cmdProgCtrIntr = NULL;
   for (i = 0; i < CMD_STACK_DEPTH_MAX; i++)
@@ -814,7 +890,16 @@ void cmdStackInit(void)
     cmdStack.cmdStackLevel[i].cmdEcho = CMD_ECHO_NONE;
     cmdStack.cmdStackLevel[i].cmdOrigin = NULL;
   }
+
+  // Init stack statistics
   cmdStackStatsInit();
+
+  // Prepare a realtime timer generating signal SIGVTALRM with a handler (but
+  // only arm/disarm during stack activity)
+  sEvent.sigev_notify = SIGEV_SIGNAL;
+  sEvent.sigev_signo = SIGVTALRM;
+  sEvent.sigev_value.sival_ptr = cmdListRaiseScan;
+  timer_create(CLOCK_REALTIME, &sEvent, &kbTimer);
 }
 
 //
@@ -824,7 +909,7 @@ void cmdStackInit(void)
 //
 u08 cmdStackIsActive(void)
 {
-  if (cmdStack.level >= 0 && cmdStack.allowResume == MC_FALSE)
+  if (cmdStack.level >= 0)
     return MC_TRUE;
   else
     return MC_FALSE;
@@ -843,10 +928,12 @@ static void cmdStackPop(u08 scope)
   cmdStackLevel_t *cmdStackLevel;
 
   // There's nothing to be done when the stack is empty
-  if (cmdStack.level == -1)
+  if (cmdStack.level == -1 && cmdStack.levelResume == -1)
     return;
 
   // Set stack level range to be reset
+  if (cmdStack.levelResume >= 0)
+    cmdStack.level = cmdStack.levelResume;
   if (scope == CMD_STACK_POP_LVL)
     levelMin = cmdStack.level;
   else
@@ -873,7 +960,7 @@ static void cmdStackPop(u08 scope)
     cmdListCleanup(cmdStack.cmdLineInvoke, NULL);
     cmdStack.cmdLineInvoke = NULL;
     cmdStack.cmdProgCtrIntr = NULL;
-    cmdStack.allowResume = MC_FALSE;
+    cmdStack.levelResume = -1;
   }
 
   // Do the actual pop on the stack level
@@ -909,7 +996,7 @@ static void cmdStackPrint(void)
     // file/keyboard list failed.
     cmdStackLevel = &cmdStack.cmdStackLevel[i];
     cmdLine = NULL;
-    if (i == cmdStack.level && cmdStack.allowResume == MC_TRUE)
+    if (i == cmdStack.level && cmdStack.levelResume >= 0)
       cmdLine = cmdStack.cmdProgCtrIntr;
     else if (cmdStackLevel->cmdProgCounter != NULL)
       cmdLine = cmdStackLevel->cmdProgCounter;
@@ -956,7 +1043,7 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
   }
 
   // In case of a new stack build-up clear remaining command resume stack
-  if (cmdStack.allowResume == MC_TRUE)
+  if (cmdStack.levelResume >= 0)
     cmdStackPop(CMD_STACK_POP_ALL);
 
   // Let's start: increase stack level and copy command origin (file/keyboard)
@@ -1002,8 +1089,7 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
   if (cmdStack.level == 0)
   {
     kbModeSet(KB_MODE_SCAN);
-    kbTimerTripped = MC_FALSE;
-    emuSysTimerStart(&kbTimerId, 100, cmdListRaiseScan);
+    cmdStackTimerSet(LIST_TIMER_ARM);
     cmdStackStatsInit();
   }
 
@@ -1014,7 +1100,7 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
 
   // If execution was 'q'-interrupted allow to resume execution at this level
   if (retVal == CMD_RET_INTERRUPT)
-    cmdStack.allowResume = MC_TRUE;
+    cmdStack.levelResume = cmdStack.level;
 
   // Print stack when initial error/interrupt has occured
   if (retVal == CMD_RET_ERROR || retVal == CMD_RET_INTERRUPT)
@@ -1030,16 +1116,19 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
   else
     cmdEcho = cmdStack.cmdStackLevel[cmdStack.level - 1].cmdEcho;
 
-  // Pop the stack level when the stack cannot be resumed
-  if (cmdStack.allowResume == MC_FALSE)
+  // Pop the stack level when the stack cannot be resumed. If we can resume
+  // do an administrative pop only by decreasing the stack level.
+  if (cmdStack.levelResume == -1)
     cmdStackPop(CMD_STACK_POP_LVL);
+  else
+    cmdStack.level--;
 
   // When the stack is empty or we were user-interrupted switch back to line
   // mode and stop keyboard timer
   if (cmdStack.level == -1 || retVal == CMD_RET_INTERRUPT)
   {
     kbModeSet(KB_MODE_LINE);
-    emuSysTimerStop(&kbTimerId);
+    cmdStackTimerSet(LIST_TIMER_DISARM);
   }
 
   // Signal that initial error handling was done
@@ -1059,7 +1148,7 @@ u08 cmdStackResume(char *cmdName)
   cmdStackLevel_t *cmdStackLevel;
   u08 retVal = CMD_RET_OK;
 
-  if (cmdStack.allowResume == MC_FALSE)
+  if (cmdStack.levelResume == -1)
   {
     printf("%s: no resume command stack available\n", cmdName);
     return CMD_RET_ERROR;
@@ -1068,15 +1157,16 @@ u08 cmdStackResume(char *cmdName)
   // Switch to keypress mode and start a timer that fires every 100 msec after
   // which the keyboard can be scanned for keypresses
   kbModeSet(KB_MODE_SCAN);
-  kbTimerTripped = MC_FALSE;
-  emuSysTimerStart(&kbTimerId, 100, cmdListRaiseScan);
+  cmdStackTimerSet(LIST_TIMER_ARM);
 
-  // Clear stack resume state and init statistics for this (resumed) session
-  cmdStack.cmdProgCtrIntr = NULL;
-  cmdStack.allowResume = MC_FALSE;
+  // Init statistics for this (resumed) session
   cmdStackStatsInit();
 
-  // Resume where we left off with the requested command echo setting
+  // Clear stack resume state and continue where we left off with the requested
+  // command echo setting
+  cmdStack.cmdProgCtrIntr = NULL;
+  cmdStack.level = cmdStack.levelResume;
+  cmdStack.levelResume = -1;
   cmdStackLevel = &cmdStack.cmdStackLevel[cmdStack.level];
   cmdEcho = cmdStack.cmdStackLevel[cmdStack.level].cmdEcho;
   while (cmdStack.level >= 0)
@@ -1088,8 +1178,9 @@ u08 cmdStackResume(char *cmdName)
     if (retVal == CMD_RET_INTERRUPT)
     {
       // Signal resume capability and print the entire stack
-      cmdStack.allowResume = MC_TRUE;
+      cmdStack.levelResume = cmdStack.level;
       cmdStackPrint();
+      cmdStack.level = -1;
     }
     else if (retVal == CMD_RET_ERROR)
     {
@@ -1101,8 +1192,10 @@ u08 cmdStackResume(char *cmdName)
     {
       // Depending on whether execution was interrupted keep the stack or
       // pop everything
-      if (cmdStack.allowResume == MC_FALSE)
+      if (cmdStack.levelResume == -1)
         cmdStackPop(CMD_STACK_POP_ALL);
+      else
+        cmdStack.level = -1;
     }
 
     // Abort stack execution when error/interrupt occured
@@ -1136,7 +1229,7 @@ u08 cmdStackResume(char *cmdName)
 
   // Switch back to line mode and stop keyboard timer
   kbModeSet(KB_MODE_LINE);
-  emuSysTimerStop(&kbTimerId);
+  cmdStackTimerSet(LIST_TIMER_DISARM);
 
   return retVal;
 }
@@ -1177,5 +1270,34 @@ static void cmdStackStatsPrint(void)
         secElapsed);
     printf("\n");
   }
-  cmdStack.cmdStackStats.cmdLineCount = 0;
+}
+
+//
+// Function: cmdStackTimerSet
+//
+// Arm/disarm a repeating realtime 100 msec interval timer for scanning the
+// keyboard.
+//
+void cmdStackTimerSet(u08 action)
+{
+  struct itimerspec iTimer;
+
+  if (action == LIST_TIMER_DISARM)
+  {
+    // Have the timer disarmed
+    iTimer.it_value.tv_sec = 0;
+    iTimer.it_value.tv_nsec = 0;
+  }
+  else // LIST_TIMER_ARM
+  {
+    // Reset possible pending scan flag and set 100 msec timeout
+    kbTimerTripped = MC_FALSE;
+    iTimer.it_value.tv_sec = CMD_STACK_SCAN_MSEC / 1000;
+    iTimer.it_value.tv_nsec = (CMD_STACK_SCAN_MSEC % 1000) * 1E6;
+  }
+
+  // Make it repeating and set timer
+  iTimer.it_interval.tv_sec = iTimer.it_value.tv_sec;
+  iTimer.it_interval.tv_nsec = iTimer.it_value.tv_nsec;
+  timer_settime(kbTimer, 0, &iTimer, NULL);
 }

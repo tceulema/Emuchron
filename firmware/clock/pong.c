@@ -85,7 +85,7 @@ extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcAlarmSwitch;
-extern volatile uint8_t mcUpdAlarmSwitch;
+extern volatile uint8_t mcAlarmSwitchEvent;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcFgColor;
@@ -193,7 +193,7 @@ void pongCycle(void)
     almDisplayState = MC_FALSE;
 
   // Do we need to change the score
-  if (mcUpdAlarmSwitch == MC_TRUE)
+  if (mcAlarmSwitchEvent == MC_TRUE)
   {
     if (mcAlarmSwitch == ALARM_SWITCH_ON)
     {

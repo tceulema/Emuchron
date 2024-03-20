@@ -23,6 +23,7 @@
 #include "../buttons.h"
 #include "../config.h"
 #include "controller.h"
+#include "listutil.h"
 #include "mchronutil.h"
 #include "scanutil.h"
 #include "stub.h"
@@ -83,6 +84,16 @@
 
 // Debug output buffer size
 #define DEBUG_BUFSIZE		100
+
+// Emulator event engine keypress overview
+#define EMU_KEYS_CLEAR		\
+  "                                                                           "
+#define EMU_KEYS_CLOCK		\
+  "<run: info = e/p/r/t, hardware = a/s/+, c = cycle, h = help, q = quit> "
+#define EMU_KEYS_MONOCHRON	\
+  "<run: info = e/p/r/t, hardware = a/m/s/+, c = cycle, h = help, q = quit> "
+#define EMU_KEYS_CYCLE		\
+  "<cycle: c = next cycle, p = next cycle + stats, q = quit, other key = run> "
 
 // Monochron defined data
 extern volatile uint8_t almAlarmEvent, almAlarming;
@@ -150,8 +161,9 @@ static pid_t alarmPid = -1;
 // Local brightness to detect changes
 static u08 stubBacklight = 16;
 
-// Active help function when running an emulator
+// Active help function and keypress overview when running an emulator
 static void (*stubHelp)(void) = NULL;
+static char *stubKeys = NULL;
 
 // Event handler stub data
 static u08 eventCycleState = CYCLE_NOWAIT;
@@ -176,6 +188,8 @@ static u08 kbMode = KB_MODE_LINE;
 static void alarmPidStart(void);
 static void alarmPidStop(void);
 static int kbHit(void);
+static void stubHelpClockFeed(void);
+static void stubHelpMonochron(void);
 
 //
 // Function: alarmPidStart
@@ -360,30 +374,26 @@ void eeprom_write_byte(uint8_t *eprombyte, uint8_t value)
 //
 u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
 {
-  if (length == 7)
-  {
-    // Assume it is a request to get the RTC time
-    struct timeval tv;
-    struct tm *tm;
-    time_t timeClock;
+  if (deviceAddr != 0xd0 || length != 7)
+    emuCoreDump(CD_CLOCK, __func__, (int)deviceAddr, (int)length, 0, 0);
 
-    gettimeofday(&tv, NULL);
-    timeClock = tv.tv_sec + timeDelta;
-    tm = localtime(&timeClock);
+  // Assume it is a request to get the RTC time
+  struct timeval tv;
+  struct tm *tm;
+  time_t timeClock;
 
-    data[0] = bcdEncode(tm->tm_sec);
-    data[1] = bcdEncode(tm->tm_min);
-    data[2] = bcdEncode(tm->tm_hour);
-    data[4] = bcdEncode(tm->tm_mday);
-    data[5] = bcdEncode(tm->tm_mon + 1);
-    data[6] = bcdEncode(tm->tm_year % 100);
-    return 0;
-  }
-  else
-  {
-    // Unsupported request
-    return 1;
-  }
+  gettimeofday(&tv, NULL);
+  timeClock = tv.tv_sec + timeDelta;
+  tm = localtime(&timeClock);
+
+  data[0] = bcdEncode(tm->tm_sec);
+  data[1] = bcdEncode(tm->tm_min);
+  data[2] = bcdEncode(tm->tm_hour);
+  data[4] = bcdEncode(tm->tm_mday);
+  data[5] = bcdEncode(tm->tm_mon + 1);
+  data[6] = bcdEncode(tm->tm_year % 100);
+
+  return 0;
 }
 
 //
@@ -393,14 +403,12 @@ u08 i2cMasterReceiveNI(u08 deviceAddr, u08 length, u08 *data)
 //
 u08 i2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
 {
-  u08 retVal;
+  if (deviceAddr != 0xd0 || (length != 8 && length != 1))
+    emuCoreDump(CD_CLOCK, __func__, (int)deviceAddr, (int)length, 0, 0);
 
-  if (length == 1)
-  {
-    // Assume it is a request to verify the presence of the RTC
-    retVal = 0;
-  }
-  else if (length == 8)
+  // Only request length 1 and 8 are allowed where value 1 is used to verify
+  // the existence of the RTC
+  if (length == 8)
   {
     // Assume it is a request to set the RTC time
     uint8_t sec, min, hr, day, mon, yr;
@@ -412,15 +420,9 @@ u08 i2cMasterSendNI(u08 deviceAddr, u08 length, u08* data)
     mon = bcdDecode(data[6], 0xf);
     yr = bcdDecode(data[7], 0xf);
     stubTimeSet(sec, min, hr, day, mon, yr);
-    retVal = 0;
-  }
-  else
-  {
-    // Unsupported request
-    retVal = 1;
   }
 
-  return retVal;
+  return 0;
 }
 
 //
@@ -568,10 +570,23 @@ void stubEepReset(void)
 }
 
 //
+// Function: stubEventCleanup
+//
+// Cleanup the event generator
+//
+void stubEventCleanup(void)
+{
+  // If the stack is active re-enable its 100 msec timer for subsequent list
+  // commands
+  if (cmdStackIsActive() == MC_TRUE)
+     cmdStackTimerSet(LIST_TIMER_ARM);
+}
+
+//
 // Function: stubEventGet
 //
 // Get an mchron event. It is a combination of a 75 msec timer wait event since
-// previous call, an optional keyboard event emulating the three buttons
+// its previous call, an optional keyboard event emulating the three buttons
 // (m,s,+) and alarm switch (a), and misc emulator commands.
 //
 char stubEventGet(u08 stats)
@@ -582,6 +597,10 @@ char stubEventGet(u08 stats)
 
   // Flush the lcd device
   ctrlLcdFlush();
+
+  // Detect cascading quit from Monochron config page
+  if (eventQuitReq == MC_TRUE)
+    return 'q';
 
   // Prevent config menu event timeout
   if (eventCfgTimeout == MC_FALSE)
@@ -638,23 +657,23 @@ char stubEventGet(u08 stats)
     if (eventCycleState == CYCLE_REQ_WAIT)
     {
       alarmPidStop();
-      printf("\n<cycle: c = next cycle, p = next cycle + stats, q = quit, other key = resume> ");
+      printf("\r%s\r%s", EMU_KEYS_CLEAR, EMU_KEYS_CYCLE);
       fflush(stdout);
-      // Continue in single cycle mode
       eventCycleState = CYCLE_WAIT;
     }
 
-    // If we're in cycle mode with stats print the stats that are current
+    // If we're in cycle mode with stats, print the stats that are current
     // after the last executed clock cycle, and repeat the cycle mode help
     // message
     if (eventCycleState == CYCLE_WAIT_STATS)
     {
-      // Print and glcd/controller performance statistics
-      printf("\n");
-      ctrlStatsPrint(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
-      printf("\n<cycle: c = next cycle, p = next cycle + stats, q = quit, other key = resume> ");
+      // Print and reset glcd/controller cycle performance statistics
+      printf("\ncycle statistics:\n");
+      emuTimePrint(ALM_NONE);
+      ctrlStatsPrint(CTRL_STATS_CYCLE);
+      ctrlStatsReset(CTRL_STATS_CYCLE);
+      printf("\n%s", EMU_KEYS_CYCLE);
       fflush(stdout);
-      ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
     }
 
     // Wait for keypress every 75 msec interval
@@ -665,15 +684,10 @@ char stubEventGet(u08 stats)
       ch = kbKeypressScan(MC_FALSE);
     }
 
-    // Detect cascading quit that overides keypress
-    if (eventQuitReq == MC_TRUE)
-      ch = 'q';
-
     // Verify keypress and its impact on the wait state
     if (ch == 'q')
     {
       // Quit the clock emulator mode
-      eventCycleState = CYCLE_REQ_NOWAIT;
       eventQuitReq = MC_TRUE;
       printf("\n");
       return ch;
@@ -682,7 +696,8 @@ char stubEventGet(u08 stats)
     {
       // Not a 'c' or 'p' character: resume to normal mode state
       eventCycleState = CYCLE_REQ_NOWAIT;
-      printf("\n");
+      printf("\r%s\r%s", EMU_KEYS_CLEAR, stubKeys);
+      fflush(stdout);
 
       // Resume alarm audio (when needed)
       alarmPid = -1;
@@ -691,7 +706,7 @@ char stubEventGet(u08 stats)
     {
       // Move from wait state to wait with statistics
       eventCycleState = CYCLE_WAIT_STATS;
-      ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
+      ctrlStatsReset(CTRL_STATS_CYCLE);
     }
     else if (eventCycleState == CYCLE_WAIT_STATS && ch == 'c')
     {
@@ -749,6 +764,8 @@ char stubEventGet(u08 stats)
       // Toggle the alarm switch
       printf("\n");
       alarmSwitchToggle(MC_TRUE);
+      printf("\n%s", stubKeys);
+      fflush(stdout);
     }
     else if (ch == 'c')
     {
@@ -761,6 +778,8 @@ char stubEventGet(u08 stats)
       // Print monochron eeprom settings
       printf("\n");
       emuEepromPrint();
+      printf("\n%s", stubKeys);
+      fflush(stdout);
     }
     else if (ch == 'h')
     {
@@ -770,6 +789,8 @@ char stubEventGet(u08 stats)
         stubHelp();
       else
         printf("no help available\n");
+      printf("\n%s", stubKeys);
+      fflush(stdout);
     }
     else if (ch == 'm')
     {
@@ -782,19 +803,24 @@ char stubEventGet(u08 stats)
       // Print stub and glcd/lcd performance statistics
       printf("\nstatistics:\n");
       stubStatsPrint();
-      ctrlStatsPrint(CTRL_STATS_ALL);
+      ctrlStatsPrint(CTRL_STATS_AGGREGATE);
+      printf("\n%s", stubKeys);
+      fflush(stdout);
     }
     else if (ch == 'q')
     {
       // Signal request to quit
       eventQuitReq = MC_TRUE;
+      printf("\n");
     }
     else if (ch == 'r')
     {
       // Reset stub and glcd/lcd performance statistics
+      printf("\nstatistics reset\n");
       stubStatsReset();
       ctrlStatsReset(CTRL_STATS_ALL);
-      printf("\nstatistics reset\n");
+      printf("\n%s", stubKeys);
+      fflush(stdout);
     }
     else if (ch == 's')
     {
@@ -807,6 +833,8 @@ char stubEventGet(u08 stats)
       // Print time/date/alarm
       printf("\n");
       emuTimePrint(ALM_MONOCHRON);
+      printf("\n%s", stubKeys);
+      fflush(stdout);
     }
     else if (ch == '+')
     {
@@ -820,11 +848,6 @@ char stubEventGet(u08 stats)
       {
         btnHold = BTN_PLUS;
       }
-    }
-    else if (ch == '\n')
-    {
-      // Maybe the user wants to see a blank line, so echo it
-      printf("\n");
     }
   }
 
@@ -853,8 +876,15 @@ char stubEventGet(u08 stats)
 //
 // Prepare the event generator for initial use by a requesting process
 //
-void stubEventInit(u08 startWait, u08 cfgTimeout, void (*stubHelpHandler)(void))
+void stubEventInit(u08 startWait, u08 cfgTimeout, u08 emuType)
 {
+  // If the stack is active disable its 100 msec keyboard scan timer to make
+  // it not interfere with different wait timer mechanisms used in the event
+  // generator
+  if (cmdStackIsActive() == MC_TRUE)
+     cmdStackTimerSet(LIST_TIMER_DISARM);
+
+  // Init the event generator itself
   eventInit = MC_TRUE;
   eventCfgTimeout = cfgTimeout;
   eventQuitReq = MC_FALSE;
@@ -863,8 +893,22 @@ void stubEventInit(u08 startWait, u08 cfgTimeout, void (*stubHelpHandler)(void))
   else
     eventCycleState = CYCLE_NOWAIT;
   btnPressed = BTN_NONE;
-  stubHelp = stubHelpHandler;
-  stubHelp();
+  if (emuType == EMU_CLOCK)
+  {
+    stubHelp = stubHelpClockFeed;
+    stubKeys = EMU_KEYS_CLOCK;
+  }
+  else
+  {
+    stubHelp = stubHelpMonochron;
+    stubKeys = EMU_KEYS_MONOCHRON;
+  }
+  // Print the emulator run keypress overview upon starting in run mode
+  if (startWait == MC_FALSE)
+  {
+    printf("%s", stubKeys);
+    fflush(stdout);
+  }
 }
 
 //
@@ -882,20 +926,22 @@ u08 stubEventQuitGet(void)
 //
 // Provide keypress help when running the clock emulator
 //
-void stubHelpClockFeed(void)
+static void stubHelpClockFeed(void)
 {
-  printf("emuchron clock emulator:\n");
-  printf("  c = execute single application clock cycle\n");
+  printf("emuchron clock emulator keypress overview\n");
+  printf("info:\n");
   printf("  e = print monochron eeprom settings\n");
-  printf("  h = provide emulator help\n");
   printf("  p = print performance statistics\n");
-  printf("  q = quit\n");
   printf("  r = reset performance statistics\n");
   printf("  t = print time/date/alarm\n");
-  printf("hardware stub keys:\n");
+  printf("hardware:\n");
   printf("  a = toggle alarm switch\n");
   printf("  s = set button\n");
   printf("  + = + button\n");
+  printf("other:\n");
+  printf("  c = execute single application clock cycle\n");
+  printf("  h = provide emulator help\n");
+  printf("  q = quit\n");
 }
 
 //
@@ -903,21 +949,23 @@ void stubHelpClockFeed(void)
 //
 // Provide keypress help when running the Monochron emulator
 //
-void stubHelpMonochron(void)
+static void stubHelpMonochron(void)
 {
-  printf("emuchron monochron emulator:\n");
-  printf("  c = execute single application clock cycle\n");
+  printf("emuchron monochron emulator keypress overview\n");
+  printf("info:\n");
   printf("  e = print monochron eeprom settings\n");
-  printf("  h = provide emulator help\n");
   printf("  p = print performance statistics\n");
-  printf("  q = quit\n");
   printf("  r = reset performance statistics\n");
   printf("  t = print time/date/alarm\n");
-  printf("hardware stub keys:\n");
+  printf("hardware:\n");
   printf("  a = toggle alarm switch\n");
   printf("  m = menu button\n");
   printf("  s = set button\n");
   printf("  + = + button\n");
+  printf("other:\n");
+  printf("  c = execute single application clock cycle\n");
+  printf("  h = provide emulator help\n");
+  printf("  q = quit\n");
 }
 
 //

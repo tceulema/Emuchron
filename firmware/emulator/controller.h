@@ -16,13 +16,22 @@
 #define CTRL_METHOD_WRITE	2	// A glcdDataWrite() method
 
 // The mergeable graphics statistics report and reset types
-#define CTRL_STATS_NULL		0x0	// No stats
-#define CTRL_STATS_GLCD		0x1	// glcd stats
-#define CTRL_STATS_CTRL		0x2	// Controller stats
-#define CTRL_STATS_LCD		0x4	// Lcd (glut/ncurses) stats
+#define CTRL_STATS_NULL		0x00	// No stats
+#define CTRL_STATS_GLCD		0x01	// Aggregated glcd stats
+#define CTRL_STATS_GLCD_CYCLE	0x02	// Single cycle glcd stats
+#define CTRL_STATS_CTRL		0x04	// Aggregated controller stats
+#define CTRL_STATS_CTRL_CYCLE	0x08	// Single cycle controller stats
+#define CTRL_STATS_LCD		0x10	// Lcd (glut/ncurses) stats
 #define CTRL_STATS_ALL		\
+  (CTRL_STATS_GLCD | CTRL_STATS_GLCD_CYCLE | CTRL_STATS_CTRL | \
+   CTRL_STATS_CTRL_CYCLE | CTRL_STATS_LCD)
+					// All stats (aggregate and cycle)
+#define CTRL_STATS_AGGREGATE	\
   (CTRL_STATS_GLCD | CTRL_STATS_CTRL | CTRL_STATS_LCD)
-					// All stats
+					// All aggregate stats
+#define CTRL_STATS_CYCLE	\
+  (CTRL_STATS_GLCD_CYCLE | CTRL_STATS_CTRL_CYCLE)
+					// All cycle stats
 
 // The mergeable lcd devices types
 #define CTRL_DEVICE_NULL	0x0	// No device

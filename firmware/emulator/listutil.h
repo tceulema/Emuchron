@@ -14,6 +14,10 @@
 #define LIST_ECHO_INHERIT	1
 #define LIST_ECHO_SILENT	2
 
+// List stack timer actions
+#define LIST_TIMER_DISARM	0
+#define LIST_TIMER_ARM		1
+
 // mchron single command line execution functions
 void cmdLineCleanup(cmdLine_t *cmdLine);
 cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot);
@@ -27,4 +31,5 @@ void cmdStackPrintSet(u08 enable);
 u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
   cmdInput_t *cmdInput);
 u08 cmdStackResume(char *cmdName);
+void cmdStackTimerSet(u08 action);
 #endif

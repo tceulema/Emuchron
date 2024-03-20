@@ -18,10 +18,10 @@
 void varInit(void);
 u08 varPrint(char *pattern, u08 summary);
 int varReset(void);
+u08 varResetVar(char *varName);
 
 // Functions for referencing and manipulating variables
 int varIdGet(char *varName, u08 create);
-u08 varClear(int varId);
 double varValGet(int varId, u08 *varStatus);
 double varValSet(int varId, double value);
 #endif

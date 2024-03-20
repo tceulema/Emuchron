@@ -62,7 +62,7 @@ extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarmEvent, mcAlarming;
 extern volatile uint8_t mcAlarmH, mcAlarmM;
 extern volatile uint8_t mcFgColor;
-extern volatile uint8_t mcUpdAlarmSwitch, mcAlarmSwitch;
+extern volatile uint8_t mcAlarmSwitchEvent, mcAlarmSwitch;
 extern volatile uint8_t mcCycleCounter;
 // mcU8Util1 = the active/pending digit mode (time/date/year/alarm)
 // mcU8Util2 = request to apply (pending) digit mode (MC_TRUE/MC_FALSE)
@@ -105,7 +105,7 @@ void daliButton(u08 pressedButton)
 void daliCycle(void)
 {
   // First check alarm related events that will override any (pending) state
-  if (mcClockInit == MC_FALSE && mcUpdAlarmSwitch == MC_TRUE)
+  if (mcClockInit == MC_FALSE && mcAlarmSwitchEvent == MC_TRUE)
   {
     // The alarm switch is switched on or off
     if (mcAlarmSwitch == ALARM_SWITCH_ON)

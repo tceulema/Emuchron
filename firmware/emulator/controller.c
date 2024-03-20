@@ -222,7 +222,8 @@ typedef struct _ctrlController_t
   u08 state;				// Controller state
   ctrlRegister_t ctrlRegister;		// Registers
   ctrlImage_t ctrlImage;		// Lcd image data
-  ctrlStats_t ctrlStats;		// Statistics
+  ctrlStats_t ctrlStats;		// Aggregated statistics
+  ctrlStats_t ctrlStatsCopy;		// Copy for single cycle stats
 } ctrlController_t;
 
 // Definition of a structure holding the state-event event handler and next
@@ -302,7 +303,8 @@ static u08 controller = 0;
 static ctrlController_t ctrlControllers[GLCD_NUM_CONTROLLERS];
 
 // Statistics counters on lcd glcd interface
-static ctrlGlcdStats_t ctrlGlcdStats;
+static ctrlGlcdStats_t ctrlGlcdStats;		// Aggregated statistics
+static ctrlGlcdStats_t ctrlGlcdStatsCopy;	// Copy for single cycle stats
 
 // Identifiers to indicate what lcd stub devices are used
 static u08 useGlut = MC_FALSE;
@@ -772,12 +774,9 @@ u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 
   // Cleanup in case there was a failure
   if (initOk == MC_FALSE)
-  {
     ctrlCleanup();
-    return MC_FALSE;
-  }
 
-  return MC_TRUE;
+  return initOk;
 }
 
 //
@@ -945,20 +944,33 @@ void ctrlStatsPrint(u08 type)
 {
   u08 i;
   ctrlStats_t *ctrlStats;
+  ctrlStats_t *ctrlStatsCopy;
 
-  // Report the lcd interface statistics
+  // Report the glcd interface statistics
   if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
   {
+    // Aggregated statistics
     printf("glcd   : dataWrite=%llu, dataRead=%llu, addressSet=%llu\n",
       ctrlGlcdStats.dataWrite, ctrlGlcdStats.dataRead,
       ctrlGlcdStats.addressSet);
     printf("       : ctrlSet=%llu\n",
       ctrlGlcdStats.ctrlSet);
   }
+  if ((type & CTRL_STATS_GLCD_CYCLE) != CTRL_STATS_NULL)
+  {
+    // Single cycle statistics
+    printf("glcd   : dataWrite=%llu, dataRead=%llu, addressSet=%llu\n",
+      ctrlGlcdStats.dataWrite - ctrlGlcdStatsCopy.dataWrite,
+      ctrlGlcdStats.dataRead - ctrlGlcdStatsCopy.dataRead,
+      ctrlGlcdStats.addressSet - ctrlGlcdStatsCopy.addressSet);
+    printf("       : ctrlSet=%llu\n",
+      ctrlGlcdStats.ctrlSet - ctrlGlcdStatsCopy.ctrlSet);
+  }
 
   // Report controller statistics
   if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
   {
+    // Aggregated statistics
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
     {
       ctrlStats = &ctrlControllers[i].ctrlStats;
@@ -995,6 +1007,62 @@ void ctrlStatsPrint(u08 type)
           ctrlStats->startLineCnf * 100 / (double)ctrlStats->startLineReq);
     }
   }
+  if ((type & CTRL_STATS_CTRL_CYCLE) != CTRL_STATS_NULL)
+  {
+    // Single cycle statistics
+    for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+    {
+      ctrlStats = &ctrlControllers[i].ctrlStats;
+      ctrlStatsCopy = &ctrlControllers[i].ctrlStatsCopy;
+      printf("ctrl-%d : ", i);
+      if (ctrlStats->writeReq - ctrlStatsCopy->writeReq == 0)
+        printf("write=%llu (-%%), ",
+          ctrlStats->writeReq - ctrlStatsCopy->writeReq);
+      else
+        printf("write=%llu (%.0f%%), ",
+          ctrlStats->writeReq - ctrlStatsCopy->writeReq,
+          (ctrlStats->writeCnf - ctrlStatsCopy->writeCnf) * 100 /
+            (double)(ctrlStats->writeReq - ctrlStatsCopy->writeReq));
+      if (ctrlStats->readReq - ctrlStatsCopy->readReq == 0)
+        printf("read=%llu (-%%), ",
+          ctrlStats->readReq - ctrlStatsCopy->readReq);
+      else
+        printf("read=%llu (%.0f%%), ",
+          ctrlStats->readReq - ctrlStatsCopy->readReq,
+          (ctrlStats->readCnf - ctrlStatsCopy->readCnf) * 100 /
+            (double)(ctrlStats->readReq - ctrlStatsCopy->readReq));
+      if (ctrlStats->displayReq - ctrlStatsCopy->displayReq == 0)
+        printf("display=%llu (-%%)\n",
+          ctrlStats->displayReq - ctrlStatsCopy->displayReq);
+      else
+        printf("display=%llu (%.0f%%)\n",
+          ctrlStats->displayReq - ctrlStatsCopy->displayReq,
+          (ctrlStats->displayCnf - ctrlStatsCopy->displayCnf) * 100 /
+            (double)(ctrlStats->displayReq - ctrlStatsCopy->displayReq));
+      if (ctrlStats->xReq - ctrlStatsCopy->xReq == 0)
+        printf("       : x=%llu (-%%), ",
+          ctrlStats->xReq - ctrlStatsCopy->xReq);
+      else
+        printf("       : x=%llu (%.0f%%), ",
+          ctrlStats->xReq - ctrlStatsCopy->xReq,
+          (ctrlStats->xCnf - ctrlStatsCopy->xCnf) * 100 /
+            (double)(ctrlStats->xReq - ctrlStatsCopy->xReq));
+      if (ctrlStats->yReq - ctrlStatsCopy->yReq == 0)
+        printf("y=%llu (-%%), ", ctrlStats->yReq - ctrlStatsCopy->yReq);
+      else
+        printf("y=%llu (%.0f%%), ", ctrlStats->yReq - ctrlStatsCopy->yReq,
+          (ctrlStats->yCnf - ctrlStatsCopy->yCnf) * 100 /
+            (double)(ctrlStats->yReq - ctrlStatsCopy->yReq));
+      if (ctrlStats->startLineReq - ctrlStatsCopy->startLineReq == 0)
+        printf("startline=%llu (-%%)\n",
+          ctrlStats->startLineReq - ctrlStatsCopy->startLineReq);
+      else
+        printf("startline=%llu (%.0f%%)\n",
+          ctrlStats->startLineReq - ctrlStatsCopy->startLineReq,
+          (ctrlStats->startLineCnf - ctrlStatsCopy->startLineCnf) * 100 /
+            (double)(ctrlStats->startLineReq - ctrlStatsCopy->startLineReq));
+    }
+  }
 
   // Report lcd stub device statistics
   if ((type & CTRL_STATS_LCD) != CTRL_STATS_NULL)
@@ -1015,14 +1083,23 @@ void ctrlStatsReset(u08 type)
 {
   u08 i;
 
-  // Lcd glcd statistics
+  // Lcd glcd statistics. Note that the resetting the cycle statistics is
+  // copying the aggregated statistics so we can calculate the delta between
+  // the up-to-date aggregated stats and its earlier made copy.
   if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
     memset(&ctrlGlcdStats, 0, sizeof(ctrlGlcdStats_t));
+  if ((type & CTRL_STATS_GLCD_CYCLE) != CTRL_STATS_NULL)
+    ctrlGlcdStatsCopy = ctrlGlcdStats;
 
-  // Lcd controller statistics
+  // Lcd controller statistics. Note that the resetting the cycle statistics is
+  // copying the aggregated statistics so we can calculate the delta between
+  // the up-to-date aggregated stats and its earlier made copy.
   if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
       memset(&ctrlControllers[i].ctrlStats, 0, sizeof(ctrlStats_t));
+  if ((type & CTRL_STATS_CTRL_CYCLE) != CTRL_STATS_NULL)
+    for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+      ctrlControllers[i].ctrlStatsCopy = ctrlControllers[i].ctrlStats;
 
   // Glut and/or ncurses statistics
   if ((type & CTRL_STATS_LCD) != CTRL_STATS_NULL)

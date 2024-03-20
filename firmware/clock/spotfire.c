@@ -293,16 +293,13 @@ u08 spotCommonUpdate(void)
   // Verify changes in day and month for the menu bar
   spotMenuBarUpdate();
 
-  // Update the filter panel range sliders
-  if (mcClockNewTS != mcClockOldTS || mcClockInit == MC_TRUE)
-    spotRangeSliderUpdate(FP_Y_START + 2 * FP_Y_OFFSET_SIZE, FP_SEC_MAX,
-      mcClockOldTS, mcClockNewTS);
-  if (mcClockNewTM != mcClockOldTM || mcClockInit == MC_TRUE)
-    spotRangeSliderUpdate(FP_Y_START + FP_Y_OFFSET_SIZE, FP_MIN_MAX,
-      mcClockOldTM, mcClockNewTM);
-  if (mcClockNewTH != mcClockOldTH || mcClockInit == MC_TRUE)
-    spotRangeSliderUpdate(FP_Y_START, FP_HOUR_MAX, mcClockOldTH,
-      mcClockNewTH);
+  // Update the filter panel range sliders (if needed)
+  spotRangeSliderUpdate(FP_Y_START + 2 * FP_Y_OFFSET_SIZE, FP_SEC_MAX,
+    mcClockOldTS, mcClockNewTS);
+  spotRangeSliderUpdate(FP_Y_START + FP_Y_OFFSET_SIZE, FP_MIN_MAX,
+    mcClockOldTM, mcClockNewTM);
+  spotRangeSliderUpdate(FP_Y_START, FP_HOUR_MAX, mcClockOldTH,
+    mcClockNewTH);
 
   return MC_TRUE;
 }
@@ -377,6 +374,10 @@ static void spotRangeSliderUpdate(u08 y, u08 maxVal, u08 oldVal, u08 newVal)
 {
   u08 sliderXPosOld;
   u08 sliderXPosNew;
+
+  // Skip if there's nothing to do
+  if (oldVal == newVal && mcClockInit == MC_FALSE)
+    return;
 
   // Get xpos of old and new marker
   sliderXPosOld = (u08)(((FP_RS_WIDTH - 2) / (float) maxVal) * oldVal + 0.5);

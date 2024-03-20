@@ -15,17 +15,21 @@
 tap 0
 
 # Check end of month
-tds 31 8 13
+tds 31 8 23
 ts 23 59 50
 tp
 hm
 hm --- check end of month ---
-cf n
+cf r
 
 # Check leap year
-tds 28 2 12
+tds 28 2 24
 ts 23 59 50
 tp
 hm
 hm --- check leap year ---
-cf n
+cf r
+
+# Restore date/time
+tdr
+tr

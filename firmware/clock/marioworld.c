@@ -140,7 +140,7 @@ extern volatile u08 mcClockNewDD, mcClockNewDM;
 extern volatile u08 mcClockInit;
 extern volatile u08 mcAlarming, mcAlarmH, mcAlarmM;
 extern volatile u08 mcAlarmSwitch;
-extern volatile u08 mcUpdAlarmSwitch;
+extern volatile u08 mcAlarmSwitchEvent;
 extern volatile u08 mcCycleCounter;
 extern volatile u08 mcClockTimeEvent;
 extern volatile u08 mcU8Util1;
@@ -234,10 +234,19 @@ static const uint8_t __attribute__ ((progmem)) marArc[] = // Jump y positions
 { 2,6,9,11,9,6,2 };
 static const uint16_t __attribute__ ((progmem)) mario[] = // 9x12 frame
 {
+  // Select one of the two Mario sprite frame sets below
+
+  // Mario frames in which the head moves along with the *body* while walking
   0x0100,0x0492,0x07d6,0x06c3,0x07cb,0x0ec6,0x0e9c,0x0918,0x0000, // <-- frame 0
   0x0900,0x0e92,0x0fd6,0x06c3,0x07cb,0x06c6,0x049c,0x0118,0x0000, // <-- frame 1
   0x0000,0x0918,0x0e9c,0x0ec6,0x07cb,0x06c3,0x07d6,0x0492,0x0100, // --> frame 0
   0x0000,0x0118,0x049c,0x06c6,0x07cb,0x06c3,0x0fd6,0x0e92,0x0900  // --> frame 1
+
+  // Mario frames in which the head moves along with the *feet* while walking
+  //0x0100,0x0492,0x07d6,0x06c3,0x07cb,0x0ec6,0x0e9c,0x0918,0x0000, // <-- frame 0
+  //0x0912,0x0e96,0x0fc3,0x06cb,0x07c6,0x06dc,0x0498,0x0100,0x0000, // <-- frame 1
+  //0x0000,0x0918,0x0e9c,0x0ec6,0x07cb,0x06c3,0x07d6,0x0492,0x0100, // --> frame 0
+  //0x0000,0x0100,0x0498,0x06dc,0x07c6,0x06cb,0x0fc3,0x0e96,0x0912  // --> frame 1
 };
 
 // Administer piranha plant animation
@@ -328,7 +337,7 @@ static void marioAlmAreaUpdate(void)
       waPos = WA_ALARM;
     }
   }
-  else if (mcUpdAlarmSwitch == MC_TRUE)
+  else if (mcAlarmSwitchEvent == MC_TRUE)
   {
     // If we switched on/off the alarm update alarm time in buffer
     marioBufFill(mcAlarmH, FONT7X7_COLON, mcAlarmM, DA_ALARM, daBuf);

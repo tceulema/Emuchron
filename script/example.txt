@@ -1,0 +1,54 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Replicate the basics of the example clock
+#
+# This script mimmics the time/date essentials of the example clock and the
+# 75 msec clock cycle update mechanism.
+#
+
+# Provide helpmessage
+hm --- press 'q' to quit ---
+
+# Clear screen and stats.
+# Note: Before resetting the stats give glut some time to empty its pending
+# message buffer from the lcd erase (le) command.
+le
+w 40
+sr
+
+# Keep hold of previous time second and day value to detect time/date change
+vs secPrev=-1
+vs dayPrev=-1
+
+# Draw the static portion of the clock
+psf
+pa 11 2 5x7m h 2 1 -Example-
+
+# Loop indefinitely and keep drawing the time and date when changed
+rf null true null
+  # Clock cycle wait time
+  wte 75
+
+  # Get current date/time
+  tg year month day hour min sec
+
+  # Skip update when time has not changed
+  iif sec==secPrev
+    rc
+  ien
+
+  # Time has changed so draw it
+  pn 41 20 5x7m h 1 1 hour %02.0f:
+  pn 59 20 5x7m h 1 1 min %02.0f:
+  pn 77 20 5x7m h 1 1 sec %02.0f
+  vs secPrev=sec
+
+  # Draw date only when day has changed
+  iif day!=dayPrev
+    pn 41 29 5x7m h 1 1 month %02.0f/
+    pn 59 29 5x7m h 1 1 day %02.0f/
+    pn 77 29 5x7m h 1 1 year %02.0f
+    vs dayPrev=day
+  ien
+rn

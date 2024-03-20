@@ -116,9 +116,9 @@ DOMAIN(domNumYSize, \
 DOMAIN(domCharEcho, \
   DOM_CHAR_VAL, "eis", 0, 0, "e = echo, i = inherit, s = silent");
 
-// Emulator start mode: 'c'ycle mode or 'n'ormal mode
+// Emulator start mode: 'c'ycle mode or 'r'un mode
 DOMAIN(domCharMode, \
-  DOM_CHAR_VAL, "cn", 0, 0, "c = single cycle, n = normal");
+  DOM_CHAR_VAL, "cr", 0, 0, "c = single cycle, r = run");
 
 // Lcd backlight: 0..16
 DOMAIN(domNumBacklight, \
@@ -240,9 +240,9 @@ DOMAIN(domNumHour, \
 DOMAIN(domNumMinSec, \
   DOM_NUM_RANGE, NULL, 0, 59, NULL);
 
-// Variable name: [a-zA-Z_]+
+// Variable name: [a-zA-Z_]+ where value 'null' means to ignore it
 DOMAIN(domStrVarName, \
-  DOM_WORD_REGEX, "^[a-zA-Z_]+$", 0, 0, "word of [a-zA-Z_] characters");
+  DOM_WORD_REGEX, "^[a-zA-Z_]+$", 0, 0, "word of [a-zA-Z_] characters, 'null' = ignore");
 
 // Variable name: [a-zA-Z_]+ or '.'
 DOMAIN(domStrVarNameAll, \
@@ -325,7 +325,7 @@ cmdArg_t argBeep[] =
 // Command 'c*'
 // Argument profile for clock feed
 cmdArg_t argClockFeed[] =
-{ { ARGTYPE(ARG_CHAR),   "mode",         &domCharMode } };
+{ { ARGTYPE(ARG_CHAR),   "startmode",    &domCharMode } };
 // Argument profile for clock select
 cmdArg_t argClockSelect[] =
 { { ARGTYPE(ARG_NUM),    "clock",        &domNumClock } };
@@ -445,10 +445,10 @@ cmdArg_t argLcdYCursorSet[] =
 // Command 'm'
 // Argument profile for Monochron application emulator
 cmdArg_t argMonochron[] =
-{ { ARGTYPE(ARG_CHAR),   "mode",         &domCharMode } };
+{ { ARGTYPE(ARG_CHAR),   "startmode",    &domCharMode } };
 // Argument profile for Monochron config pages emulator
 cmdArg_t argMonoConfig[] =
-{ { ARGTYPE(ARG_CHAR),   "mode",         &domCharMode },
+{ { ARGTYPE(ARG_CHAR),   "startmode",    &domCharMode },
   { ARGTYPE(ARG_NUM),    "timeout",      &domNumOffOn },
   { ARGTYPE(ARG_NUM),    "restart",      &domNumOffOn } };
 // Argument profile for Monochron eeprom write
@@ -561,6 +561,15 @@ cmdArg_t argTimeDateSet[] =
 { { ARGTYPE(ARG_NUM),    "day",          &domNumDay },
   { ARGTYPE(ARG_NUM),    "month",        &domNumMonth },
   { ARGTYPE(ARG_NUM),    "year",         &domNumYear } };
+// Argument profile for time get
+cmdArg_t argTimeGet[] =
+{ { ARGTYPE(ARG_STRING), "varyear",      &domStrVarName },
+  { ARGTYPE(ARG_STRING), "varmonth",     &domStrVarName },
+  { ARGTYPE(ARG_STRING), "varday",       &domStrVarName },
+  { ARGTYPE(ARG_STRING), "varhour",      &domStrVarName },
+  { ARGTYPE(ARG_STRING), "varmin",       &domStrVarName },
+  { ARGTYPE(ARG_STRING), "varsec",       &domStrVarName } };
+
 // Argument profile for time set
 cmdArg_t argTimeSet[] =
 { { ARGTYPE(ARG_NUM),    "hour",         &domNumHour },
@@ -655,7 +664,7 @@ cmdCommand_t cmdGroupLcd[] =
   { "lgs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdGlutSizeSet),  CMDHANDLER(doLcdGlutSizeSet),  "set glut window size" },
   { "lhr", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdGlutHlReset),  "reset glut glcd pixel highlight" },
   { "lhs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdGlutHlSet),    CMDHANDLER(doLcdGlutHlSet),    "set glut glcd pixel highlight" },
-  { "li",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdInverse),      "inverse lcd display" },
+  { "li",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdInverse),      "inverse lcd display and draw colors" },
   { "lng", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdNcurGrSet),    CMDHANDLER(doLcdNcurGrSet),    "set ncurses graphics options" },
   { "lp",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdPrint),        "print lcd controller state/registers" },
   { "lr",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdRead),         CMDHANDLER(doLcdRead),         "read data from active lcd controller" },
@@ -691,7 +700,9 @@ cmdCommand_t cmdGroupPaint[] =
 
 // All commands for command group 'r' (repeat)
 cmdCommand_t cmdGroupRepeat[] =
-{ { "rf",  PCCTRLTYPE(PC_REPEAT_FOR),  CMDARGS(argRepeatFor),       PCCTRLHANDLER(doRepeatFor),    "repeat for" },
+{ { "rb",  PCCTRLTYPE(PC_REPEAT_BRK),  CMDARGS(NULL),               PCCTRLHANDLER(doRepeatBreak),  "repeat break" },
+  { "rc",  PCCTRLTYPE(PC_REPEAT_CONT), CMDARGS(NULL),               PCCTRLHANDLER(doRepeatCont),   "repeat continue" },
+  { "rf",  PCCTRLTYPE(PC_REPEAT_FOR),  CMDARGS(argRepeatFor),       PCCTRLHANDLER(doRepeatFor),    "repeat for" },
   { "rn",  PCCTRLTYPE(PC_REPEAT_NEXT), CMDARGS(NULL),               PCCTRLHANDLER(doRepeatNext),   "repeat next" } };
 
 // All commands for command group 's' (statistics)
@@ -708,6 +719,7 @@ cmdCommand_t cmdGroupTime[] =
   { "tdr", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimeDateReset),   "reset date to system date" },
   { "tds", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argTimeDateSet),     CMDHANDLER(doTimeDateSet),     "set date" },
   { "tf",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimeFlush),       "flush time/date to clock" },
+  { "tg",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argTimeGet),         CMDHANDLER(doTimeGet),         "get date/time" },
   { "tp",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimePrint),       "print time/date/alarm" },
   { "tr",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimeReset),       "reset time to system time" },
   { "ts",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argTimeSet),         CMDHANDLER(doTimeSet),         "set time" } };
@@ -721,8 +733,8 @@ cmdCommand_t cmdGroupVar[] =
 // All commands for command group 'w' (wait)
 cmdCommand_t cmdGroupWait[] =
 { { "w",   PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argWait),            CMDHANDLER(doWait),            "wait for keypress or time" },
-  { "wte", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argWaitTimerExpiry), CMDHANDLER(doWaitTimerExpiry), "wait for timer expiry" },
-  { "wts", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doWaitTimerStart),  "start expiry timer" } };
+  { "wte", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argWaitTimerExpiry), CMDHANDLER(doWaitTimerExpiry), "wait for wait timer expiry" },
+  { "wts", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doWaitTimerStart),  "start wait timer" } };
 
 // All commands for command group 'x' (exit)
 cmdCommand_t cmdGroupExit[] =

@@ -8,7 +8,7 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
-#include <sys/select.h>
+#include <time.h>
 #include <sys/time.h>
 #include <GL/freeglut.h>
 #include "lcdglut.h"
@@ -67,7 +67,6 @@
 
 // The hor/vert aspect ratio of the glut lcd display (almost 2:1)
 #define GLUT_ASPECTRATIO	((float)GLUT_XPIXELS / GLUT_YPIXELS)
-#define GLUT_ASPECTRATIO2	((double)GLUT_XPIXELS / GLUT_YPIXELS)
 
 // The lcd frame and gridline brightness
 #define GLUT_FRAME_BRIGHTNESS	0.5
@@ -1452,15 +1451,13 @@ void lcdGlutSizeSet(unsigned char axis, unsigned int size)
 //
 // Function: lcdGlutSleep
 //
-// Sleep amount in time (in msec)
+// Sleep amount of time (in msec) without keyboard interaction with a max value
+// of 999 msec.
 //
 static void lcdGlutSleep(int sleep)
 {
-  struct timeval tvWait;
-
-  tvWait.tv_sec = 0;
-  tvWait.tv_usec = sleep * 1000;
-  select(0, NULL, NULL, NULL, &tvWait);
+  struct timespec timeSleep = { 0, sleep * 1000000 };
+  nanosleep(&timeSleep, NULL);
 }
 
 //
