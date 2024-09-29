@@ -36,6 +36,7 @@
 #define TO_INT(d)	((int)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_S08(d)	((s08)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_U08(d)	((u08)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
+#define TO_S16(d)	((s16)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_U16(d)	((u16)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_UINT8_T(d)	((uint8_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 #define TO_UINT16_T(d)	((uint16_t)((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
@@ -105,7 +106,6 @@ static int emuClockPoolCount = 0;
 //
 int main(int argc, char *argv[])
 {
-  cmdLine_t *cmdLine;
   char *prompt;
   emuArgcArgv_t emuArgcArgv;
   int i;
@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
   alarmSwitchSet(MC_FALSE, MC_FALSE);
   alarmSoundReset();
 
-  // Init emuchron system clock + clock plugin time, then print it
+  // Init emuchron system clock and clock plugin time, then print it
   rtcTimeInit();
   rtcMchronTimeInit();
   emuTimePrint(ALM_EMUCHRON);
@@ -200,11 +200,10 @@ int main(int argc, char *argv[])
   // Init mchron wait expiry timer
   waitTimerStart(&tvTimer);
 
-  // Init the command line input interface
-  cmdInputInit(&cmdInput, stdin, CMD_INPUT_READLINELIB);
-
-  // Init the command stack
+  // Init the command stack, command line input interface and command prompt
   cmdStackInit();
+  cmdInputInit(&cmdInput, stdin, CMD_INPUT_READLINELIB);
+  prompt = emuCmdPromptInit();
 
   // All initialization is done!
   printf("\nenter 'h' for help\n");
@@ -212,25 +211,16 @@ int main(int argc, char *argv[])
   // We're in business: give prompt and process keyboard commands until the
   // last proton in the universe has desintegrated (or use 'x' or ^D to exit)
 
-  // Do the first command line read
-  prompt = malloc(strlen(__progname) + 3);
-  sprintf(prompt, "%s> ", __progname);
+  // Read and process input lines until done
+  emuCmdPromptSet(prompt);
   cmdInputRead(prompt, &cmdInput);
-
-  // Create a command line and keep processing input lines until done
-  cmdLine = cmdLineCreate(NULL, NULL);
   while (cmdInput.input != NULL)
   {
-    // Process input
-    cmdLine->lineNum++;
-    cmdLine->input = cmdInput.input;
-    cmdLine->cmdCommand = NULL;
-    retVal = cmdLineExecute(cmdLine, &cmdInput);
-    cmdArgCleanup(cmdLine);
+    // Execute the command and either exit or read the next command
+    retVal = cmdExecute(&cmdInput);
     if (retVal == CMD_RET_EXIT)
       break;
-
-    // Get next command
+    emuCmdPromptSet(prompt);
     cmdInputRead(prompt, &cmdInput);
   }
 
@@ -238,17 +228,15 @@ int main(int argc, char *argv[])
   if (retVal != CMD_RET_EXIT)
     printf("<ctrl>d - exit\n");
 
-  // Cleanup command line, command line read interface and command stack
-  free(prompt);
-  cmdLine->input = NULL;
-  cmdLineCleanup(cmdLine);
+  // Cleanup command prompt, read interface and command stack
+  emuCmdPromptCleanup(prompt);
   cmdInputCleanup(&cmdInput);
   cmdStackCleanup();
 
   // Shutdown gracefully by releasing the mchron clock pool, killing audio,
   // stopping the controller and lcd device(s), and cleaning up the named
   // variables and graphics buffers
-  emuClockPoolReset(emuClockPool);
+  emuClockPoolCleanup(emuClockPool);
   alarmSoundReset();
   ctrlCleanup();
   varReset();
@@ -264,19 +252,20 @@ int main(int argc, char *argv[])
 }
 
 //
-// Below are all mchron command and control block handlers functions. Each and
-// every mchron command will, when provided with proper arguments, end up in
-// one of the functions below.
+// Below are all mchron regular command and program counter control block (pcb)
+// command handler functions. Each and every mchron command will, when provided
+// with proper argument values, end up in one of the functions below.
 //
 // Upon entering a command handler function for a 'regular' command, all its
-// arguments have been successfully scanned and evaluated. All it takes for
-// the handler is to pick up and process the evaluated arguments in the
-// argChar[], argDouble[] and argString[] arrays, based on the sequence of
-// command arguments in the command dictionary.
+// arguments have been successfully scanned and evaluated. All it takes for the
+// handler is to pick up and process the evaluated arguments in the argChar[],
+// argDouble[] and argString[] arrays, based on the sequence of command
+// arguments in the command dictionary.
 //
-// A control block handler (for if-logic and repeat commands) however must
-// decide which command arguments are evaluated, depending on the state of its
-// control block. In other words, command arguments are evaluated optionally.
+// A pcb handler (for repeat/if/return commands) however usually decides which
+// command arguments are evaluated, depending on the requested action as set in
+// the pcb. In other words, pcb command arguments are evaluated optionally and
+// by the pcb command handler function itself.
 //
 
 //
@@ -300,11 +289,11 @@ u08 doBeep(cmdLine_t *cmdLine)
 u08 doClockFeed(cmdLine_t *cmdLine)
 {
   char ch = '\0';
-  u08 startWait = MC_FALSE;
+  u08 startMode = MC_FALSE;
   u08 myKbMode = KB_MODE_LINE;
 
   // Get the start mode
-  startWait = emuStartModeGet(argChar[0]);
+  startMode = emuStartModeGet(argChar[0]);
 
   // Check clock
   if (mcClockPool[mcMchronClock].clockId == CHRON_NONE)
@@ -323,7 +312,7 @@ u08 doClockFeed(cmdLine_t *cmdLine)
   rtcMchronTimeInit();
 
   // Init stub event handler used in main loop below and get first event
-  stubEventInit(startWait, MC_TRUE, EMU_CLOCK);
+  stubEventInit(startMode, MC_TRUE, EMU_CLOCK);
   ch = stubEventGet(MC_TRUE);
 
   // Run clock until 'q'
@@ -341,8 +330,8 @@ u08 doClockFeed(cmdLine_t *cmdLine)
     ch = stubEventGet(MC_TRUE);
   }
 
-  // We're done. Cleanup stub event handler and kill/reset alarm (if needed).
-  stubEventCleanup();
+  // We're done. Reset stub event handler and kill/reset alarm (if needed).
+  stubEventReset();
   alarmSoundReset();
 
   // Flush any pending updates in the lcd device
@@ -362,17 +351,15 @@ u08 doClockFeed(cmdLine_t *cmdLine)
 //
 u08 doClockPrint(cmdLine_t *cmdLine)
 {
-  u08 retVal = CMD_RET_OK;
+  u08 retVal;
 
-  if (cmdStackIsActive() == MC_TRUE)
-  {
-    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
-    retVal = CMD_RET_ERROR;
-  }
-  else
-  {
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
+
+  // Print overview of available clocks
+  if (retVal == CMD_RET_OK)
     emuClockPrint();
-  }
 
   return retVal;
 }
@@ -421,10 +408,233 @@ u08 doClockSelect(cmdLine_t *cmdLine)
 u08 doComments(cmdLine_t *cmdLine)
 {
   // Dump comments command in the log only when we run at root command level
-  if (cmdStackIsActive() == MC_FALSE)
+  if (cmdStackActiveGet() == MC_FALSE)
     DEBUGP(cmdLine->input);
 
   return CMD_RET_OK;
+}
+
+//
+// Function: doDbBpAdd
+//
+// Add a breakpoint
+//
+u08 doDbBpAdd(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  // Check if we run from the command line prompt and in debug mode
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_TRUE, MC_TRUE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Attempt to add/update breakpoint in the stack
+  if (cmdDebugBpAdd(TO_U08(argDouble[0]), TO_S16(argDouble[1]),
+      argString[1]) == MC_FALSE)
+  {
+    printf("%s: invalid stack level or line number\n",
+      cmdLine->cmdCommand->cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+
+  return retVal;
+}
+
+//
+// Function: doDbBpCond
+//
+// Check a conditional script breakpoint
+//
+u08 doDbBpCond(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  // Check if we run from the stack
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_TRUE,
+    MC_FALSE, MC_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  if (cmdDebugActiveGet() == MC_TRUE && argDouble[0] != 0)
+  {
+    // Breakpoints are active and breakpoint condition is met
+    cmdDebugCmdSet(0, DEBUG_NONE);
+    printf("*** breakpoint - execution halted ***\n");
+    retVal = CMD_RET_INTR_CMD;
+  }
+
+  return retVal;
+}
+
+//
+// Function: doDbBpDelete
+//
+// Delete a single or all breakpoints for a stack level
+//
+u08 doDbBpDelete(cmdLine_t *cmdLine)
+{
+  s16 breakpoint = TO_U16(argDouble[1]);
+  int deleted = 0;
+  u08 retVal;
+
+  // Check if we run from the command line prompt and in debug mode
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_TRUE, MC_TRUE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Attempt to delete a single or all breakpoints in the stack level
+  if (cmdDebugBpDelete(TO_U08(argDouble[0]), breakpoint, &deleted) == MC_FALSE)
+  {
+    printf("%s: invalid stack level or breakpoint number\n",
+      cmdLine->cmdCommand->cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+  else if (breakpoint == 0 && cmdEcho == CMD_ECHO_YES)
+  {
+    printf("breakpoints deleted: %d\n", deleted);
+  }
+
+  return retVal;
+}
+
+//
+// Function: doDbBpPrint
+//
+// Print all breakpoints
+//
+u08 doDbBpPrint(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  // Check if we run from the command line prompt and in debug mode
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_TRUE, MC_TRUE);
+
+  // Print all breakpoints
+  if (retVal == CMD_RET_OK)
+    cmdDebugBpPrint();
+
+  return retVal;
+}
+
+//
+// Function: doDbContinue
+//
+// Set debug command to continue excuting command until next interrupt
+//
+u08 doDbContinue(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  retVal = emuDebugCmdSet(cmdLine->cmdCommand->cmdName, DEBUG_CONT);
+  if (retVal == CMD_RET_OK)
+    retVal = cmdStackResume(cmdLine->cmdCommand->cmdName);
+
+  return retVal;
+}
+
+//
+// Function: doDbSet
+//
+// Enable/disable script debugging
+//
+u08 doDbSet(cmdLine_t *cmdLine)
+{
+  u08 active = TO_U08(argDouble[0]);
+  u08 retVal;
+
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
+
+  if (retVal == CMD_RET_OK)
+  {
+    // Enable/disable debugging, to be sure clean any debug command, and upon
+    // enabling debugging, as a courtesy, print the stack (when present)
+    cmdDebugSet(active);
+    cmdDebugCmdSet(0, DEBUG_NONE);
+    if (active == 1)
+      cmdStackPrint(CMD_RET_OK);
+  }
+
+  return retVal;
+}
+
+//
+// Function: doDbPcSet
+//
+// Set script execution program counter in top stack level
+//
+u08 doDbPcSet(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  // Check if we run from the command line prompt and in debug mode
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_TRUE, MC_TRUE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Attempt to set the script program counter in the top stack level
+  if (cmdDebugPcSet(TO_U16(argDouble[0])) == MC_FALSE)
+  {
+    printf("%s: no stack or invalid line number\n",
+      cmdLine->cmdCommand->cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+
+  return retVal;
+}
+
+//
+// Function: doDbStepIn
+//
+// Set debug command to step into script 'e' command or execute next command
+//
+u08 doDbStepIn(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  retVal = emuDebugCmdSet(cmdLine->cmdCommand->cmdName, DEBUG_STEP_IN);
+  if (retVal == CMD_RET_OK)
+    retVal = cmdStackResume(cmdLine->cmdCommand->cmdName);
+
+  return retVal;
+}
+
+//
+// Function: doDbStepNext
+//
+// Set debug command to execute next script command
+//
+u08 doDbStepNext(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  retVal = emuDebugCmdSet(cmdLine->cmdCommand->cmdName, DEBUG_STEP_NEXT);
+  if (retVal == CMD_RET_OK)
+    retVal = cmdStackResume(cmdLine->cmdCommand->cmdName);
+
+  return retVal;
+}
+
+//
+// Function: doDbStepOut
+//
+// Set debug command to continue execution until current stack level is
+// completed
+//
+u08 doDbStepOut(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  retVal = emuDebugCmdSet(cmdLine->cmdCommand->cmdName, DEBUG_STEP_OUT);
+  if (retVal == CMD_RET_OK)
+    retVal = cmdStackResume(cmdLine->cmdCommand->cmdName);
+
+  return retVal;
 }
 
 //
@@ -478,10 +688,37 @@ u08 doEepromWrite(cmdLine_t *cmdLine)
 u08 doExecFile(cmdLine_t *cmdLine)
 {
   u08 echoReq;
-  u08 retVal = CMD_RET_OK;
+  u08 retVal;
 
   echoReq = emuEchoReqGet(argChar[0]);
   retVal = cmdStackPush(cmdLine, echoReq, argString[1], NULL);
+
+  return retVal;
+}
+
+//
+// Function: doExecListPrint
+//
+// Print stack command source list in a range surrounding its program counter
+//
+u08 doExecListPrint(cmdLine_t *cmdLine)
+{
+  u08 retVal;
+
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Print the requested stack command source list range
+  if (cmdStackListPrint(TO_U08(argDouble[0]), TO_S16(argDouble[1])) ==
+      MC_FALSE)
+  {
+    printf("%s: no stack available or invalid stack level\n",
+      cmdLine->cmdCommand->cmdArg[0].argName);
+    retVal = CMD_RET_ERROR;
+  }
 
   return retVal;
 }
@@ -493,16 +730,53 @@ u08 doExecFile(cmdLine_t *cmdLine)
 //
 u08 doExecResume(cmdLine_t *cmdLine)
 {
-  u08 retVal = CMD_RET_OK;
+  u08 retVal;
 
-  if (cmdStackIsActive() == MC_TRUE)
-  {
-    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
-    retVal = CMD_RET_ERROR;
-  }
-  else
-  {
+  // Check if we run from the command line prompt and not in debug mode
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_TRUE, MC_FALSE);
+
+  // Resume stack command execution
+  if (retVal == CMD_RET_OK)
     retVal = cmdStackResume(cmdLine->cmdCommand->cmdName);
+
+  return retVal;
+}
+
+//
+// Function: doExecReturn
+//
+// Return (exit) from the current stack level
+//
+u08 doExecReturn(cmdLine_t **cmdProgCounter)
+{
+  // To return, jump to the end of the stack level
+  *cmdProgCounter = NULL;
+
+  return CMD_RET_OK;
+}
+
+//
+// Function: doExecStackPrint
+//
+// Print the command stack
+//
+u08 doExecStackPrint(cmdLine_t *cmdLine)
+{
+  //u08 retVal = CMD_RET_OK;
+  u08 retVal;
+
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // Print the command stack
+  if (cmdStackPrint(CMD_RET_OK) == MC_FALSE)
+  {
+    printf("%s: no stack available\n", cmdLine->cmdCommand->cmdName);
+    retVal = CMD_RET_ERROR;
   }
 
   return retVal;
@@ -515,16 +789,15 @@ u08 doExecResume(cmdLine_t *cmdLine)
 //
 u08 doExit(cmdLine_t *cmdLine)
 {
-  u08 retVal = CMD_RET_OK;
+  u08 retVal;
 
-  if (cmdStackIsActive() == MC_TRUE)
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
+
+  // Indicate we want to exit
+  if (retVal == CMD_RET_OK)
   {
-    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
-    retVal = CMD_RET_ERROR;
-  }
-  else
-  {
-    // Indicate we want to exit
     invokeExit = MC_TRUE;
     retVal = CMD_RET_EXIT;
   }
@@ -771,7 +1044,6 @@ u08 doGrSaveFile(cmdLine_t *cmdLine)
   emuGrBuf_t *emuGrBuf = &emuGrBufs[bufferId];
   u08 retVal;
 
-  // Check if data was loaded
   if (emuGrBuf->bufType == GRAPH_NULL)
   {
     printf("%s? %d: buffer is empty\n", cmdLine->cmdCommand->cmdArg[0].argName,
@@ -782,10 +1054,8 @@ u08 doGrSaveFile(cmdLine_t *cmdLine)
   // Save the buffer data
   retVal = grBufSaveFile(cmdLine->cmdCommand->cmdArg[1].argName,
     TO_U08(argDouble[1]), argString[1], emuGrBuf);
-  if (retVal != CMD_RET_OK)
-    return retVal;
 
-  return CMD_RET_OK;
+  return retVal;
 }
 
 //
@@ -795,15 +1065,17 @@ u08 doGrSaveFile(cmdLine_t *cmdLine)
 //
 u08 doHelp(cmdLine_t *cmdLine)
 {
-  if (cmdStackIsActive() == MC_TRUE)
-  {
-    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
-    return CMD_RET_ERROR;
-  }
+  u08 retVal;
+
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
 
   // Show help using 'more'
-  system("/bin/more ../support/help.txt 2>&1");
-  return CMD_RET_OK;
+  if (retVal == CMD_RET_OK)
+    system("/bin/more ../support/help.txt 2>&1");
+
+  return retVal;
 }
 
 //
@@ -816,18 +1088,19 @@ u08 doHelpCmd(cmdLine_t *cmdLine)
   u08 searchType;
   u08 retVal;
 
-  if (cmdStackIsActive() == MC_TRUE)
-  {
-    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
-    return CMD_RET_ERROR;
-  }
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
 
   // Print dictionary of command(s) where '.' is all
-  searchType = emuSearchTypeGet(argChar[0]);
-  retVal = dictPrint(argString[1], searchType);
-  if (retVal != CMD_RET_OK)
-    printf("%s? invalid: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
-      argString[1]);
+  if (retVal == CMD_RET_OK)
+  {
+    searchType = emuSearchTypeGet(argChar[0]);
+    retVal = dictPrint(argString[1], searchType);
+    if (retVal != CMD_RET_OK)
+      printf("%s? invalid: %s\n", cmdLine->cmdCommand->cmdArg[0].argName,
+        argString[1]);
+  }
 
   return retVal;
 }
@@ -840,7 +1113,7 @@ u08 doHelpCmd(cmdLine_t *cmdLine)
 u08 doHelpExpr(cmdLine_t *cmdLine)
 {
   // Print expression result in the command shell
-  cmdArgValuePrint(argDouble[0], MC_TRUE, MC_TRUE);
+  emuValuePrint(argDouble[0], MC_TRUE, MC_TRUE, MC_TRUE);
 
   return CMD_RET_OK;
 }
@@ -866,24 +1139,25 @@ u08 doHelpMsg(cmdLine_t *cmdLine)
 u08 doIf(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
   cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
 
   // Evaluate the condition expression
   if (exprEvaluate(cmdArg[0].argName, &cmdLine->argInfo[0]) != CMD_RET_OK)
     return CMD_RET_ERROR;
 
-  // Decide where to go depending on the condition result
+  // Reset pcb action and decide where to go depending on the condition result
+  cmdLine->pcbAction = PCB_ACT_DEFAULT;
   if (cmdLine->argInfo[0].exprValue != 0)
   {
-    // Make the if-then block active and continue on next line
-    cmdPcCtrlChild->active = MC_TRUE;
+    // Continue on next line
     *cmdProgCounter = cmdLine->next;
   }
   else
   {
-    // Jump to next if-else-if, if-else or if-end block
-    *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+    // Jump to next block (if-else-if, if-else or if-end) to evaluate its
+    // expression condition
+    *cmdProgCounter = cmdLine->pcbGrpNext;
+    (*cmdProgCounter)->pcbAction = PCB_ACT_ALT_1;
   }
 
   return CMD_RET_OK;
@@ -897,21 +1171,17 @@ u08 doIf(cmdLine_t **cmdProgCounter)
 u08 doIfElse(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
-  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
 
-  // Decide where to go depending on whether the preceding block (if-then or
-  // else-if) was active
-  if (cmdPcCtrlParent->active == MC_TRUE)
+  // Decide where to go depending on the pcb action
+  if (cmdLine->pcbAction == PCB_ACT_DEFAULT)
   {
-    // Deactivate preceding block and jump to end-if
-    cmdPcCtrlParent->active = MC_FALSE;
-    *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+    // Jump to end-if
+    *cmdProgCounter = cmdLine->pcbGrpTail;
   }
-  else
+  else // PCB_ACT_ALT_1
   {
-    // Make if-else block active and continue on next line
-    cmdPcCtrlChild->active = MC_TRUE;
+    // Reset pcb action and continue on next line
+    cmdLine->pcbAction = PCB_ACT_DEFAULT;
     *cmdProgCounter = cmdLine->next;
   }
 
@@ -926,35 +1196,33 @@ u08 doIfElse(cmdLine_t **cmdProgCounter)
 u08 doIfElseIf(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
-  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
   cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
 
-  // Decide where to go depending on whether the preceding block (if-then or
-  // else-if) was active
-  if (cmdPcCtrlParent->active == MC_TRUE)
+  // Decide where to go depending on the pcb action
+  if (cmdLine->pcbAction == PCB_ACT_DEFAULT)
   {
-    // Deactivate preceding block and jump to end-if
-    cmdPcCtrlParent->active = MC_FALSE;
-    *cmdProgCounter = cmdPcCtrlParent->cmdLineGrpTail;
+    // Jump to end-if
+    *cmdProgCounter = cmdLine->pcbGrpTail;
   }
-  else
+  else // PCB_ACT_ALT_1
   {
-    // Evaluate the condition expression
+    // Reset pcb action and evaluate the condition expression
+    cmdLine->pcbAction = PCB_ACT_DEFAULT;
     if (exprEvaluate(cmdArg[0].argName, &cmdLine->argInfo[0]) != CMD_RET_OK)
       return CMD_RET_ERROR;
 
     // Decide where to go depending on the condition result
     if (cmdLine->argInfo[0].exprValue != 0)
     {
-      // Make the if-else-if block active and continue on the next line
-      cmdPcCtrlChild->active = MC_TRUE;
+      // Continue on the next line
       *cmdProgCounter = cmdLine->next;
     }
     else
     {
-      // Jump to next block (if-else-if, if-else or if-end)
-      *cmdProgCounter = cmdPcCtrlChild->cmdLineChild;
+      // Jump to next block (if-else-if, if-else or if-end) to evaluate its
+      // expression condition
+      *cmdProgCounter = cmdLine->pcbGrpNext;
+      (*cmdProgCounter)->pcbAction = PCB_ACT_ALT_1;
     }
   }
 
@@ -969,15 +1237,13 @@ u08 doIfElseIf(cmdLine_t **cmdProgCounter)
 u08 doIfEnd(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlParent = cmdLine->cmdPcCtrlParent;
 
-  // Deactivate preceding control block (if anyway) and continue on next line
-  cmdPcCtrlParent->active = MC_FALSE;
+  // Reset pcb action and continue on next line
+  cmdLine->pcbAction = PCB_ACT_DEFAULT;
   *cmdProgCounter = cmdLine->next;
 
   return CMD_RET_OK;
 }
-
 
 //
 // Function: doLcdActCtrlSet
@@ -1074,12 +1340,13 @@ u08 doLcdGlutEdit(cmdLine_t *cmdLine)
   u08 x;
   u08 y;
   u08 event;
+  u08 retVal;
 
-  if (cmdStackIsActive() == MC_TRUE)
-  {
-    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
-    return CMD_RET_ERROR;
-  }
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
 
   // Ignore if glut device is not used
   if (ctrlDeviceActive(CTRL_DEVICE_GLUT) == MC_FALSE)
@@ -1118,7 +1385,7 @@ u08 doLcdGlutEdit(cmdLine_t *cmdLine)
   kbModeSet(KB_MODE_LINE);
   printf("\n");
 
-  return CMD_RET_OK;
+  return retVal;
 }
 
 //
@@ -1174,31 +1441,29 @@ u08 doLcdGlutHlSet(cmdLine_t *cmdLine)
 u08 doLcdGlutSizeSet(cmdLine_t *cmdLine)
 {
   u16 size = TO_U16(argDouble[0]);
-  u08 retVal = CMD_RET_OK;
+  u08 retVal;
 
-  if (cmdStackIsActive() == MC_TRUE)
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
+  if (retVal != CMD_RET_OK)
+    return retVal;
+
+  // The size argument has a different value range depending on whether it is
+  // used for width or height.
+  if (argChar[0] == 'w' && size < 130)
   {
-    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
-    retVal = CMD_RET_ERROR;
+    printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[1].argName,
+      (int)size);
+    return CMD_RET_ERROR;
   }
-  else
+  else if (argChar[0] == 'h' && size > 1056)
   {
-    // The size argument has a different value range depending on whether it is
-    // used for width or height.
-    if (argChar[0] == 'w' && size < 130)
-    {
-      printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[1].argName,
-        (int)size);
-      return CMD_RET_ERROR;
-    }
-    else if (argChar[0] == 'h' && size > 1056)
-    {
-      printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[1].argName,
-        (int)size);
-      return CMD_RET_ERROR;
-    }
-    ctrlLcdGlutSizeSet(argChar[0], size);
+    printf("%s? invalid: %d\n", cmdLine->cmdCommand->cmdArg[1].argName,
+      (int)size);
+    return CMD_RET_ERROR;
   }
+  ctrlLcdGlutSizeSet(argChar[0], size);
 
   return retVal;
 }
@@ -1378,11 +1643,11 @@ u08 doLcdYCursorSet(cmdLine_t *cmdLine)
 u08 doMonochron(cmdLine_t *cmdLine)
 {
   u08 myBacklight = 16;
-  u08 startWait = MC_FALSE;
+  u08 startMode = MC_FALSE;
   u08 myKbMode = KB_MODE_LINE;
 
   // Get the start mode
-  startWait = emuStartModeGet(argChar[0]);
+  startMode = emuStartModeGet(argChar[0]);
 
   // Switch to keyboard scan mode if needed
   myKbMode = kbModeGet();
@@ -1413,13 +1678,13 @@ u08 doMonochron(cmdLine_t *cmdLine)
   ctrlLcdFlush();
 
   // Init stub event handler used in Monochron
-  stubEventInit(startWait, MC_TRUE, EMU_MONOCHRON);
+  stubEventInit(startMode, MC_TRUE, EMU_MONOCHRON);
 
   // Start Monochron and witness the magic :-)
   monoMain();
 
-  // We're done. Cleanup stub event handler and kill/reset alarm (if needed).
-  stubEventCleanup();
+  // We're done. Reset stub event handler and kill/reset alarm (if needed).
+  stubEventReset();
   alarmSoundReset();
 
   // Restore mchron clock pool, alarm, foreground/background color and
@@ -1448,12 +1713,12 @@ u08 doMonochron(cmdLine_t *cmdLine)
 u08 doMonoConfig(cmdLine_t *cmdLine)
 {
   u08 myBacklight = 16;
-  u08 startWait = MC_FALSE;
+  u08 startMode = MC_FALSE;
   u08 restart = MC_FALSE;
   u08 myKbMode = KB_MODE_LINE;
 
   // Get the start mode and the option to restart upon exiting the menu
-  startWait = emuStartModeGet(argChar[0]);
+  startMode = emuStartModeGet(argChar[0]);
   restart = TO_U08(argDouble[1]);
 
   // Switch to keyboard scan mode if needed
@@ -1487,7 +1752,7 @@ u08 doMonoConfig(cmdLine_t *cmdLine)
   almTimeGet(almAlarmSelect, &mcAlarmH, &mcAlarmM);
 
   // Init stub event handler used in Monochron
-  stubEventInit(startWait, TO_U08(argDouble[0]), EMU_MONOCHRON);
+  stubEventInit(startMode, TO_U08(argDouble[0]), EMU_MONOCHRON);
 
   // (Re)start Monochron configuration menu pages until a quit keypress
   // occurred or a regular menu exit is considered as final
@@ -1502,14 +1767,14 @@ u08 doMonoConfig(cmdLine_t *cmdLine)
     else if (restart == MC_FALSE)
     {
       // We may not restart and we got here due to a regular menu exit or a
-      // keypress timeout. The next mchron prompt must start on a newline.
-      printf("\n");
+      // keypress timeout. Remove the stub event prompt.
+      printf("\r%s\r", EMU_KEYS_CLEAR);
       break;
     }
   }
 
-  // We're done. Cleanup event handler and kill/reset alarm (if needed).
-  stubEventCleanup();
+  // We're done. Reset event handler and kill/reset alarm (if needed).
+  stubEventReset();
   alarmSoundReset();
 
   // Restore clock pool, alarm, foreground/background color and backlight as
@@ -1862,23 +2127,11 @@ u08 doPaintSetFg(cmdLine_t *cmdLine)
 u08 doRepeatBreak(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlHead =
-    cmdLine->cmdPcCtrlChild->cmdLineGrpHead->cmdPcCtrlChild;
-  cmdPcCtrl_t *cmdPcCtrlClean = cmdLine->cmdPcCtrlChild->prev;
 
-  // Since we need to break the repeat, deactivate its associated repeat-for
-  cmdPcCtrlHead->active = MC_FALSE;
-
-  // Deactivate any preceding active block in-between this break and associated
-  // repeat-for
-  while (cmdPcCtrlClean != cmdPcCtrlHead)
-  {
-    cmdPcCtrlClean->active = MC_FALSE;
-    cmdPcCtrlClean = cmdPcCtrlClean->prev;
-  }
-
-  // Then jump to associated repeat-next (and from there exit loop)
-  *cmdProgCounter = cmdLine->cmdPcCtrlChild->cmdLineGrpTail;
+  // Reset pcb action and jump to repeat-next to exit the repeat loop
+  cmdLine->pcbAction = PCB_ACT_DEFAULT;
+  *cmdProgCounter = cmdLine->pcbGrpTail;
+  (*cmdProgCounter)->pcbAction = PCB_ACT_ALT_1;
 
   return CMD_RET_OK;
 }
@@ -1891,20 +2144,10 @@ u08 doRepeatBreak(cmdLine_t **cmdProgCounter)
 u08 doRepeatCont(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlHead =
-    cmdLine->cmdPcCtrlChild->cmdLineGrpHead->cmdPcCtrlChild;
-  cmdPcCtrl_t *cmdPcCtrlClean = cmdLine->cmdPcCtrlChild->prev;
 
-  // Deactivate any preceding active block in-between this continue and
-  // associated repeat-for
-  while (cmdPcCtrlClean != cmdPcCtrlHead)
-  {
-    cmdPcCtrlClean->active = MC_FALSE;
-    cmdPcCtrlClean = cmdPcCtrlClean->prev;
-  }
-
-  // Then jump to associated repeat-next (and from there continue loop)
-  *cmdProgCounter = cmdLine->cmdPcCtrlChild->cmdLineGrpTail;
+  // Reset pcb action and jump to repeat-next to continue the repeat loop
+  cmdLine->pcbAction = PCB_ACT_DEFAULT;
+  *cmdProgCounter = cmdLine->pcbGrpTail;
 
   return CMD_RET_OK;
 }
@@ -1917,24 +2160,24 @@ u08 doRepeatCont(cmdLine_t **cmdProgCounter)
 u08 doRepeatFor(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdPcCtrl_t *cmdPcCtrlChild = cmdLine->cmdPcCtrlChild;
   cmdArg_t *cmdArg = cmdLine->cmdCommand->cmdArg;
 
-  // Execute the repeat logic
-  if (cmdPcCtrlChild->active == MC_FALSE)
+  // Execute the repeat logic depending on the pcb action
+  if (cmdLine->pcbAction == PCB_ACT_DEFAULT)
   {
-    // First entry for this loop. Make the repeat active, then evaluate the
-    // repeat init and the repeat condition expressions.
-    cmdPcCtrlChild->active = MC_TRUE;
+    // First entry for this loop. Evaluate the repeat init and the repeat
+    // condition expressions.
     if (exprEvaluate(cmdArg[0].argName, &cmdLine->argInfo[0]) != CMD_RET_OK)
       return CMD_RET_ERROR;
     if (exprEvaluate(cmdArg[1].argName, &cmdLine->argInfo[1]) != CMD_RET_OK)
       return CMD_RET_ERROR;
   }
-  else
+  else // PCB_ACT_ALT_1
   {
-    // For a next repeat loop first evaluate the repeat post expression and
-    // then re-evaluate the repeat condition expression
+    // For a next repeat loop reset the pcb action, then first evaluate the
+    // repeat post expression and then re-evaluate the repeat condition
+    // expression
+    cmdLine->pcbAction = PCB_ACT_DEFAULT;
     if (exprEvaluate(cmdArg[2].argName, &cmdLine->argInfo[2]) != CMD_RET_OK)
       return CMD_RET_ERROR;
     if (exprEvaluate(cmdArg[1].argName, &cmdLine->argInfo[1]) != CMD_RET_OK)
@@ -1949,9 +2192,9 @@ u08 doRepeatFor(cmdLine_t **cmdProgCounter)
   }
   else
   {
-    // End of loop; make it inactive and jump to its associated repeat-next
-    cmdPcCtrlChild->active = MC_FALSE;
-    *cmdProgCounter = cmdPcCtrlChild->cmdLineGrpTail;
+    // End of loop; jump to its associated repeat-next to exit from there
+    *cmdProgCounter = cmdLine->pcbGrpTail;
+    (*cmdProgCounter)->pcbAction = PCB_ACT_ALT_1;
   }
 
   return CMD_RET_OK;
@@ -1965,19 +2208,18 @@ u08 doRepeatFor(cmdLine_t **cmdProgCounter)
 u08 doRepeatNext(cmdLine_t **cmdProgCounter)
 {
   cmdLine_t *cmdLine = *cmdProgCounter;
-  cmdLine_t *cmdLineHead = cmdLine->cmdPcCtrlParent->cmdLineGrpHead;
-  cmdPcCtrl_t *cmdPcCtrlHead = cmdLineHead->cmdPcCtrlChild;
 
-  // Decide where to go depending on whether the loop is still active
-  if (cmdPcCtrlHead->active == MC_TRUE)
+  // Decide where to go depending on the pcb action
+  if (cmdLine->pcbAction == PCB_ACT_DEFAULT)
   {
-    // Jump back to the associated repeat-for and evaluate there whether the
-    // repeat loop will continue
-    *cmdProgCounter = cmdLineHead;
+    // Jump back to repeat-for to continue loop
+    *cmdProgCounter = cmdLine->pcbGrpHead;
+    (*cmdProgCounter)->pcbAction = PCB_ACT_ALT_1;
   }
-  else
+  else // PCB_ACT_ALT_1
   {
-    // End of repeat loop; continue at next line
+    // Reset pcb action and continue on next line to exit loop
+    cmdLine->pcbAction = PCB_ACT_DEFAULT;
     *cmdProgCounter = cmdLine->next;
   }
 
@@ -2028,16 +2270,17 @@ u08 doStatsReset(cmdLine_t *cmdLine)
 //
 u08 doStatsStack(cmdLine_t *cmdLine)
 {
-  if (cmdStackIsActive() == MC_TRUE)
-  {
-    printf("%s: use only at command prompt\n", cmdLine->cmdCommand->cmdName);
-    return CMD_RET_ERROR;
-  }
+  u08 retVal;
+
+  // Check if we run from the command line prompt
+  retVal = emuEnvirCheck(cmdLine->cmdCommand->cmdName, MC_TRUE, MC_FALSE,
+    MC_FALSE, MC_FALSE);
 
   // Enable/disable printing stack command runtime statistics
-  cmdStackPrintSet(TO_U08(argDouble[0]));
+  if (retVal == CMD_RET_OK)
+    cmdStackStatsSet(TO_U08(argDouble[0]));
 
-  return CMD_RET_OK;
+  return retVal;
 }
 
 //
@@ -2421,14 +2664,14 @@ u08 doWait(cmdLine_t *cmdLine)
 
   // If the stack is active disable its 100 msec keyboard scan timer to make
   // it not interfere with different wait timer mechanisms below
-  if (cmdStackIsActive() == MC_TRUE)
-     cmdStackTimerSet(LIST_TIMER_DISARM);
+  if (cmdStackActiveGet() == MC_TRUE)
+    cmdStackTimerSet(LIST_TIMER_DISARM);
 
   delay = TO_INT(argDouble[0]);
   if (delay == 0)
   {
     // Wait for keypress
-    if (cmdStackIsActive() == MC_FALSE)
+    if (cmdStackActiveGet() == MC_FALSE)
       ch = waitKeypress(MC_FALSE);
     else
       ch = waitKeypress(MC_TRUE);
@@ -2441,14 +2684,14 @@ u08 doWait(cmdLine_t *cmdLine)
 
   // If the stack is active re-enable its 100 msec timer for subsequent list
   // commands
-  if (cmdStackIsActive() == MC_TRUE)
-     cmdStackTimerSet(LIST_TIMER_ARM);
+  if (cmdStackActiveGet() == MC_TRUE)
+    cmdStackTimerSet(LIST_TIMER_ARM);
 
   // A 'q' will interrupt any command execution
-  if (ch == 'q' && cmdStackIsActive() == MC_TRUE)
+  if (ch == 'q' && cmdStackActiveGet() == MC_TRUE)
   {
     printf("quit\n");
-    return CMD_RET_INTERRUPT;
+    return CMD_RET_INTR_CMD;
   }
 
   return CMD_RET_OK;
@@ -2466,8 +2709,8 @@ u08 doWaitTimerExpiry(cmdLine_t *cmdLine)
 
   // If the stack is active disable its 100 msec keyboard scan timer to make
   // it not interfere with different wait timer mechanisms below
-  if (cmdStackIsActive() == MC_TRUE)
-     cmdStackTimerSet(LIST_TIMER_DISARM);
+  if (cmdStackActiveGet() == MC_TRUE)
+    cmdStackTimerSet(LIST_TIMER_DISARM);
 
   // Wait for timer expiry (if not already expired)
   delay = TO_INT(argDouble[0]);
@@ -2475,14 +2718,14 @@ u08 doWaitTimerExpiry(cmdLine_t *cmdLine)
 
   // If the stack is active re-enable its 100 msec timer for subsequent list
   // commands
-  if (cmdStackIsActive() == MC_TRUE)
-     cmdStackTimerSet(LIST_TIMER_ARM);
+  if (cmdStackActiveGet() == MC_TRUE)
+    cmdStackTimerSet(LIST_TIMER_ARM);
 
   // A 'q' will interrupt any command execution
-  if (ch == 'q' && cmdStackIsActive() == MC_TRUE)
+  if (ch == 'q' && cmdStackActiveGet() == MC_TRUE)
   {
     printf("quit\n");
-    return CMD_RET_INTERRUPT;
+    return CMD_RET_INTR_CMD;
   }
 
   return CMD_RET_OK;

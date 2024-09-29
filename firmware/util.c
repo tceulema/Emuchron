@@ -77,7 +77,11 @@ void ROM_putstring(const char *str, uint8_t nl)
 {
   if (DEBUGGING == 1 || DEBUGI2C == 1)
   {
+#ifdef EMULIN
+    size_t i;
+#else
     uint8_t i;
+#endif
 
     for (i = 0; pgm_read_byte(&str[i]); i++)
       uart_putchar(pgm_read_byte(&str[i]));

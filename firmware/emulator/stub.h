@@ -23,6 +23,10 @@
 #define EMU_CLOCK		0	// Single clock emulator
 #define EMU_MONOCHRON		1	// Monochron application emulator
 
+// String to erase the stub event keypress prompt
+#define EMU_KEYS_CLEAR		\
+  "                                                                           "
+
 // Eeprom stubs
 uint8_t eeprom_read_byte(uint8_t *eprombyte);
 void eeprom_write_byte(uint8_t *eprombyte, uint8_t value);
@@ -50,10 +54,10 @@ void stubUartPutChar(void);
 // Below is emulator oriented stub functionality
 
 // Monochron emulator stubs
-void stubEventCleanup(void);
 char stubEventGet(u08 stats);
 void stubEventInit(u08 startWait, u08 cfgTimeout, u08 emuType);
 u08 stubEventQuitGet(void);
+void stubEventReset(void);
 
 // Logfile stubs
 void stubLogfileClose(void);

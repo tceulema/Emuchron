@@ -19,5 +19,9 @@ void cmdArgCleanup(cmdLine_t *cmdLine);
 u08 cmdArgInit(char **input, cmdLine_t *cmdLine);
 u08 cmdArgPublish(cmdLine_t *cmdLine);
 u08 cmdArgRead(char *input, cmdLine_t *cmdLine);
-u08 cmdArgValuePrint(double value, u08 detail, u08 forceNewline);
+
+// mchron command line breakpoint argument scanning functions
+void cmdArgBpCleanup(cmdLine_t *cmdline);
+u08 cmdArgBpExecute(argInfo_t *argInfoBp);
+void cmdArgBpCreate(char *condition, cmdLine_t *cmdline);
 #endif

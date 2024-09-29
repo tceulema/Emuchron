@@ -380,8 +380,8 @@ static void lcdGlutKeyboard(unsigned char key, int x, int y)
 
   // Do not blink at every keyboard hit. When someone press-holds a key the
   // blinking will prevent regular updates from being drawn. Not good.
-  // Only blink when a certain time has elapsed since the last blink or when
-  // a consecutive number of previous keypresses were ignored for blinking.
+  // Only blink when a certain time has elapsed since the last blink or when a
+  // consecutive number of previous keypresses were ignored for blinking.
   gettimeofday(&tvNow, NULL);
   timeDiff = TIMEDIFF_USEC(tvNow, tvWinKbLastHit);
   if (timeDiff / 1000 <= GLUT_THREAD_SLEEP_MS + 3)
@@ -496,8 +496,8 @@ static void *lcdGlutMain(void *ptr)
     lcdGlutSleep(GLUT_THREAD_SLEEP_MS);
   }
 
-  // We are about to exit the glut thread. Disable the close callback as it
-  // may get triggered upon exit. Why disable? In combination with an ncurses
+  // We are about to exit the glut thread. Disable the close callback as it may
+  // get triggered upon exit. Why disable? In combination with an ncurses
   // device and the readline library it may cause a race condition in readline
   // library cleanup, potentially leading to an mchron coredump.
   glutCloseFunc(NULL);
@@ -526,9 +526,9 @@ static void lcdGlutMouse(int button, int state, int x, int y)
     struct timeval tvNow;
     suseconds_t timeDiff;
 
-    // Compare timestamp of now and last left click. If it is less than the
-    // max interval value we have a double-click event. If more, sync last
-    // click time with current time for another attempt.
+    // Compare timestamp of now and last left click. If it is less than the max
+    // interval value we have a double-click event. If more, sync last click
+    // time with current time for another attempt.
     gettimeofday(&tvNow, NULL);
     timeDiff = TIMEDIFF_USEC(tvNow, tvWinLeftMouseLastHit);
     if (timeDiff / 1000 < GLUT_DBLCLICK_MS)
@@ -726,15 +726,15 @@ static void lcdGlutMsgQueueProcess(void)
       // window aspect ratio.
       if (lcdGlutMsg->arg1 == 'w')
       {
-        // Set width and get the height using the window aspect ratio
-        // that is upper rounded
+        // Set width and get the height using the window aspect ratio that is
+        // upper rounded
         winReqWidth = (lcdGlutMsg->arg2 << 8) + lcdGlutMsg->arg3;
         winReqHeight = (int)ceil((double)winReqWidth / GLUT_ASPECTRATIO);
       }
       else
       {
-        // Set height and get the width using the window aspect ratio
-        // that is upper rounded
+        // Set height and get the width using the window aspect ratio that is
+        // upper rounded
         winReqHeight = (lcdGlutMsg->arg2 << 8) + lcdGlutMsg->arg3;
         winReqWidth = (int)ceil((double)winReqHeight * GLUT_ASPECTRATIO);
       }
@@ -1340,8 +1340,8 @@ static void lcdGlutRenderSize(float arX, float arY, int winWidth,
   // Draw window pixel size info after resizing the window
   if (winShowWinSize == MC_TRUE)
   {
-    // Get strings for window pixel size and Monochron draw area pixel size
-    // and determine window pixel size in relation to the projection
+    // Get strings for window pixel size and Monochron draw area pixel size and
+    // determine window pixel size in relation to the projection
     size1 = snprintf(sizeInfo1, 14, "%dx%d", winWidth, winHeight);
     size2 = snprintf(sizeInfo2, 14, "(%.0fx%.0f)",
       (float)winWidth * GLCD_XPIXELS / GLUT_XPIXELS / arX,
@@ -1416,8 +1416,8 @@ void lcdGlutReshapeProcess(void)
 
   if (winResize == MC_TRUE)
   {
-    // There has been a glut resize event. Clear it and begin showing
-    // window pixel size info.
+    // There has been a glut resize event. Clear it and begin showing window
+    // pixel size info.
     winResize = MC_FALSE;
     winShowWinSize = MC_TRUE;
     winRedraw = MC_TRUE;
@@ -1481,8 +1481,8 @@ void lcdGlutStatsPrint(void)
   struct timeval tvNow;
   double diffDivider;
 
-  // As this is a multi-threaded interface we need to have exclusive access
-  // to the counters
+  // As this is a multi-threaded interface we need to have exclusive access to
+  // the counters
   pthread_mutex_lock(&mutexStats);
 
   printf("glut   : lcdByteRx=%llu, ", lcdGlutStats.byteReq);
@@ -1522,8 +1522,8 @@ void lcdGlutStatsPrint(void)
 //
 void lcdGlutStatsReset(void)
 {
-  // As this is a multi-threaded interface we need to have exclusive access
-  // to the counters
+  // As this is a multi-threaded interface we need to have exclusive access to
+  // the counters
   pthread_mutex_lock(&mutexStats);
   memset(&lcdGlutStats, 0, sizeof(lcdGlutStats_t));
   gettimeofday(&lcdGlutStats.timeStart, NULL);

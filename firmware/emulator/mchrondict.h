@@ -27,8 +27,8 @@
 #define ARGTYPE(a) \
   #a, a
 
-// This macro returns a program counter control type and its name
-#define PCCTRLTYPE(a) \
+// This macro returns a program counter control block (pcb) type and its name
+#define PCBTYPE(a) \
   #a, a
 
 // This macro returns a regular command handler function and its name
@@ -280,9 +280,37 @@ DOMAIN(domStrSearchPattern, \
 DOMAIN(domNumExpr, \
   DOM_NUM, NULL, 0, 0, "expression");
 
-// Condition expression: info
-DOMAIN(domNumCondition, \
+// Block condition expression: info
+DOMAIN(domNumConditionBlock, \
   DOM_NUM, NULL, 0, 0, "expression determining block execution");
+
+// Stack level: 0..(CMD_STACK_DEPTH_MAX - 1)
+DOMAIN(domNumStackLevel, \
+  DOM_NUM_RANGE, NULL, 0, 7, "script execution stack level");
+
+// Script line number: 1..10000
+DOMAIN(domNumLineNumber, \
+  DOM_NUM_RANGE, NULL, 1, 1E4, "script line number");
+
+// Script program counter line number: 0..10000
+DOMAIN(domNumPcLineNumber, \
+  DOM_NUM_RANGE, NULL, 0, 1E4, "script line number, 0 = <eof>");
+
+// Script line number range: -1..10000
+DOMAIN(domNumLineRange, \
+  DOM_NUM_RANGE, NULL, -1, 1E4, "script line number range, -1 = full range");
+
+// Debug breakpoint number or all: 1..1000, 0 is all
+DOMAIN(domNumBreakpoint, \
+  DOM_NUM_RANGE, NULL, 0, 1E3, "breakpoint number, 0 = all");
+
+// Debug breakpoint condition expression: Info
+DOMAIN(domStrConditionBp, \
+  DOM_STRING, NULL, 0, 0, "expression determining execution halt");
+
+// Breakpoint condition expression: info
+DOMAIN(domNumConditionBp, \
+  DOM_NUM, NULL, 0, 0, "expression determining execution halt");
 
 // Text: info
 DOMAIN(domStrText, \
@@ -330,7 +358,31 @@ cmdArg_t argClockFeed[] =
 cmdArg_t argClockSelect[] =
 { { ARGTYPE(ARG_NUM),    "clock",        &domNumClock } };
 
-// Command 'e'
+// Command 'd*'
+// Argument profile for breakpoint add
+cmdArg_t argDbBpAdd[] =
+{ { ARGTYPE(ARG_NUM),    "stacklevel",   &domNumStackLevel },
+  { ARGTYPE(ARG_NUM),    "linenumber",   &domNumLineNumber },
+  { ARGTYPE(ARG_STRING), "condition",    &domStrConditionBp } };
+// Argument profile for breakpoint delete
+cmdArg_t argDbBpDelete[] =
+{ { ARGTYPE(ARG_NUM),    "stacklevel",   &domNumStackLevel },
+  { ARGTYPE(ARG_NUM),    "breakpoint",   &domNumBreakpoint } };
+// Argument profile for conditional debug breakpoint
+cmdArg_t argDbBpCond[] =
+{ { ARGTYPE(ARG_NUM),    "condition",    &domNumConditionBp } };
+// Argument profile for setting script program counter
+cmdArg_t argDbPcSet[] =
+{ { ARGTYPE(ARG_NUM),    "linenumber",   &domNumPcLineNumber } };
+// Argument profile for activating script debugging
+cmdArg_t argDbSet[] =
+{ { ARGTYPE(ARG_NUM),    "enable",       &domNumOffOn } };
+
+// Command 'e*'
+// Argument profile for printing stack level source list range
+cmdArg_t argExecListPrint[] =
+{ { ARGTYPE(ARG_NUM),    "stacklevel",   &domNumStackLevel },
+  { ARGTYPE(ARG_NUM),    "range",        &domNumLineRange } };
 // Argument profile for execute command file
 cmdArg_t argExecute[] =
 { { ARGTYPE(ARG_CHAR),   "echo",         &domCharEcho },
@@ -394,10 +446,10 @@ cmdArg_t argHelpMsg[] =
 // Command 'i*'
 // Argument profile for if-else-if
 cmdArg_t argIfElseIf[] =
-{ { ARGTYPE(ARG_NUM),    "condition",    &domNumCondition } };
+{ { ARGTYPE(ARG_NUM),    "condition",    &domNumConditionBlock } };
 // Argument profile for if
 cmdArg_t argIf[] =
-{ { ARGTYPE(ARG_NUM),    "condition",    &domNumCondition } };
+{ { ARGTYPE(ARG_NUM),    "condition",    &domNumConditionBlock } };
 
 // Command 'l*'
 // Argument profile for set active lcd controller
@@ -442,7 +494,7 @@ cmdArg_t argLcdXCursorSet[] =
 cmdArg_t argLcdYCursorSet[] =
 { { ARGTYPE(ARG_NUM),    "yline",        &domNumCtrlPageY } };
 
-// Command 'm'
+// Command 'm*'
 // Argument profile for Monochron application emulator
 cmdArg_t argMonochron[] =
 { { ARGTYPE(ARG_CHAR),   "startmode",    &domCharMode } };
@@ -540,7 +592,7 @@ cmdArg_t argPaintSetColor[] =
 // Argument profile for repeat for
 cmdArg_t argRepeatFor[] =
 { { ARGTYPE(ARG_NUM),    "init",         &domNumInit },
-  { ARGTYPE(ARG_NUM),    "condition",    &domNumCondition },
+  { ARGTYPE(ARG_NUM),    "condition",    &domNumConditionBlock },
   { ARGTYPE(ARG_NUM),    "post",         &domNumPost } };
 
 // Command 's*'
@@ -587,7 +639,7 @@ cmdArg_t argVarReset[] =
 cmdArg_t argVarSet[] =
 { { ARGTYPE(ARG_NUM),    "assignment",   &domNumAssign } };
 
-// Command 'w'
+// Command 'w*'
 // Argument profile for wait
 cmdArg_t argWait[] =
 { { ARGTYPE(ARG_NUM),    "delay",        &domNumDelay } };
@@ -595,7 +647,7 @@ cmdArg_t argWait[] =
 cmdArg_t argWaitTimerExpiry[] =
 { { ARGTYPE(ARG_NUM),    "expiry",       &domNumExpiry } };
 
-// Command 'x'
+// Command 'x*'
 // No additional profiles are needed
 
 //
@@ -610,135 +662,151 @@ cmdArg_t argWaitTimerExpiry[] =
 
 // All commands for command group '#' (comments)
 cmdCommand_t cmdGroupComments[] =
-{ { "#",   PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argComments),        CMDHANDLER(doComments),        "comments" } };
+{ { "#",   PCBTYPE(PCB_CONTINUE),    MC_FALSE, CMDARGS(argComments),        CMDHANDLER(doComments),        "comments" } };
 
 // All commands for command group 'b' (beep)
 cmdCommand_t cmdGroupBeep[] =
-{ { "b",   PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argBeep),            CMDHANDLER(doBeep),            "play beep" } };
+{ { "b",   PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argBeep),            CMDHANDLER(doBeep),            "play beep" } };
 
 // All commands for command group 'c' (clock)
 cmdCommand_t cmdGroupClock[] =
-{ { "cf",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argClockFeed),       CMDHANDLER(doClockFeed),       "feed clock time/keyboard events" },
-  { "cp",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doClockPrint),      "print available clocks" },
-  { "cs",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argClockSelect),     CMDHANDLER(doClockSelect),     "select clock" } };
+{ { "cf",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argClockFeed),       CMDHANDLER(doClockFeed),       "feed clock time/keyboard events" },
+  { "cp",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doClockPrint),      "print available clocks" },
+  { "cs",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argClockSelect),     CMDHANDLER(doClockSelect),     "select clock" } };
+
+// All commands for command group 'd' (debug)
+cmdCommand_t cmdGroupDebug[] =
+{ { "dba", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbBpAdd),         CMDHANDLER(doDbBpAdd),         "add/update breakpoint" },
+  { "dbd", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbBpDelete),      CMDHANDLER(doDbBpDelete),      "delete breakpoint" },
+  { "dbp", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doDbBpPrint),       "print breakpoints" },
+  { "dc",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doDbContinue),      "debug continue" },
+  { "dcc", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbBpCond),        CMDHANDLER(doDbBpCond),        "check conditional breakpoint" },
+  { "di",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doDbStepIn),        "debug step in" },
+  { "dn",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doDbStepNext),      "debug step next" },
+  { "do",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doDbStepOut),       "debug step out" },
+  { "dps", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbPcSet),         CMDHANDLER(doDbPcSet),         "set top stack program counter" },
+  { "dss", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbSet),           CMDHANDLER(doDbSet),           "set script debugging" } };
 
 // All commands for command group 'e' (execute)
 cmdCommand_t cmdGroupExecute[] =
-{ { "e",   PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argExecute),         CMDHANDLER(doExecFile),        "execute commands from file" },
-  { "er",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doExecResume),      "resume interrupted execution" } };
+{ { "e",   PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argExecute),         CMDHANDLER(doExecFile),        "execute commands from file" },
+  { "elp", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argExecListPrint),   CMDHANDLER(doExecListPrint),   "print source list" },
+  { "elr", PCBTYPE(PCB_RETURN),      MC_TRUE,  CMDARGS(NULL),               PCCTRLHANDLER(doExecReturn),   "return from current stack level" },
+  { "er",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doExecResume),      "resume interrupted execution" },
+  { "esp", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doExecStackPrint),  "print command stack" } };
 
 // All commands for command group 'g' (graphics buffer)
 cmdCommand_t cmdGroupGraphics[] =
-{ { "gbc", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argGrCopy),          CMDHANDLER(doGrCopy),          "copy graphics buffer" },
-  { "gbi", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argGrInfo),          CMDHANDLER(doGrInfo),          "show graphics buffer info" },
-  { "gbr", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argGrReset),         CMDHANDLER(doGrReset),         "reset graphics buffer" },
-  { "gbs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argGrSaveFile),      CMDHANDLER(doGrSaveFile),      "save graphics buffer to file" },
-  { "gci", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argGrLoadCtrImg),    CMDHANDLER(doGrLoadCtrImg),    "load controller lcd image data" },
-  { "gf",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argGrLoadFile),      CMDHANDLER(doGrLoadFile),      "load file graphics data" },
-  { "gfi", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argGrLoadFileImg),   CMDHANDLER(doGrLoadFileImg),   "load file image data" },
-  { "gfs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argGrLoadFileSpr),   CMDHANDLER(doGrLoadFileSpr),   "load file sprite data" } };
+{ { "gbc", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argGrCopy),          CMDHANDLER(doGrCopy),          "copy graphics buffer" },
+  { "gbi", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argGrInfo),          CMDHANDLER(doGrInfo),          "show graphics buffer info" },
+  { "gbr", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argGrReset),         CMDHANDLER(doGrReset),         "reset graphics buffer" },
+  { "gbs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argGrSaveFile),      CMDHANDLER(doGrSaveFile),      "save graphics buffer to file" },
+  { "gci", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argGrLoadCtrImg),    CMDHANDLER(doGrLoadCtrImg),    "load controller lcd image data" },
+  { "gf",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argGrLoadFile),      CMDHANDLER(doGrLoadFile),      "load file graphics data" },
+  { "gfi", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argGrLoadFileImg),   CMDHANDLER(doGrLoadFileImg),   "load file image data" },
+  { "gfs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argGrLoadFileSpr),   CMDHANDLER(doGrLoadFileSpr),   "load file sprite data" } };
 
 // All commands for command group 'h' (help)
 cmdCommand_t cmdGroupHelp[] =
-{ { "h",   PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doHelp),            "show help" },
-  { "hc",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argHelpCmd),         CMDHANDLER(doHelpCmd),         "search command" },
-  { "he",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argHelpExpr),        CMDHANDLER(doHelpExpr),        "show expression result" },
-  { "hm",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argHelpMsg),         CMDHANDLER(doHelpMsg),         "show help message" } };
+{ { "h",   PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doHelp),            "show help" },
+  { "hc",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argHelpCmd),         CMDHANDLER(doHelpCmd),         "search command" },
+  { "he",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argHelpExpr),        CMDHANDLER(doHelpExpr),        "show expression result" },
+  { "hm",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argHelpMsg),         CMDHANDLER(doHelpMsg),         "show help message" } };
 
 // All commands for command group 'i' (if)
 cmdCommand_t cmdGroupIf[] =
-{ { "iei", PCCTRLTYPE(PC_IF_ELSE_IF),  CMDARGS(argIfElseIf),        PCCTRLHANDLER(doIfElseIf),     "if else if" },
-  { "iel", PCCTRLTYPE(PC_IF_ELSE),     CMDARGS(NULL),               PCCTRLHANDLER(doIfElse),       "if else" },
-  { "ien", PCCTRLTYPE(PC_IF_END),      CMDARGS(NULL),               PCCTRLHANDLER(doIfEnd),        "if end" },
-  { "iif", PCCTRLTYPE(PC_IF),          CMDARGS(argIf),              PCCTRLHANDLER(doIf),           "if" } };
+{ { "iei", PCBTYPE(PCB_IF_ELSE_IF),  MC_TRUE,  CMDARGS(argIfElseIf),        PCCTRLHANDLER(doIfElseIf),     "if else if" },
+  { "iel", PCBTYPE(PCB_IF_ELSE),     MC_TRUE,  CMDARGS(NULL),               PCCTRLHANDLER(doIfElse),       "if else" },
+  { "ien", PCBTYPE(PCB_IF_END),      MC_TRUE,  CMDARGS(NULL),               PCCTRLHANDLER(doIfEnd),        "if end" },
+  { "iif", PCBTYPE(PCB_IF),          MC_TRUE,  CMDARGS(argIf),              PCCTRLHANDLER(doIf),           "if" } };
 
 // All commands for command group 'l' (lcd)
 cmdCommand_t cmdGroupLcd[] =
-{ { "lbs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdBacklightSet), CMDHANDLER(doLcdBacklightSet), "set lcd backlight brightness" },
-  { "lcr", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdCursorReset),  "reset lcd cursor administration" },
-  { "lcs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdActCtrlSet),   CMDHANDLER(doLcdActCtrlSet),   "set active lcd controller" },
-  { "lds", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdDisplaySet),   CMDHANDLER(doLcdDisplaySet),   "switch lcd controller display on/off" },
-  { "le",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdErase),        "erase lcd display" },
-  { "lge", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdGlutEdit),     "edit glut lcd display" },
-  { "lgg", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdGlutGrSet),    CMDHANDLER(doLcdGlutGrSet),    "set glut graphics options" },
-  { "lgs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdGlutSizeSet),  CMDHANDLER(doLcdGlutSizeSet),  "set glut window size" },
-  { "lhr", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdGlutHlReset),  "reset glut glcd pixel highlight" },
-  { "lhs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdGlutHlSet),    CMDHANDLER(doLcdGlutHlSet),    "set glut glcd pixel highlight" },
-  { "li",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdInverse),      "inverse lcd display and draw colors" },
-  { "lng", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdNcurGrSet),    CMDHANDLER(doLcdNcurGrSet),    "set ncurses graphics options" },
-  { "lp",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doLcdPrint),        "print lcd controller state/registers" },
-  { "lr",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdRead),         CMDHANDLER(doLcdRead),         "read data from active lcd controller" },
-  { "lss", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdStartLineSet), CMDHANDLER(doLcdStartLineSet), "set lcd controller start line" },
-  { "lw",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdWrite),        CMDHANDLER(doLcdWrite),        "write data to active lcd controller" },
-  { "lxs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdXCursorSet),   CMDHANDLER(doLcdXCursorSet),   "set active lcd controller x cursor" },
-  { "lys", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argLcdYCursorSet),   CMDHANDLER(doLcdYCursorSet),   "set active lcd controller y cursor" } };
+{ { "lbs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdBacklightSet), CMDHANDLER(doLcdBacklightSet), "set lcd backlight brightness" },
+  { "lcr", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doLcdCursorReset),  "reset lcd cursor administration" },
+  { "lcs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdActCtrlSet),   CMDHANDLER(doLcdActCtrlSet),   "set active lcd controller" },
+  { "lds", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdDisplaySet),   CMDHANDLER(doLcdDisplaySet),   "switch lcd controller display on/off" },
+  { "le",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doLcdErase),        "erase lcd display" },
+  { "lge", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doLcdGlutEdit),     "edit glut lcd display" },
+  { "lgg", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdGlutGrSet),    CMDHANDLER(doLcdGlutGrSet),    "set glut graphics options" },
+  { "lgs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdGlutSizeSet),  CMDHANDLER(doLcdGlutSizeSet),  "set glut window size" },
+  { "lhr", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doLcdGlutHlReset),  "reset glut glcd pixel highlight" },
+  { "lhs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdGlutHlSet),    CMDHANDLER(doLcdGlutHlSet),    "set glut glcd pixel highlight" },
+  { "li",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doLcdInverse),      "inverse lcd display and draw colors" },
+  { "lng", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdNcurGrSet),    CMDHANDLER(doLcdNcurGrSet),    "set ncurses graphics options" },
+  { "lp",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doLcdPrint),        "print lcd controller state/registers" },
+  { "lr",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdRead),         CMDHANDLER(doLcdRead),         "read data from active lcd controller" },
+  { "lss", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdStartLineSet), CMDHANDLER(doLcdStartLineSet), "set lcd controller start line" },
+  { "lw",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdWrite),        CMDHANDLER(doLcdWrite),        "write data to active lcd controller" },
+  { "lxs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdXCursorSet),   CMDHANDLER(doLcdXCursorSet),   "set active lcd controller x cursor" },
+  { "lys", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argLcdYCursorSet),   CMDHANDLER(doLcdYCursorSet),   "set active lcd controller y cursor" } };
 
 // All commands for command group 'm' (monochron)
 cmdCommand_t cmdGroupMonochron[] =
-{ { "m",   PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argMonochron),       CMDHANDLER(doMonochron),       "run monochron application" },
-  { "mc",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argMonoConfig),      CMDHANDLER(doMonoConfig),      "run monochron config" },
-  { "mep", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doEepromPrint),     "print monochron eeprom settings" },
-  { "mer", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doEepromReset),     "reset monochron eeprom" },
-  { "mew", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argEepromWrite),     CMDHANDLER(doEepromWrite),     "write data to monochron eeprom" } };
+{ { "m",   PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argMonochron),       CMDHANDLER(doMonochron),       "run monochron application" },
+  { "mc",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argMonoConfig),      CMDHANDLER(doMonoConfig),      "run monochron config" },
+  { "mep", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doEepromPrint),     "print monochron eeprom settings" },
+  { "mer", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doEepromReset),     "reset monochron eeprom" },
+  { "mew", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argEepromWrite),     CMDHANDLER(doEepromWrite),     "write data to monochron eeprom" } };
 
 // All commands for command group 'p' (paint)
 cmdCommand_t cmdGroupPaint[] =
-{ { "pa",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintAscii),      CMDHANDLER(doPaintAscii),      "paint ascii" },
-  { "pb",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintBuffer),     CMDHANDLER(doPaintBuffer),     "paint buffer" },
-  { "pbi", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintBufferImg),  CMDHANDLER(doPaintBufferImg),  "paint buffer image" },
-  { "pbs", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintBufferSpr),  CMDHANDLER(doPaintBufferSpr),  "paint buffer sprite" },
-  { "pc",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintCircle),     CMDHANDLER(doPaintCircle),     "paint circle" },
-  { "pcf", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintCircleFill), CMDHANDLER(doPaintCircleFill), "paint filled circle" },
-  { "pd",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintDot),        CMDHANDLER(doPaintDot),        "paint dot" },
-  { "pl",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintLine),       CMDHANDLER(doPaintLine),       "paint line" },
-  { "pn",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintNumber),     CMDHANDLER(doPaintNumber),     "paint number" },
-  { "pr",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintRect),       CMDHANDLER(doPaintRect),       "paint rectangle" },
-  { "prf", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintRectFill),   CMDHANDLER(doPaintRectFill),   "paint filled rectangle" },
-  { "ps",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argPaintSetColor),   CMDHANDLER(doPaintSetColor),   "set draw color" },
-  { "psb", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doPaintSetBg),      "set draw color to background color" },
-  { "psf", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doPaintSetFg),      "set draw color to foreground color" } };
+{ { "pa",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintAscii),      CMDHANDLER(doPaintAscii),      "paint ascii" },
+  { "pb",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintBuffer),     CMDHANDLER(doPaintBuffer),     "paint buffer" },
+  { "pbi", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintBufferImg),  CMDHANDLER(doPaintBufferImg),  "paint buffer image" },
+  { "pbs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintBufferSpr),  CMDHANDLER(doPaintBufferSpr),  "paint buffer sprite" },
+  { "pc",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintCircle),     CMDHANDLER(doPaintCircle),     "paint circle" },
+  { "pcf", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintCircleFill), CMDHANDLER(doPaintCircleFill), "paint filled circle" },
+  { "pd",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintDot),        CMDHANDLER(doPaintDot),        "paint dot" },
+  { "pl",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintLine),       CMDHANDLER(doPaintLine),       "paint line" },
+  { "pn",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintNumber),     CMDHANDLER(doPaintNumber),     "paint number" },
+  { "pr",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintRect),       CMDHANDLER(doPaintRect),       "paint rectangle" },
+  { "prf", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintRectFill),   CMDHANDLER(doPaintRectFill),   "paint filled rectangle" },
+  { "ps",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argPaintSetColor),   CMDHANDLER(doPaintSetColor),   "set draw color" },
+  { "psb", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doPaintSetBg),      "set draw color to background color" },
+  { "psf", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doPaintSetFg),      "set draw color to foreground color" } };
 
 // All commands for command group 'r' (repeat)
 cmdCommand_t cmdGroupRepeat[] =
-{ { "rb",  PCCTRLTYPE(PC_REPEAT_BRK),  CMDARGS(NULL),               PCCTRLHANDLER(doRepeatBreak),  "repeat break" },
-  { "rc",  PCCTRLTYPE(PC_REPEAT_CONT), CMDARGS(NULL),               PCCTRLHANDLER(doRepeatCont),   "repeat continue" },
-  { "rf",  PCCTRLTYPE(PC_REPEAT_FOR),  CMDARGS(argRepeatFor),       PCCTRLHANDLER(doRepeatFor),    "repeat for" },
-  { "rn",  PCCTRLTYPE(PC_REPEAT_NEXT), CMDARGS(NULL),               PCCTRLHANDLER(doRepeatNext),   "repeat next" } };
+{ { "rb",  PCBTYPE(PCB_REPEAT_BRK),  MC_TRUE,  CMDARGS(NULL),               PCCTRLHANDLER(doRepeatBreak),  "repeat break" },
+  { "rc",  PCBTYPE(PCB_REPEAT_CONT), MC_TRUE,  CMDARGS(NULL),               PCCTRLHANDLER(doRepeatCont),   "repeat continue" },
+  { "rf",  PCBTYPE(PCB_REPEAT_FOR),  MC_TRUE,  CMDARGS(argRepeatFor),       PCCTRLHANDLER(doRepeatFor),    "repeat for" },
+  { "rn",  PCBTYPE(PCB_REPEAT_NEXT), MC_TRUE,  CMDARGS(NULL),               PCCTRLHANDLER(doRepeatNext),   "repeat next" } };
 
 // All commands for command group 's' (statistics)
 cmdCommand_t cmdGroupStats[] =
-{ { "sls", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argStatsStack),      CMDHANDLER(doStatsStack),      "set list runtime statistics" },
-  { "sp",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doStatsPrint),      "print application statistics" },
-  { "sr",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doStatsReset),      "reset application statistics" } };
+{ { "sls", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argStatsStack),      CMDHANDLER(doStatsStack),      "set list runtime statistics" },
+  { "sp",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doStatsPrint),      "print application statistics" },
+  { "sr",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doStatsReset),      "reset application statistics" } };
 
 // All commands for command group 't' (time/date/alarm)
 cmdCommand_t cmdGroupTime[] =
-{ { "tap", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argTimeAlarmPos),    CMDHANDLER(doTimeAlarmPos),    "set alarm switch position" },
-  { "tas", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argTimeAlarmSet),    CMDHANDLER(doTimeAlarmSet),    "set alarm time" },
-  { "tat", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimeAlarmToggle), "toggle alarm switch position" },
-  { "tdr", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimeDateReset),   "reset date to system date" },
-  { "tds", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argTimeDateSet),     CMDHANDLER(doTimeDateSet),     "set date" },
-  { "tf",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimeFlush),       "flush time/date to clock" },
-  { "tg",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argTimeGet),         CMDHANDLER(doTimeGet),         "get date/time" },
-  { "tp",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimePrint),       "print time/date/alarm" },
-  { "tr",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doTimeReset),       "reset time to system time" },
-  { "ts",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argTimeSet),         CMDHANDLER(doTimeSet),         "set time" } };
+{ { "tap", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argTimeAlarmPos),    CMDHANDLER(doTimeAlarmPos),    "set alarm switch position" },
+  { "tas", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argTimeAlarmSet),    CMDHANDLER(doTimeAlarmSet),    "set alarm time" },
+  { "tat", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doTimeAlarmToggle), "toggle alarm switch position" },
+  { "tdr", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doTimeDateReset),   "reset date to system date" },
+  { "tds", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argTimeDateSet),     CMDHANDLER(doTimeDateSet),     "set date" },
+  { "tf",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doTimeFlush),       "flush time/date to clock" },
+  { "tg",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argTimeGet),         CMDHANDLER(doTimeGet),         "get date/time" },
+  { "tp",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doTimePrint),       "print time/date/alarm" },
+  { "tr",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doTimeReset),       "reset time to system time" },
+  { "ts",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argTimeSet),         CMDHANDLER(doTimeSet),         "set time" } };
 
 // All commands for command group 'v' (variable)
 cmdCommand_t cmdGroupVar[] =
-{ { "vp",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argVarPrint),        CMDHANDLER(doVarPrint),        "print value variable(s)" },
-  { "vr",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argVarReset),        CMDHANDLER(doVarReset),        "reset value variable(s)" },
-  { "vs",  PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argVarSet),          CMDHANDLER(doVarSet),          "set value variable" } };
+{ { "vp",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argVarPrint),        CMDHANDLER(doVarPrint),        "print value variable(s)" },
+  { "vr",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argVarReset),        CMDHANDLER(doVarReset),        "reset value variable(s)" },
+  { "vs",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argVarSet),          CMDHANDLER(doVarSet),          "set value variable" } };
 
 // All commands for command group 'w' (wait)
 cmdCommand_t cmdGroupWait[] =
-{ { "w",   PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argWait),            CMDHANDLER(doWait),            "wait for keypress or time" },
-  { "wte", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(argWaitTimerExpiry), CMDHANDLER(doWaitTimerExpiry), "wait for wait timer expiry" },
-  { "wts", PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doWaitTimerStart),  "start wait timer" } };
+{ { "w",   PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argWait),            CMDHANDLER(doWait),            "wait for keypress or time" },
+  { "wte", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argWaitTimerExpiry), CMDHANDLER(doWaitTimerExpiry), "wait for wait timer expiry" },
+  { "wts", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doWaitTimerStart),  "start wait timer" } };
 
 // All commands for command group 'x' (exit)
 cmdCommand_t cmdGroupExit[] =
-{ { "x",   PCCTRLTYPE(PC_CONTINUE),    CMDARGS(NULL),               CMDHANDLER(doExit),            "exit mchron" } };
+{ { "x",   PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doExit),            "exit mchron" } };
 
 //
 // Dictionary build-up step 4: the complete mchron command dictionary and its size
@@ -751,7 +819,7 @@ cmdDict_t cmdDictMchron[] =
   { 'a', "-",          CMDGROUP(NULL) },
   { 'b', "beep",       CMDGROUP(cmdGroupBeep) },
   { 'c', "clock",      CMDGROUP(cmdGroupClock) },
-  { 'd', "-",          CMDGROUP(NULL) },
+  { 'd', "debug",      CMDGROUP(cmdGroupDebug) },
   { 'e', "execute",    CMDGROUP(cmdGroupExecute) },
   { 'f', "-",          CMDGROUP(NULL) },
   { 'g', "graphics",   CMDGROUP(cmdGroupGraphics) },

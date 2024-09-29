@@ -14,8 +14,9 @@
 
 // Monochron and emuchron defines
 #include "../global.h"
-#include "expr.h"
 #include "dictutil.h"
+#include "expr.h"
+#include "mchronutil.h"
 #include "scanutil.h"
 
 // The command line input stream batch size for a single line
@@ -51,28 +52,88 @@ static u08 cmdArgValidateRegex(cmdArg_t *cmdArg, char *argValue);
 static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue);
 
 //
+// Function: cmdArgBpCleanup
+//
+// Cleanup a breakpoint argument from a command line. For cleaning up all
+// arguments of a command line, including a breakpoint argument, use
+// cmdArgCleanup().
+//
+void cmdArgBpCleanup(cmdLine_t *cmdLine)
+{
+  argInfo_t *argInfoBp = cmdLine->argInfoBp;
+
+  // Clean a breakpoint argument
+  if (argInfoBp != NULL)
+  {
+    if (argInfoBp->arg != NULL)
+      free(argInfoBp->arg);
+    free(argInfoBp);
+    cmdLine->argInfoBp = NULL;
+  }
+}
+
+//
+// Function: cmdArgBpCreate
+//
+// Create a command line breakpoint argument. In case a breakpoint argument
+// already exists it is cleaned up first.
+//
+void cmdArgBpCreate(char *condition, cmdLine_t *cmdLine)
+{
+  argInfo_t *argInfoBp;
+
+  // Cleanup first if needed
+  if (cmdLine->argInfoBp != NULL)
+    cmdArgBpCleanup(cmdLine);
+
+  // Create a new one
+  cmdLine->argInfoBp = malloc(sizeof(argInfo_t));
+  argInfoBp = cmdLine->argInfoBp;
+  argInfoBp->arg = cmdArgCreate(condition, strlen(condition), MC_TRUE);
+  argInfoBp->exprAssign = MC_FALSE;
+  argInfoBp->exprConst = MC_FALSE;
+  argInfoBp->exprValue = 0;
+}
+
+//
+// Function: cmdArgBpExecute
+//
+// Execute a breakpoint condition.
+//
+u08 cmdArgBpExecute(argInfo_t *argInfoBp)
+{
+  u08 retVal;
+
+  retVal = exprEvaluate("breakpoint", argInfoBp);
+
+  return retVal;
+}
+
+//
 // Function: cmdArgCleanup
 //
-// Cleanup the split-up command arguments in a command line
+// Cleanup the split-up command and breakpoint arguments in a command line
 //
 void cmdArgCleanup(cmdLine_t *cmdLine)
 {
   int i;
 
-  // Anything to clean?
-  cmdLine->initialized = MC_FALSE;
-  if (cmdLine->argInfo == NULL)
-    return;
-
   // Clean each of the command argument values and the array itself
-  for (i = 0; i < cmdLine->cmdCommand->argCount; i++)
+  if (cmdLine->argInfo != NULL)
   {
-    if (cmdLine->argInfo[i].arg != NULL)
-      free(cmdLine->argInfo[i].arg);
+    for (i = 0; i < cmdLine->cmdCommand->argCount; i++)
+    {
+      if (cmdLine->argInfo[i].arg != NULL)
+        free(cmdLine->argInfo[i].arg);
+    }
+    free(cmdLine->argInfo);
   }
-  free(cmdLine->argInfo);
+
+  // Clean a command breakpoint argument (if any)
+  cmdArgBpCleanup(cmdLine);
 
   // Cleanup complete
+  cmdLine->initialized = MC_FALSE;
   cmdLine->argInfo = NULL;
 }
 
@@ -243,7 +304,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
   u08 argType;
   u08 domType;
   int i = 0;
-  int j = 0;
+  int len = 0;
 
   // Allocate and init an array of split-up command line arguments and numeric
   // expression evaluation result properties
@@ -278,8 +339,8 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
     if (argType == ARG_CHAR)
     {
       // Scan and validate a single char argument
-      j = strcspn(workPtr, " \t");
-      cmdLine->argInfo[i].arg = cmdArgCreate(workPtr, j, MC_FALSE);
+      len = strcspn(workPtr, " \t");
+      cmdLine->argInfo[i].arg = cmdArgCreate(workPtr, len, MC_FALSE);
       if (cmdArgValidateChar(&cmdArg[i], argInfo->arg) != CMD_RET_OK)
         return CMD_RET_ERROR;
     }
@@ -287,8 +348,47 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
     {
       // Copy the flex/bison expression argument up to next delimeter.
       // Validation is done at runtime when the expression is evaluated.
-      j = strcspn(workPtr, " \t");
-      argInfo->arg = cmdArgCreate(workPtr, j, MC_TRUE);
+      u08 useQuotes = MC_FALSE;
+      char searchQuote[2];
+
+      if (workPtr[0] == '"' || workPtr[0] == '\'')
+      {
+        // We have an expression enclosed by quotes (" or ')
+        useQuotes = MC_TRUE;
+        searchQuote[0] = workPtr[0];
+        searchQuote[1] = '\0';
+        len = strcspn(&workPtr[1], searchQuote) + 1;
+        if (len == 1 && workPtr[len] == workPtr[0])
+        {
+          // Empty quote enclosed string
+          printf("%s? invalid: empty expression\n", cmdArg[i].argName);
+          return CMD_RET_ERROR;
+        }
+        else if (len == 1 || workPtr[len] != workPtr[0] ||
+            (workPtr[len + 1] != ' ' && workPtr[len + 1] != '\t' &&
+            workPtr[len + 1] != '\0'))
+        {
+          // We either have a single quote, a string not closed with a quote,
+          // or closing quote is not followed by whitespace or end-of-line
+          printf("%s? invalid: incorrect/missing closing quote %c\n",
+            cmdArg[i].argName, workPtr[0]);
+          return CMD_RET_ERROR;
+        }
+        // Remove the starting quote from the expression to copy (the closing
+        // is already not included).
+        workPtr++;
+        len = len - 1;
+      }
+      else
+      {
+        // We have an expression enclosed by white space
+        len = strcspn(workPtr, " \t");
+      }
+      argInfo->arg = cmdArgCreate(workPtr, len, MC_TRUE);
+
+      // Skip expression closing quote char
+      if (useQuotes == MC_TRUE)
+        len++;
     }
     else if (argType == ARG_STRING)
     {
@@ -296,24 +396,24 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
       if (domType == DOM_WORD_VAL)
       {
         // Copy the word argument up to next delimeter and validate value
-        j = strcspn(workPtr, " \t");
-        argInfo->arg = cmdArgCreate(workPtr, j, MC_FALSE);
+        len = strcspn(workPtr, " \t");
+        argInfo->arg = cmdArgCreate(workPtr, len, MC_FALSE);
         if (cmdArgValidateWord(&cmdArg[i], argInfo->arg) != CMD_RET_OK)
           return CMD_RET_ERROR;
       }
       else if (domType == DOM_WORD_REGEX)
       {
         // Copy the word argument up to next delimeter and validate value
-        j = strcspn(workPtr, " \t");
-        argInfo->arg = cmdArgCreate(workPtr, j, MC_FALSE);
+        len = strcspn(workPtr, " \t");
+        argInfo->arg = cmdArgCreate(workPtr, len, MC_FALSE);
         if (cmdArgValidateRegex(&cmdArg[i], argInfo->arg) != CMD_RET_OK)
           return CMD_RET_ERROR;
       }
       else if (domType == DOM_STRING || domType == DOM_STRING_OPT)
       {
         // Copy the remainder of the input string (that may be empty)
-        j = strlen(workPtr);
-        argInfo->arg = cmdArgCreate(workPtr, j, MC_FALSE);
+        len = strlen(workPtr);
+        argInfo->arg = cmdArgCreate(workPtr, len, MC_FALSE);
       }
       else
       {
@@ -328,7 +428,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
     }
 
     // Skip to next argument in input string
-    workPtr = workPtr + j;
+    workPtr = workPtr + len;
     workPtr = workPtr + strspn(workPtr, " \t");
   }
 
@@ -409,13 +509,13 @@ static u08 cmdArgValidateNum(cmdArg_t *cmdArg, argInfo_t *argInfo)
     if (argInfo->exprValue <= cmdArg->cmdDomain->domNumMin - 0.1)
     {
       printf("%s? invalid: ", cmdArg->argName);
-      cmdArgValuePrint(argInfo->exprValue, MC_FALSE, MC_TRUE);
+      emuValuePrint(argInfo->exprValue, MC_FALSE, MC_TRUE, MC_TRUE);
       return CMD_RET_ERROR;
     }
     if (argInfo->exprValue >= cmdArg->cmdDomain->domNumMax + 0.1)
     {
       printf("%s? invalid: ", cmdArg->argName);
-      cmdArgValuePrint(argInfo->exprValue, MC_FALSE, MC_TRUE);
+      emuValuePrint(argInfo->exprValue, MC_FALSE, MC_TRUE, MC_TRUE);
       return CMD_RET_ERROR;
     }
   }
@@ -542,47 +642,6 @@ static u08 cmdArgValidateWord(cmdArg_t *cmdArg, char *argValue)
   }
 
   return CMD_RET_OK;
-}
-
-//
-// Function: cmdArgValuePrint
-//
-// Print a number in the desired format and return print length in characters
-// including optional newline char
-//
-u08 cmdArgValuePrint(double value, u08 detail, u08 forceNewline)
-{
-  u08 length = 0;
-
-  if (fabs(value) >= 10000 || fabs(value) < 0.01L)
-  {
-    if (detail == MC_TRUE)
-    {
-      if ((double)((long long)value) == value &&
-          fabs(value) < 10E9L)
-        length = printf("%lld ", (long long)value);
-      else
-        length = printf("%.6g ", value);
-    }
-    else
-    {
-      length = printf("%.3g ", value);
-    }
-  }
-  else
-  {
-    if ((double)((long long)value) == value)
-      length = printf("%lld ", (long long)value);
-    else if (detail == MC_TRUE)
-      length = printf("%.6f ", value);
-    else
-      length = printf("%.2f ", value);
-  }
-
-  if (forceNewline == MC_TRUE)
-    length = length + printf("\n");
-
-  return length;
 }
 
 //

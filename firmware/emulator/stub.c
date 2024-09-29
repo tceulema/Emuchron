@@ -86,8 +86,6 @@
 #define DEBUG_BUFSIZE		100
 
 // Emulator event engine keypress overview
-#define EMU_KEYS_CLEAR		\
-  "                                                                           "
 #define EMU_KEYS_CLOCK		\
   "<run: info = e/p/r/t, hardware = a/s/+, c = cycle, h = help, q = quit> "
 #define EMU_KEYS_MONOCHRON	\
@@ -570,19 +568,6 @@ void stubEepReset(void)
 }
 
 //
-// Function: stubEventCleanup
-//
-// Cleanup the event generator
-//
-void stubEventCleanup(void)
-{
-  // If the stack is active re-enable its 100 msec timer for subsequent list
-  // commands
-  if (cmdStackIsActive() == MC_TRUE)
-     cmdStackTimerSet(LIST_TIMER_ARM);
-}
-
-//
 // Function: stubEventGet
 //
 // Get an mchron event. It is a combination of a 75 msec timer wait event since
@@ -688,8 +673,8 @@ char stubEventGet(u08 stats)
     if (ch == 'q')
     {
       // Quit the clock emulator mode
+      printf("\r%s\r", EMU_KEYS_CLEAR);
       eventQuitReq = MC_TRUE;
-      printf("\n");
       return ch;
     }
     else if (ch != 'c' && ch != 'p')
@@ -759,6 +744,7 @@ char stubEventGet(u08 stats)
       hold = MC_FALSE;
     }
 
+    // Process a valid keyboard char
     if (ch == 'a')
     {
       // Toggle the alarm switch
@@ -810,8 +796,8 @@ char stubEventGet(u08 stats)
     else if (ch == 'q')
     {
       // Signal request to quit
+      printf("\r%s\r", EMU_KEYS_CLEAR);
       eventQuitReq = MC_TRUE;
-      printf("\n");
     }
     else if (ch == 'r')
     {
@@ -881,7 +867,7 @@ void stubEventInit(u08 startWait, u08 cfgTimeout, u08 emuType)
   // If the stack is active disable its 100 msec keyboard scan timer to make
   // it not interfere with different wait timer mechanisms used in the event
   // generator
-  if (cmdStackIsActive() == MC_TRUE)
+  if (cmdStackActiveGet() == MC_TRUE)
      cmdStackTimerSet(LIST_TIMER_DISARM);
 
   // Init the event generator itself
@@ -919,6 +905,19 @@ void stubEventInit(u08 startWait, u08 cfgTimeout, u08 emuType)
 u08 stubEventQuitGet(void)
 {
   return eventQuitReq;
+}
+
+//
+// Function: stubEventReset
+//
+// Cleanup the event generator
+//
+void stubEventReset(void)
+{
+  // If the stack is active re-enable its 100 msec timer for subsequent list
+  // commands
+  if (cmdStackActiveGet() == MC_TRUE)
+    cmdStackTimerSet(LIST_TIMER_ARM);
 }
 
 //
@@ -1194,43 +1193,49 @@ void stubUartPutChar(void)
 {
   unsigned char debugChar = (unsigned char)UDR0;
 
-  if (stubDebugStream != NULL)
+  // In case no debug output file is used discard debug char
+  if (stubDebugStream == NULL)
+    return;
+
+  // If this is a new log line add system timestamp
+  if (debugNew == MC_TRUE)
   {
-    // If this is a new log line add system timestamp
-    if (debugNew == MC_TRUE)
-    {
-      struct timeval tv;
-      struct tm *tm;
-      time_t timeClock;
+    struct timeval tv;
+    struct tm *tm;
+    time_t timeClock;
 
-      debugNew = MC_FALSE;
-      gettimeofday(&tv, NULL);
-      timeClock = tv.tv_sec;
-      tm = localtime(&timeClock);
-      debugCount = sprintf(debugBuffer, "%02d:%02d:%02d.%03d ", tm->tm_hour,
-        tm->tm_min, tm->tm_sec, (int)(tv.tv_usec/1000));
-    }
+    debugNew = MC_FALSE;
+    gettimeofday(&tv, NULL);
+    timeClock = tv.tv_sec;
+    tm = localtime(&timeClock);
+    debugCount = sprintf(debugBuffer, "%02d:%02d:%02d.%03d ", tm->tm_hour,
+      tm->tm_min, tm->tm_sec, (int)(tv.tv_usec / 1000));
+  }
 
-    // Buffer the debug character but suppress the '\r' in the output since in
-    // Linux we only need the '\n'
-    if (debugChar != '\r')
-    {
-      debugBuffer[debugCount] = debugChar;
-      debugCount++;
-    }
+  // Buffer the debug character. In case of a CR suppress it in the output
+  // since in Linux we only need the '\n', but do flag it as a log new line.
+  if (debugChar != '\r')
+  {
+    // Add the non-CR char to the buffer
+    debugBuffer[debugCount] = debugChar;
+    debugCount++;
+  }
+  else
+  {
+    // Use the CR to detect a new line in the log
+    debugNew = MC_TRUE;
+  }
 
-    // Dump buffer when a CR is pushed or the buffer is full
-    if (debugChar == '\r' || debugCount == sizeof(debugBuffer) - 2)
-    {
-      // Dump and reset buffer
-      fprintf(stubDebugStream, "%s", debugBuffer);
-      memset(debugBuffer, '\0', debugCount);
-      debugCount = 0;
-
-      // Detect a new line in the log
-      if (debugChar == '\r')
-        debugNew = MC_TRUE;
-    }
+  // Dump buffer when a CR is pushed or the buffer is full
+  if (debugChar == '\r' || debugCount == sizeof(debugBuffer) - 2)
+  {
+    // Dump and reset buffer
+    if (debugChar == '\r')
+      debugBuffer[debugCount] = '\0';
+    else
+      debugBuffer[debugCount + 1] = '\0';
+    fprintf(stubDebugStream, "%s", debugBuffer);
+    debugCount = 0;
   }
 }
 

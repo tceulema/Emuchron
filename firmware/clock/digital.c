@@ -6,6 +6,7 @@
 #include <math.h>
 #include "../global.h"
 #include "../glcd.h"
+#include "../ks0108.h"
 #include "../anim.h"
 #include "../ks0108conf.h"
 #include "digital.h"

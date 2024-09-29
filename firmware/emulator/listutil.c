@@ -7,18 +7,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libgen.h>
 #include <math.h>
 #include <signal.h>
 #include <sys/time.h>
 
 // Monochron and emuchron defines
 #include "../global.h"
-#include "scanutil.h"
 #include "mchronutil.h"
+#include "scanutil.h"
 #include "listutil.h"
 
 // To prevent recursive file loading define a max stack depth when executing
-// command files
+// command files. Upon changing this also change domain domNumStackLevel in
+// mchrondict.h [firmware/emulator].
 #define CMD_STACK_DEPTH_MAX	8
 
 // The command stack keyboard scan interval (msec)
@@ -28,10 +30,25 @@
 #define CMD_STACK_POP_ALL	0	// Pop all levels (clear stack)
 #define CMD_STACK_POP_LVL	1	// Pop current stack level only
 
-// Generic stack trace header and line
-#define CMD_STACK_TRACE		"--- stack trace ---\n"
-#define CMD_STACK_FMT		"%d:%s:%d:%s\n"
-#define CMD_STACK_INVOKE_FMT	"-:%s:-:%s\n"
+// Stack trace header and line templates
+#define CMD_STACK_NOTIFY	"stack trace:\n"
+#define CMD_STACK_NFY_INTR_CMD	"stack trace (command interrupt):\n"
+#define CMD_STACK_HEADER	"lvl  filename         line#  command\n"
+#define CMD_STACK_EOF_FMT	" %2d  %-15s  <eof>  -\n"
+#define CMD_STACK_FMT		" %2d  %-15s  %5d  %s\n"
+#define CMD_STACK_INVOKE_FMT	"  -  %-15s      -  %s\n"
+
+// Source listing header and line templates
+#define CMD_SOURCE_NOTIFY	"source list:\n"
+#define CMD_SOURCE_HEADER	"lvl  line#  pc   b  command\n"
+#define CMD_SOURCE_LVL_LINE_FMT	" %2d  %5d  "
+#define CMD_SOURCE_PC		"==>  "
+#define CMD_SOURCE_NO_PC	"     "
+#define CMD_SOURCE_BP		"@  "
+#define CMD_SOURCE_INACT_BP	"O  "
+#define CMD_SOURCE_NO_BP	"   "
+#define CMD_SOURCE_COMMAND_FMT	"%s\n"
+#define CMD_SOURCE_EOF_FMT	" %2d  <eof>  ==>     -\n"
 
 // Definition of a structure holding stack execution runtime statistics
 typedef struct _cmdStackStats_t
@@ -46,18 +63,29 @@ typedef struct _cmdStackLevel_t
 {
   cmdLine_t *cmdProgCounter;	// Active command line
   cmdLine_t *cmdLineRoot;	// Root of command lines
-  cmdPcCtrl_t *cmdPcCtrlRoot;	// Root of control blocks
+  cmdLine_t *cmdLineBpRoot;	// Root of command lines with breakpoint
   u08 cmdEcho;			// Command echo
   char *cmdOrigin;		// Commands origin (file or cmdline)
+  u08 cmdDebugCmd;		// Active debug command
+  int cmdLines;			// Number of command lines in stack level
+  int cmdDebugLines;		// Number of breakpoints in stack level
 } cmdStackLevel_t;
 
-// Definition of a structure holding the run stack
+// Definition of a structure holding the script run stack.
+// What do elements level and levelResume combinations mean:
+// level  levelResume  Stack status
+// -----+------------+-------------
+//    -1           -1  Empty stack
+//    -1          >=0  Interrupted stack that can be resumed/continued
+//   >=0           -1  Active stack; commands are run from the stack
+//   >=0          >=0  Undefined (not supported)
 typedef struct _cmdStack_t
 {
-  s08 level;			// Current stack run level (-1 = free)
-  s08 levelResume;		// Execution resume stack level (-1 = no)
+  s08 level;			// Current stack run level
+  s08 levelResume;		// Execution resume stack level
   cmdLine_t *cmdLineInvoke;	// Command line that initiates stack
-  cmdLine_t *cmdProgCtrIntr;	// Interrupted command line upon completion
+  cmdLine_t *cmdProgCtrIntr;	// Interrupted command line
+  u08 bpInterrupt;		// Execution is interrupted by breakpoint
   cmdStackStats_t cmdStackStats; // Stack runtime statistics
   cmdStackLevel_t cmdStackLevel[CMD_STACK_DEPTH_MAX]; // The run stack
 } cmdStack_t;
@@ -76,27 +104,390 @@ static u08 kbTimerTripped;
 static cmdStack_t cmdStack;
 static u08 cmdStackStatsEnable = MC_TRUE;
 
+// List debugging master switch and debug halted flag
+static u08 cmdDebugActive = MC_FALSE;		// Is list debugging active
+static u08 cmdDebugHalted = MC_FALSE;		// Exec halted due to step cmd
+
 // Local function prototypes
 // Command line
 static cmdLine_t *cmdLineCopy(cmdLine_t *cmdLineIn);
-static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
-  cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine);
+static cmdLine_t *cmdLineCreate(int lineNum, char *input,
+  cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot);
+static u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput);
+static int cmdLineValidate(cmdLine_t **cmdPcbTail, cmdLine_t *cmdLine);
 // Command list
-static void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot);
+static void cmdListCleanup(cmdLine_t *cmdLineRoot);
 static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
   cmdLine_t **cmdProgCtrIntr);
 static u08 cmdListFileLoad(char *argName, char *fileName);
 static u08 cmdListKeyboardLoad(cmdInput_t *cmdInput);
 static void cmdListRaiseScan(void);
-// Program counter control block
-static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
-  cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine);
-static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine);
+// Program counter control block (pcb)
+static int cmdPcbLink(cmdLine_t **cmdPcbTail, cmdLine_t *cmdLine);
+static void cmdPcbOpen(cmdLine_t **cmdPcbTail, cmdLine_t *cmdLine);
 // Command stack
+static s08 cmdStackLevelGet(void);
 static void cmdStackPop(u08 scope);
-static void cmdStackPrint(void);
 static void cmdStackStatsInit(void);
 static void cmdStackStatsPrint(void);
+// Debugging
+static u08 cmdDebugCmdGet(s08 offset);
+
+//
+// Function: cmdDebugActiveGet
+//
+// Returns whether conditional breakpoint commands are active
+//
+u08 cmdDebugActiveGet(void)
+{
+  return cmdDebugActive;
+}
+
+//
+// Function: cmdDebugBpAdd
+//
+// Add or update a command list breakpoint
+//
+u08 cmdDebugBpAdd(u08 level, u16 line, char *condition)
+{
+  cmdStackLevel_t *cmdStackLevel;
+  cmdLine_t *cmdLineBpHead;
+  cmdLine_t *cmdLineBpTail;
+  cmdLine_t *cmdLineSearch;
+  s08 levelTop;
+  u08 lineFound = MC_FALSE;
+
+  // See if we have an active or interupted stack and check validity of
+  // requested level
+  levelTop = cmdStackLevelGet();
+  if (levelTop == -1 || level > levelTop)
+    return MC_FALSE;
+
+  // Check validity of requested line number
+  cmdStackLevel = &cmdStack.cmdStackLevel[level];
+  if ((int)line > cmdStackLevel->cmdLines)
+    return MC_FALSE;
+
+  // First find the breakpoint chain range in which the line resides
+  cmdLineBpHead = cmdStackLevel->cmdLineBpRoot;
+  cmdLineBpTail = NULL;
+  cmdLineSearch = cmdStackLevel->cmdLineBpRoot;
+  while (cmdLineSearch != NULL)
+  {
+    if (cmdLineSearch->lineNum > line)
+    {
+      cmdLineBpTail = cmdLineSearch;
+      break;
+    }
+    else
+    {
+      cmdLineBpHead = cmdLineSearch;
+      cmdLineSearch = cmdLineSearch->bpNext;
+    }
+  }
+
+  // Next, find the exact line in the range
+  if (cmdStackLevel->cmdLineBpRoot == NULL || cmdLineBpHead->lineNum > line)
+  {
+    // We have a first root or one with a #line lower than current one
+    cmdStackLevel->cmdLineBpRoot = NULL;
+    cmdLineBpHead = NULL;
+    cmdLineSearch = cmdStackLevel->cmdLineRoot;
+  }
+  else
+  {
+    cmdLineSearch = cmdLineBpHead;
+  }
+  lineFound = MC_FALSE;
+  while (cmdLineSearch != NULL)
+  {
+    // See if we found the requested line
+    if (cmdLineSearch->lineNum == line)
+    {
+      // Insert the breakpoint in the chain unless it is re-used
+      if (cmdLineSearch != cmdLineBpHead)
+      {
+        cmdStackLevel->cmdDebugLines++;
+        cmdLineSearch->bpNext = cmdLineBpTail;
+        if (cmdLineBpHead != NULL)
+          cmdLineBpHead->bpNext = cmdLineSearch;
+      }
+      if (cmdStackLevel->cmdLineBpRoot == NULL)
+        cmdStackLevel->cmdLineBpRoot = cmdLineSearch;
+
+      // Add/update the breakpoint argument in the command line
+      cmdArgBpCreate(condition, cmdLineSearch);
+      lineFound = MC_TRUE;
+      break;
+    }
+    else
+    {
+      // Skip to next line
+      cmdLineSearch = cmdLineSearch->next;
+    }
+  }
+
+  return lineFound;
+}
+
+//
+// Function: cmdDebugBpDelete
+//
+// Delete a single or all command list breakpoints.
+// The number of breakpoints deleted is returned in argument count.
+//
+u08 cmdDebugBpDelete(u08 level, u16 breakpoint, int *count)
+{
+  cmdStackLevel_t *cmdStackLevel;
+  cmdLine_t *cmdLineBpHead;
+  cmdLine_t *cmdLineSearch;
+  s08 levelTop;
+  int toDo = 1;
+  int i;
+
+  // Init number of deletes done regardless of request success/failure
+  *count = 0;
+
+  // See if we have an active or interupted stack and check validity of
+  // requested level
+  levelTop = cmdStackLevelGet();
+  if (levelTop == -1 || level > levelTop)
+    return MC_FALSE;
+
+  // Check validity of breakpoint line
+  cmdStackLevel = &cmdStack.cmdStackLevel[level];
+  if ((int)breakpoint > cmdStackLevel->cmdDebugLines)
+    return MC_FALSE;
+
+  // If we need to remove all breakpoints delete the first breakpoint in the
+  // (remaining) list multiple times
+  if (breakpoint == 0)
+  {
+    toDo = cmdStackLevel->cmdDebugLines;
+    breakpoint = 1;
+  }
+
+  // Delete the requested breakpoint(s)
+  while (*count < toDo)
+  {
+    // Find the line in the list breakpoint chain
+    cmdLineBpHead = cmdStackLevel->cmdLineBpRoot;
+    cmdLineSearch = cmdStackLevel->cmdLineBpRoot;
+    for (i = 1; i < (int)breakpoint; i++)
+    {
+      cmdLineBpHead = cmdLineSearch;
+      cmdLineSearch = cmdLineSearch->bpNext;
+    }
+
+    // Remove the breakpoint from the chain and its command line argument
+    cmdStackLevel->cmdDebugLines--;
+    if (cmdStackLevel->cmdLineBpRoot == cmdLineSearch)
+      cmdStackLevel->cmdLineBpRoot = cmdLineSearch->bpNext;
+    cmdLineBpHead->bpNext = cmdLineSearch->bpNext;
+    cmdArgBpCleanup(cmdLineSearch);
+
+    // Increment number of deletes done
+    (*count)++;
+  }
+
+  return MC_TRUE;
+}
+
+//
+// Function: cmdDebugBpPrint
+//
+// Print al breakpoints
+//
+void cmdDebugBpPrint(void)
+{
+  cmdLine_t *cmdLineBp;
+  s08 level;
+  u08 first = MC_TRUE;
+  int levelCount;
+
+  // Run through each stack level, starting at the top
+  level = cmdStackLevelGet();
+  while (level >= 0)
+  {
+    cmdLineBp = cmdStack.cmdStackLevel[level].cmdLineBpRoot;
+    levelCount = 0;
+
+    // Print all breakpoints from the level
+    while (cmdLineBp != NULL)
+    {
+      // Print breakpoint header only once when first breakpoint is found
+      if (first == MC_TRUE)
+      {
+        first = MC_FALSE;
+        printf("breakpoints:\n");
+        printf("lvl    id  line#  condition\n");
+      }
+
+      // Print breakpoint info and move to the next
+      levelCount++;
+      printf(" %2d  %4d  %5d  %s", (int)level, levelCount, cmdLineBp->lineNum,
+        cmdLineBp->argInfoBp->arg);
+      cmdLineBp = cmdLineBp->bpNext;
+    }
+    level--;
+  }
+}
+
+//
+// Function: cmdDebugCmdGet
+//
+// Get the active debug command for a stacklevel relative to the top stack
+// level
+//
+static u08 cmdDebugCmdGet(s08 offset)
+{
+  s08 level;
+  u08 cmdDebugCmd;
+
+  // See if we have an active or interupted stack
+  level = cmdStackLevelGet();
+
+  // Exclude irrelevant/invalid request
+  if (level == -1 || offset > 0)
+    return DEBUG_NONE;
+  else if (level + offset < 0)
+    return DEBUG_NONE;
+
+  // Get what we asked for
+  cmdDebugCmd = cmdStack.cmdStackLevel[level + offset].cmdDebugCmd;
+
+  return cmdDebugCmd;
+}
+
+//
+// Function: cmdDebugCmdSet
+//
+// Set the active debug command for a stacklevel relative to the top stack
+// level. When the request is to clear it skip partial error checking.
+//
+u08 cmdDebugCmdSet(s08 offset, u08 command)
+{
+  s08 i;
+  s08 level;
+
+  // See if we have an active or interupted stack
+  level = cmdStackLevelGet();
+
+  // Exclude irrelevant or invalid request
+  if (level == -1)
+  {
+    // An error only occurs when we request a debug command for an empty stack
+    if (command == DEBUG_NONE)
+      return MC_TRUE;
+    else
+      return MC_FALSE;
+  }
+
+  // Clear any active stack debug command as it may be replaced by a new one
+  for (i = 0; i <= level; i++)
+    cmdStack.cmdStackLevel[i].cmdDebugCmd = DEBUG_NONE;
+
+  // Can we actually set a new debug command
+  if (offset > 0 || level + offset < 0)
+    return MC_FALSE;
+
+  // Set the new debug command on the level relative to the stack top level
+  cmdStack.cmdStackLevel[level + offset].cmdDebugCmd = command;
+
+  return MC_TRUE;
+}
+
+//
+// Function: cmdDebugPcSet
+//
+// Set the top stack level program counter to another line
+//
+u08 cmdDebugPcSet(u16 line)
+{
+  cmdStackLevel_t *cmdStackLevel;
+  cmdLine_t *cmdLineSearch;
+  s08 levelTop;
+  u08 cmdPcbType;
+
+  // See if we have an active or interupted stack and validate requested line
+  // number
+  levelTop = cmdStackLevelGet();
+  if (levelTop == -1)
+    return MC_FALSE;
+  cmdStackLevel = &cmdStack.cmdStackLevel[levelTop];
+  if ((int)line > cmdStackLevel->cmdLines)
+    return MC_FALSE;
+
+  // Clear a debug interrupted indicator (if anyway) and reset pending pcb
+  // action (if anyway) on the current line
+  cmdStack.bpInterrupt = MC_FALSE;
+  if (cmdStackLevel->cmdProgCounter != NULL)
+    cmdStackLevel->cmdProgCounter->pcbAction = PCB_ACT_DEFAULT;
+
+  // Set the new program counter
+  if (line == 0)
+  {
+    // Line 0 means the script <eof>
+    cmdStackLevel->cmdProgCounter = NULL;
+  }
+  else
+  {
+    // Find the requested script line and set it as the new program counter
+    cmdLineSearch = cmdStackLevel->cmdLineRoot;
+    while (MC_TRUE)
+    {
+      if (cmdLineSearch->lineNum == line)
+        break;
+      else
+        cmdLineSearch = cmdLineSearch->next;
+    }
+    cmdStackLevel->cmdProgCounter = cmdLineSearch;
+
+    // Override the default behavior of a pcb when needed
+    if (cmdLineSearch->cmdCommand != NULL)
+    {
+      cmdPcbType = cmdLineSearch->cmdCommand->cmdPcbType;
+      if (cmdPcbType == PCB_IF_ELSE_IF || cmdPcbType == PCB_IF_ELSE)
+        cmdStackLevel->cmdProgCounter->pcbAction = PCB_ACT_ALT_1;
+    }
+  }
+
+  // Print the new top level stack trace
+  cmdDebugHalted = MC_TRUE;
+  cmdStackPrint(CMD_RET_INTR);
+
+  return MC_TRUE;
+}
+
+//
+// Function: cmdDebugSet
+//
+// Enable/disable script debugging
+//
+void cmdDebugSet(u08 enable)
+{
+  cmdDebugActive = enable;
+  cmdDebugHalted = MC_FALSE;
+}
+
+//
+// Function: cmdExecute
+//
+// Execute a user-entered mchron shell command line command
+//
+u08 cmdExecute(cmdInput_t *cmdInput)
+{
+  static int lineNum = 0;
+  cmdLine_t *cmdLine;
+  u08 retVal;
+
+  lineNum++;
+  cmdLine = cmdLineCreate(lineNum, cmdInput->input, NULL, NULL);
+  retVal = cmdLineExecute(cmdLine, cmdInput);
+  cmdListCleanup(cmdLine);
+
+  return retVal;
+}
 
 //
 // Function: cmdLineCopy
@@ -108,14 +499,16 @@ static cmdLine_t *cmdLineCopy(cmdLine_t *cmdLineIn)
   cmdLine_t *cmdLine = NULL;
   int argCount = cmdLineIn->cmdCommand->argCount;
   int i = 0;
+  size_t size;
 
   // Allocate a new command line and init using an existing command line
   cmdLine = malloc(sizeof(cmdLine_t));
   *cmdLine = *cmdLineIn;
 
   // Allocate and copy command line text
-  cmdLine->input = malloc(strlen(cmdLineIn->input) + 1);
-  memcpy(cmdLine->input, cmdLineIn->input, strlen(cmdLineIn->input) + 1);
+  size = strlen(cmdLineIn->input) + 1;
+  cmdLine->input = malloc(size);
+  memcpy(cmdLine->input, cmdLineIn->input, size);
 
   // Allocate and copy individually scanned command arguments
   cmdLine->argInfo = NULL;
@@ -124,13 +517,25 @@ static cmdLine_t *cmdLineCopy(cmdLine_t *cmdLineIn)
     cmdLine->argInfo = malloc(sizeof(argInfo_t) * argCount);
     for (i = 0; i < argCount; i++)
     {
-      cmdLine->argInfo[i].arg = malloc(strlen(cmdLineIn->argInfo[i].arg) + 1);
-      memcpy(cmdLine->argInfo[i].arg, cmdLineIn->argInfo[i].arg,
-        strlen(cmdLineIn->argInfo[i].arg) + 1);
+      size = strlen(cmdLineIn->argInfo[i].arg) + 1;
+      cmdLine->argInfo[i].arg = malloc(size);
+      memcpy(cmdLine->argInfo[i].arg, cmdLineIn->argInfo[i].arg, size);
       cmdLine->argInfo[i].exprAssign = cmdLineIn->argInfo[i].exprAssign;
       cmdLine->argInfo[i].exprConst = cmdLineIn->argInfo[i].exprConst;
       cmdLine->argInfo[i].exprValue = cmdLineIn->argInfo[i].exprValue;
     }
+  }
+
+  // Allocate and copy debug arguments
+  cmdLine->argInfoBp = NULL;
+  if (cmdLineIn->argInfoBp != NULL)
+  {
+    size = strlen(cmdLineIn->argInfoBp->arg) + 1;
+    cmdLine->argInfoBp->arg = malloc(size);
+    memcpy(cmdLine->argInfoBp->arg, cmdLineIn->argInfoBp->arg, size);
+    cmdLine->argInfoBp->exprAssign = cmdLineIn->argInfoBp->exprAssign;
+    cmdLine->argInfoBp->exprConst = cmdLineIn->argInfoBp->exprConst;
+    cmdLine->argInfoBp->exprValue = cmdLineIn->argInfoBp->exprValue;
   }
 
   return cmdLine;
@@ -139,23 +544,31 @@ static cmdLine_t *cmdLineCopy(cmdLine_t *cmdLineIn)
 //
 // Function: cmdLineCreate
 //
-// Create a new cmdLine structure and, when provided, add it in the command
-// linked list
+// Create a new cmdLine structure, copy an input string into it, and, when
+// provided, add it in the command linked list
 //
-cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
+static cmdLine_t *cmdLineCreate(int lineNum, char *input,
+  cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
 {
   cmdLine_t *cmdLine = NULL;
 
   // Allocate and init a new command line
   cmdLine = malloc(sizeof(cmdLine_t));
-  cmdLine->lineNum = 0;
-  cmdLine->input = NULL;
+  cmdLine->lineNum = lineNum;
+  cmdLine->input = malloc(strlen(input) + 1);
+  strcpy(cmdLine->input, input);
   cmdLine->argInfo = NULL;
+  cmdLine->argInfoBp = NULL;
   cmdLine->initialized = MC_FALSE;
   cmdLine->cmdCommand = NULL;
-  cmdLine->cmdPcCtrlParent = NULL;
-  cmdLine->cmdPcCtrlChild = NULL;
   cmdLine->next = NULL;
+  cmdLine->pcbPrev = NULL;
+  cmdLine->pcbNext = NULL;
+  cmdLine->pcbAction = PCB_ACT_DEFAULT;
+  cmdLine->pcbGrpNext = NULL;
+  cmdLine->pcbGrpHead = NULL;
+  cmdLine->pcbGrpTail = NULL;
+  cmdLine->bpNext = NULL;
 
   // Take care of some administrative pointers
   if (cmdLineRoot != NULL && *cmdLineRoot == NULL)
@@ -179,7 +592,7 @@ cmdLine_t *cmdLineCreate(cmdLine_t *cmdLineLast, cmdLine_t **cmdLineRoot)
 // This is the main command input handler that can be called recursively via
 // the mchron 'e' command.
 //
-u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
+static u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
 {
   char *input = cmdLine->input;
   cmdCommand_t *cmdCommand;
@@ -209,7 +622,7 @@ u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
 
   // See what type of command we're dealing with
   cmdCommand = cmdLine->cmdCommand;
-  if (cmdCommand->cmdPcCtrlType == PC_CONTINUE)
+  if (cmdCommand->cmdPcbType == PCB_CONTINUE)
   {
     // For a standard command publish the commandline argument variables and
     // execute its command handler function
@@ -218,11 +631,10 @@ u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
       return retVal;
     retVal = cmdCommand->cmdHandler(cmdLine);
   }
-  else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR ||
-    cmdCommand->cmdPcCtrlType == PC_IF)
+  else if (cmdCommand->cmdPcbType == PCB_REPEAT_FOR ||
+      cmdCommand->cmdPcbType == PCB_IF)
   {
-    // The user has entered a program counter control block start command at
-    // command prompt level.
+    // The user has entered a pcb start command at command prompt level.
     // Cache all keyboard input commands until this command is matched with a
     // corresponding end command and execute the command list.
     retVal = cmdStackPush(cmdLine, LIST_ECHO_SILENT, (char *)__progname,
@@ -231,9 +643,9 @@ u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
   else
   {
     // All other control block types are invalid on the command line as they
-    // need to link to either a repeat-for or if-then command. As such, they
-    // can only be entered via multiline keyboard input or a command file.
-    printf("%s? cannot match this command\n", cmdCommand->cmdName);
+    // must be part of a repeat/if/return command. As such they can only be
+    // be entered via multiline keyboard input or a command file.
+    printf("%s? not part of script\n", cmdCommand->cmdName);
     retVal = CMD_RET_ERROR;
   }
 
@@ -244,18 +656,17 @@ u08 cmdLineExecute(cmdLine_t *cmdLine, cmdInput_t *cmdInput)
 // Function: cmdLineValidate
 //
 // Validate a single command line for use in a command list and, if needed,
-// add or find a program counter control block and associate it with the
+// open or find a program counter control block and associate with it in the
 // command line.
 // Return values:
 // -1 : invalid command
 //  0 : success (with valid command or only white space without command)
 // >0 : starting line number of block in which command cannot be matched
 //
-static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
-  cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine)
+static int cmdLineValidate(cmdLine_t **cmdPcbTail, cmdLine_t *cmdLine)
 {
   int lineNumErr = 0;
-  cmdCommand_t *cmdCommand;
+  u08 cmdPcbType;
   char *input;
   u08 retVal;
 
@@ -269,86 +680,16 @@ static int cmdLineValidate(cmdPcCtrl_t **cmdPcCtrlLast,
   if (cmdLine->cmdCommand == NULL)
     return 0;
 
-  // Get the control block type and based on that optionally link it to a (new)
-  // program control block
-  cmdCommand = cmdLine->cmdCommand;
-  if (cmdCommand->cmdPcCtrlType != PC_CONTINUE)
-  {
-    if (cmdCommand->cmdPcCtrlType == PC_REPEAT_NEXT)
-    {
-      // We must find a repeat for/break/cont command to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR)
-    {
-      // Create new control block and link it to the repeat command
-      *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-        cmdLine);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_BRK)
-    {
-      // We must find a repeat for/break/cont to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
-
-      // Create new control block and link it to repeat break command
-      if (lineNumErr == 0)
-        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-          cmdLine);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_REPEAT_CONT)
-    {
-      // We must find a repeat for/break/cont to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
-
-      // Create new control block and link it to repeat continue command
-      if (lineNumErr == 0)
-        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-          cmdLine);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF_ELSE_IF)
-    {
-      // We must find an if or else-if command to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
-
-      // Create new control block and link it to the if-else-if command
-      if (lineNumErr == 0)
-        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-          cmdLine);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF_END)
-    {
-      // We must find an if, else-if or else command to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF_ELSE)
-    {
-      // We must find an if or else-if command to associate with
-      lineNumErr = cmdPcCtrlLink(*cmdPcCtrlLast, cmdLine);
-
-      // Create new control block and link it to the if-else command
-      if (lineNumErr == 0)
-        *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-          cmdLine);
-    }
-    else if (cmdCommand->cmdPcCtrlType == PC_IF)
-    {
-      // Create new control block and link it to the if-then command
-      *cmdPcCtrlLast = cmdPcCtrlCreate(*cmdPcCtrlLast, cmdPcCtrlRoot,
-        cmdLine);
-    }
-  }
+  // Get the control block type and based on that either open a new pcb group
+  // or attempt to add the command in an existing open pcb group
+  cmdPcbType = cmdLine->cmdCommand->cmdPcbType;
+  if (cmdPcbType == PCB_REPEAT_FOR || cmdPcbType == PCB_IF ||
+      cmdPcbType == PCB_RETURN)
+    cmdPcbOpen(cmdPcbTail, cmdLine);
+  else if (cmdPcbType != PCB_CONTINUE)
+    lineNumErr = cmdPcbLink(cmdPcbTail, cmdLine);
 
   return lineNumErr;
-}
-
-//
-// Function: cmdLineCleanup
-//
-// Cleanup a command line
-//
-void cmdLineCleanup(cmdLine_t *cmdLine)
-{
-  cmdListCleanup(cmdLine, NULL);
 }
 
 //
@@ -356,34 +697,23 @@ void cmdLineCleanup(cmdLine_t *cmdLine)
 //
 // Cleanup a command linked list structure
 //
-static void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot)
+static void cmdListCleanup(cmdLine_t *cmdLineRoot)
 {
   cmdLine_t *nextLine;
-  cmdPcCtrl_t *nextPcCtrl;
 
   // Free the linked list of command lines
-  nextLine = cmdLineRoot;
-  while (nextLine != NULL)
+  while (cmdLineRoot != NULL)
   {
-    // Return the malloc-ed scanned command line arguments in the command and
-    // the command itself
+    // Return the malloc-ed scanned command line arguments in the command, its
+    // optional assigned breakpoint expression, and the command itself
     cmdArgCleanup(cmdLineRoot);
     if (cmdLineRoot->input != NULL)
       free(cmdLineRoot->input);
 
-    // Return the malloc-ed command line
+    // Return the malloc-ed command line and continue with the next
     nextLine = cmdLineRoot->next;
     free(cmdLineRoot);
     cmdLineRoot = nextLine;
-  }
-
-  // Free the linked list of program counter control blocks
-  nextPcCtrl = cmdPcCtrlRoot;
-  while (nextPcCtrl != NULL)
-  {
-    nextPcCtrl = cmdPcCtrlRoot->next;
-    free(cmdPcCtrlRoot);
-    cmdPcCtrlRoot = nextPcCtrl;
   }
 }
 
@@ -392,34 +722,75 @@ static void cmdListCleanup(cmdLine_t *cmdLineRoot, cmdPcCtrl_t *cmdPcCtrlRoot)
 //
 // Execute the commands in the command list as loaded from a file or entered
 // interactively on the command line.
-// We have all command lines and control blocks available in linked lists. The
-// control block list has been checked on its integrity, meaning that all
-// pointers between command lines and control blocks are present and validated
-// so we don't need to worry about that.
+// We have all command lines available in a linked list. The control block
+// pointers are present and have been validated on their integrity, so we don't
+// need to worry about that.
 // Start at the requested position in the list (usually the top of the list but
-// in case of an execute resume it may be halfway the list) and work our way
-// down until we find a runtime error or end up at the end of the list.
+// in case of an execute resume or debug commands it may be halfway the list)
+// and work our way down until we find a runtime error, debug or end-user
+// interrupt, or end up at the end of the list.
 // We may encounter program control blocks that will influence the program
 // counter by creating loops or jumps in the execution plan of the list.
-// When command list execution is end-user interrupted, its interrupt point is
-// returned in argument cmdProgCtrIntr. The interrupted stack itself is already
-// prepared to resume at the next command.
+// When command list execution is end-user or debug interrupted, its interrupt
+// point is returned in argument cmdProgCtrIntr. The interrupted stack itself
+// is prepared to resume at the proper command in cmdProgCounter.
 //
 static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
   cmdLine_t **cmdProgCtrIntr)
 {
   int i;
   char ch = '\0';
-  cmdLine_t *cmdLine = NULL;
+  cmdLine_t *cmdLine = *cmdProgCounter;
   cmdLine_t *cmdProgCounterNext = NULL;
   char *input;
+  u08 cmdDebugCmd;
+  u08 cmdDone = MC_FALSE;
   u08 retVal = CMD_RET_OK;
 
   // We start at the requested position in the linked list, so let's see where
-  // we end up.
+  // we end up
   while (*cmdProgCounter != NULL)
   {
-    cmdLine = *cmdProgCounter;
+    // When debugging see if we must halt at a debug supported command. Next,
+    // we may hit a breakpoint condition for a command. We must skip it though
+    // when the breakpoint was hit resulting in an execution break, and we now
+    // resume from that break.
+    if (cmdDebugActive == MC_TRUE)
+    {
+      cmdDone = MC_TRUE;
+      cmdDebugCmd = cmdDebugCmdGet(0);
+      if ((cmdDebugCmd == DEBUG_HALT || cmdDebugCmd == DEBUG_HALT_EXIT) &&
+          cmdLine->cmdCommand != NULL &&
+          cmdLine->cmdCommand->cmdDbSupport == MC_TRUE)
+      {
+        // Set interrupt point at active line of script and flag interrupt
+        *cmdProgCtrIntr = *cmdProgCounter;
+        cmdDebugHalted = MC_TRUE;
+        return CMD_RET_INTR;
+      }
+      else if (cmdStack.bpInterrupt == MC_FALSE && cmdLine->argInfoBp != NULL)
+      {
+        // Check the breakpoint condition and interrupt execution when needed.
+        // If so, flag we got interrupted by a breakpoint.
+        retVal = cmdArgBpExecute(cmdLine->argInfoBp);
+        if ((retVal == CMD_RET_OK && cmdLine->argInfoBp->exprValue != 0) ||
+            retVal != CMD_RET_OK)
+        {
+          if (retVal == CMD_RET_OK)
+            printf("*** breakpoint - execution halted ***\n");
+          else
+            printf("*** breakpoint *evaluation error* - execution halted ***\n");
+          cmdStack.bpInterrupt = MC_TRUE;
+          *cmdProgCtrIntr = *cmdProgCounter;
+          return CMD_RET_INTR;
+        }
+      }
+      else
+      {
+        // When needed clear the interrupt by breakpoint flag for next one
+        cmdStack.bpInterrupt = MC_FALSE;
+      }
+    }
 
     // Echo command prefixed by the stack level line numbers
     if (cmdEcho == CMD_ECHO_YES)
@@ -437,7 +808,7 @@ static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
       cmdProgCounterNext = cmdLine->next;
       retVal = CMD_RET_OK;
     }
-    else if (cmdLine->cmdCommand->cmdPcCtrlType == PC_CONTINUE)
+    else if (cmdLine->cmdCommand->cmdPcbType == PCB_CONTINUE)
     {
       // Execute a regular command via the generic handler
       cmdStack.cmdStackStats.cmdCmdCount++;
@@ -446,8 +817,8 @@ static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
     }
     else
     {
-      // This is a control block command from a repeat or if construct. Get the
-      // command arguments (if not already done) and execute the associated
+      // This is a control block command from a repeat/if/return construct. Get
+      // the command arguments (if not already done) and execute the associated
       // program counter control block handler from the command dictionary.
       cmdStack.cmdStackStats.cmdCmdCount++;
       input = cmdLine->input;
@@ -459,7 +830,7 @@ static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
       if (retVal == CMD_RET_OK)
       {
         cmdProgCounterNext = cmdLine;
-        retVal = cmdLine->cmdCommand->cbHandler(&cmdProgCounterNext);
+        retVal = cmdLine->cmdCommand->pcbHandler(&cmdProgCounterNext);
       }
     }
 
@@ -471,13 +842,19 @@ static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
       if (ch == 'q')
       {
         printf("quit\n");
-        retVal = CMD_RET_INTERRUPT;
+        retVal = CMD_RET_INTR;
       }
     }
 
-    // If we encountered an interrupt set interrupt point and prepare stack
-    // to resume
-    if (retVal == CMD_RET_INTERRUPT)
+    // When we're debugging and matching an active debug command, request to
+    // halt at the next command that supports debugging or at eof
+    if (cmdDebugActive == MC_TRUE && retVal == CMD_RET_OK &&
+        (cmdDebugCmd == DEBUG_STEP_NEXT || cmdDebugCmd == DEBUG_STEP_IN))
+      cmdDebugCmdSet(0, DEBUG_HALT);
+
+    // If we encountered an interrupt set interrupt point and prepare stack to
+    // resume
+    if (retVal == CMD_RET_INTR || retVal == CMD_RET_INTR_CMD)
     {
       *cmdProgCtrIntr = *cmdProgCounter;
       *cmdProgCounter = cmdProgCounterNext;
@@ -485,13 +862,38 @@ static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
 
     // Abort when something is not ok
     if (retVal != CMD_RET_OK)
-      break;
+      return retVal;
 
-    // Move to next command in linked list and continue
+    // Move to next command in command list and continue
     *cmdProgCounter = cmdProgCounterNext;
+    cmdLine = *cmdProgCounter;
   }
 
-  return retVal;
+  // We're at the end of the command list with successful completion. See what
+  // we need to with an active debug command.
+  if (cmdDebugActive == MC_TRUE)
+  {
+    cmdDebugCmd = cmdDebugCmdGet(0);
+    if (cmdDebugCmd == DEBUG_STEP_OUT || cmdDebugCmd == DEBUG_HALT_EXIT)
+    {
+      // Stop at next command in lower stack level or exit at its eof
+      cmdDebugCmdSet(-1, DEBUG_HALT_EXIT);
+    }
+    else if (cmdDone == MC_FALSE)
+    {
+      // Stop at next command in lower stack level or when reaching its eof
+      if (cmdDebugCmd == DEBUG_STEP_NEXT || cmdDebugCmd == DEBUG_STEP_IN)
+        cmdDebugCmdSet(-1, DEBUG_HALT);
+    }
+    else if (cmdDebugCmd == DEBUG_HALT)
+    {
+      // We reached eof after one or more (blank) commands and must stop
+      cmdDebugHalted = MC_TRUE;
+      return CMD_RET_INTR;
+    }
+  }
+
+  return CMD_RET_OK;
 }
 
 //
@@ -504,10 +906,9 @@ static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
 static u08 cmdListFileLoad(char *argName, char *fileName)
 {
   FILE *fp;				// Input file pointer
-  cmdLine_t *cmdLine = NULL;		// The last cmdLine in linked list
-  cmdPcCtrl_t *cmdPcCtrlLast = NULL;	// The last cmdPcCtrl in linked list
-  cmdPcCtrl_t *cmdPcCtrlSearch = NULL;	// Active cmdPcCtrl in search efforts
-  int lineNum = 1;
+  cmdLine_t *cmdLineTail = NULL;	// The last cmdLine in linked list
+  cmdLine_t *cmdPcbTail = NULL;	        // The last pcb in linked list
+  cmdLine_t *cmdPcbSearch = NULL;	// Active pcb in search efforts
   int lineNumErr = 0;
   cmdInput_t cmdInput;
   cmdStackLevel_t *cmdStackLevel;
@@ -516,7 +917,8 @@ static u08 cmdListFileLoad(char *argName, char *fileName)
   cmdStackLevel = &cmdStack.cmdStackLevel[cmdStack.level];
   cmdStackLevel->cmdProgCounter = NULL;
   cmdStackLevel->cmdLineRoot = NULL;
-  cmdStackLevel->cmdPcCtrlRoot = NULL;
+  cmdStackLevel->cmdLineBpRoot = NULL;
+  cmdStackLevel->cmdLines = 0;
 
   // Open command file
   fp = fopen(fileName, "r");
@@ -533,23 +935,19 @@ static u08 cmdListFileLoad(char *argName, char *fileName)
   // Add each line in the command file in a command linked list
   while (cmdInput.input != NULL)
   {
-    // Create new command line, add it to the linked list, and fill in its
-    // functional payload
-    cmdLine = cmdLineCreate(cmdLine, &cmdStackLevel->cmdLineRoot);
-    cmdStackLevel->cmdProgCounter = cmdLine;
-    cmdLine->lineNum = lineNum;
-    cmdLine->input = malloc(strlen(cmdInput.input) + 1);
-    strcpy(cmdLine->input, cmdInput.input);
+    // Create new command line
+    cmdStackLevel->cmdLines++;
+    cmdLineTail = cmdLineCreate(cmdStackLevel->cmdLines, cmdInput.input,
+      cmdLineTail, &cmdStackLevel->cmdLineRoot);
+    cmdStackLevel->cmdProgCounter = cmdLineTail;
 
     // Scan and validate the command name (but not its arguments) as well as
-    // validating matching control blocks
-    lineNumErr = cmdLineValidate(&cmdPcCtrlLast, &cmdStackLevel->cmdPcCtrlRoot,
-      cmdLine);
+    // validating matching program counter control blocks
+    lineNumErr = cmdLineValidate(&cmdPcbTail, cmdLineTail);
     if (lineNumErr != 0)
       break;
 
     // Get next input line
-    lineNum++;
     cmdInputRead(NULL, &cmdInput);
   }
 
@@ -572,13 +970,13 @@ static u08 cmdListFileLoad(char *argName, char *fileName)
 
   // Postprocessing the linked lists.
   // We may not find a control block that is not linked to a command line.
-  cmdPcCtrlSearch = cmdPcCtrlLast;
-  while (cmdPcCtrlSearch != NULL)
+  cmdPcbSearch = cmdPcbTail;
+  while (cmdPcbSearch != NULL)
   {
-    if (cmdPcCtrlSearch->cmdLineChild == NULL)
+    if (cmdPcbSearch->pcbGrpTail == NULL)
     {
       // Unlinked control block
-      cmdStackLevel->cmdProgCounter = cmdPcCtrlSearch->cmdLineParent;
+      cmdStackLevel->cmdProgCounter = cmdPcbSearch;
       printf("parse: command unmatched in block starting at line %d\n",
         cmdStackLevel->cmdProgCounter->lineNum);
       return CMD_RET_ERROR;
@@ -586,7 +984,7 @@ static u08 cmdListFileLoad(char *argName, char *fileName)
     else
     {
       // Continue search backwards
-      cmdPcCtrlSearch = cmdPcCtrlSearch->prev;
+      cmdPcbSearch = cmdPcbSearch->pcbPrev;
     }
   }
   cmdStackLevel->cmdProgCounter = cmdStackLevel->cmdLineRoot;
@@ -605,9 +1003,9 @@ static u08 cmdListFileLoad(char *argName, char *fileName)
 //
 static u08 cmdListKeyboardLoad(cmdInput_t *cmdInput)
 {
-  cmdLine_t *cmdLine = NULL;		// The last cmdLine in linked list
-  cmdPcCtrl_t *cmdPcCtrlLast = NULL;	// The last cmdPcCtrl in linked list
-  int pcCtrlCount = 0;			// Active if+repeat command count
+  cmdLine_t *cmdLineTail = NULL;	// The last cmdLine in linked list
+  cmdLine_t *cmdPcbTail = NULL;		// The last cmdPcCtrl in linked list
+  int pcCtrlCount = 0;			// Active repeat/if command count
   char *prompt;
   int lineNum = 1;
   int lineNumDigits;
@@ -618,7 +1016,7 @@ static u08 cmdListKeyboardLoad(cmdInput_t *cmdInput)
   cmdStackLevel = &cmdStack.cmdStackLevel[cmdStack.level];
   cmdStackLevel->cmdProgCounter = NULL;
   cmdStackLevel->cmdLineRoot = NULL;
-  cmdStackLevel->cmdPcCtrlRoot = NULL;
+  cmdStackLevel->cmdLineBpRoot = NULL;
 
   // Do not read from the keyboard yet as we already have the first command in
   // the input buffer. Once we've processed that one we'll continue reading the
@@ -626,41 +1024,41 @@ static u08 cmdListKeyboardLoad(cmdInput_t *cmdInput)
 
   // Add each line entered via keyboard in a command linked list.
   // The list is complete when the program control block start command (rf/iif)
-  // is matched with a corresponding end command (rn/ien).
+  // is matched with a corresponding end command (rn/ien). Note that the return
+  // command (elr) is both a pcb block start and end command so we ignore them.
   // List build-up is interrupted when the user enters ^D on a blank line, when
   // a control block command cannot be matched or when a non-existing command
   // is entered.
   while (MC_TRUE)
   {
-    // Create new command line, add it to the linked list, and fill in
-    // its functional payload
-    cmdLine = cmdLineCreate(cmdLine, &cmdStackLevel->cmdLineRoot);
-    cmdStackLevel->cmdProgCounter = cmdLine;
-    cmdLine->lineNum = lineNum;
-    cmdLine->input = malloc(strlen(cmdInput->input) + 1);
-    strcpy(cmdLine->input, cmdInput->input);
+    // Create new command line
+    cmdLineTail = cmdLineCreate(lineNum, cmdInput->input, cmdLineTail,
+      &cmdStackLevel->cmdLineRoot);
+    cmdStackLevel->cmdProgCounter = cmdLineTail;
 
     // Scan and validate the command name (but not its arguments) as well as
     // validating matching control blocks
-    lineNumErr = cmdLineValidate(&cmdPcCtrlLast, &cmdStackLevel->cmdPcCtrlRoot,
-      cmdLine);
+    lineNumErr = cmdLineValidate(&cmdPcbTail, cmdLineTail);
     if (lineNumErr != 0)
       break;
 
     // Administer count of nested repeat and if blocks
-    if (cmdLine->cmdCommand != NULL)
+    if (cmdLineTail->cmdCommand != NULL)
     {
-      if (cmdLine->cmdCommand->cmdPcCtrlType == PC_REPEAT_FOR ||
-          cmdLine->cmdCommand->cmdPcCtrlType == PC_IF)
+      if (cmdLineTail->cmdCommand->cmdPcbType == PCB_REPEAT_FOR ||
+          cmdLineTail->cmdCommand->cmdPcbType == PCB_IF)
         pcCtrlCount++;
-      else if (cmdLine->cmdCommand->cmdPcCtrlType == PC_REPEAT_NEXT ||
-          cmdLine->cmdCommand->cmdPcCtrlType == PC_IF_END)
+      else if (cmdLineTail->cmdCommand->cmdPcbType == PCB_REPEAT_NEXT ||
+          cmdLineTail->cmdCommand->cmdPcbType == PCB_IF_END)
         pcCtrlCount--;
     }
 
     // If the most outer control block start is matched we're done
     if (pcCtrlCount == 0)
+    {
+      cmdStackLevel->cmdLines = lineNum;
       break;
+    }
 
     // Next command line linenumber
     lineNum++;
@@ -713,147 +1111,146 @@ static void cmdListRaiseScan(void)
 }
 
 //
-// Function: cmdPcCtrlCreate
-//
-// Create a new cmdPcCtrl structure, add it in the control block list,
-// initialize it and link it to the command line
-//
-static cmdPcCtrl_t *cmdPcCtrlCreate(cmdPcCtrl_t *cmdPcCtrlLast,
-  cmdPcCtrl_t **cmdPcCtrlRoot, cmdLine_t *cmdLine)
-{
-  cmdPcCtrl_t *cmdPcCtrl = NULL;
-
-  // Allocate the new control block runtime
-  cmdPcCtrl = malloc(sizeof(cmdPcCtrl_t));
-
-  // Take care of administrative pointers
-  if (*cmdPcCtrlRoot == NULL)
-  {
-    // First structure in the list
-    *cmdPcCtrlRoot = cmdPcCtrl;
-  }
-  if (cmdPcCtrlLast != NULL)
-  {
-    // Not the first in the list
-    cmdPcCtrlLast->next = cmdPcCtrl;
-  }
-
-  // Init the new program counter control block
-  cmdPcCtrl->cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
-  cmdPcCtrl->active = MC_FALSE;
-  cmdPcCtrl->cmdLineParent = cmdLine;
-  cmdPcCtrl->cmdLineChild = NULL;
-  cmdPcCtrl->prev = cmdPcCtrlLast;
-  cmdPcCtrl->next = NULL;
-  // The head of the control group is the start command (repeat or if) and is
-  // copied down to each other member of the control group
-  if (cmdPcCtrl->cmdPcCtrlType == PC_REPEAT_FOR ||
-      cmdPcCtrl->cmdPcCtrlType == PC_IF)
-    cmdPcCtrl->cmdLineGrpHead = cmdLine;
-  else
-    cmdPcCtrl->cmdLineGrpHead = cmdLine->cmdPcCtrlParent->cmdLineGrpHead;
-  // The tail of the control group is only known when the control group is
-  // completed (repeat-next or if-end) and must then be copied into each
-  // control group member
-  cmdPcCtrl->cmdLineGrpTail = NULL;
-
-  // Link the program counter control block to the current command line
-  cmdLine->cmdPcCtrlChild = cmdPcCtrl;
-
-  return cmdPcCtrl;
-}
-
-//
-// Function: cmdPcCtrlLink
+// Function: cmdPcbLink
 //
 // Find an unlinked control block and verify if it can match the control block
-// type of the current command line.
+// type of the current command line. When done, add the pcb to the pcb list.
 // Return values:
 //  0 : success
 // >0 : starting line number of block in which command cannot be matched
 //
-static int cmdPcCtrlLink(cmdPcCtrl_t *cmdPcCtrlLast, cmdLine_t *cmdLine)
+static int cmdPcbLink(cmdLine_t **cmdPcbTail, cmdLine_t *cmdLine)
 {
-  cmdPcCtrl_t *cmdCtrlFind = cmdPcCtrlLast;
-  u08 cmdPcCtrlType = cmdLine->cmdCommand->cmdPcCtrlType;
+  cmdLine_t *cmdPcbFind = *cmdPcbTail;
+  u08 cmdPcbType = cmdLine->cmdCommand->cmdPcbType;
   u08 cmdFindType;
 
-  while (cmdCtrlFind != NULL)
+  while (cmdPcbFind != NULL)
   {
-    cmdFindType = cmdCtrlFind->cmdPcCtrlType;
+    cmdFindType = cmdPcbFind->cmdCommand->cmdPcbType;
 
     // Check the block to verify vs unlinked control block members we find in
     // the linked list. Some combinations must be skipped, some are invalid and
     // some will result in a valid combination.
-    if (cmdCtrlFind->cmdLineChild == NULL &&
-        (cmdPcCtrlType == PC_IF_ELSE_IF || cmdPcCtrlType == PC_IF_ELSE ||
-         cmdPcCtrlType == PC_IF_END) &&
-        (cmdFindType == PC_REPEAT_BRK || cmdFindType == PC_REPEAT_CONT))
+    if (cmdPcbFind->pcbGrpTail == NULL &&
+        (cmdPcbType == PCB_IF_ELSE_IF || cmdPcbType == PCB_IF_ELSE ||
+         cmdPcbType == PCB_IF_END) &&
+        (cmdFindType == PCB_REPEAT_BRK || cmdFindType == PCB_REPEAT_CONT))
     {
       // Skip combination if blocks vs repeat break/cont blocks, so go backward
-      cmdCtrlFind = cmdCtrlFind->prev;
+      cmdPcbFind = cmdPcbFind->pcbPrev;
     }
-    else if (cmdCtrlFind->cmdLineChild == NULL &&
-        (cmdPcCtrlType == PC_REPEAT_BRK || cmdPcCtrlType == PC_REPEAT_CONT) &&
-        (cmdFindType == PC_IF || cmdFindType == PC_IF_ELSE_IF ||
-         cmdFindType == PC_IF_ELSE || cmdFindType == PC_IF_END))
+    else if (cmdPcbFind->pcbGrpTail == NULL &&
+        (cmdPcbType == PCB_REPEAT_BRK || cmdPcbType == PCB_REPEAT_CONT) &&
+        (cmdFindType == PCB_IF || cmdFindType == PCB_IF_ELSE_IF ||
+         cmdFindType == PCB_IF_ELSE || cmdFindType == PCB_IF_END))
     {
       // Skip combination repeat break/cont blocks vs if blocks, so go backward
-      cmdCtrlFind = cmdCtrlFind->prev;
+      cmdPcbFind = cmdPcbFind->pcbPrev;
     }
-    else if (cmdCtrlFind->cmdLineChild == NULL)
+    else if (cmdPcbFind->pcbGrpTail == NULL)
     {
       // Found an unlinked control block that is to be validated. Verify if its
       // control block type is compatible with the control block type of the
       // command line.
-      if (cmdPcCtrlType == PC_REPEAT_BRK && cmdFindType != PC_REPEAT_FOR &&
-          cmdFindType != PC_REPEAT_BRK && cmdFindType != PC_REPEAT_CONT)
-        return cmdCtrlFind->cmdLineParent->lineNum;
-      if (cmdPcCtrlType == PC_REPEAT_CONT && cmdFindType != PC_REPEAT_FOR &&
-          cmdFindType != PC_REPEAT_BRK && cmdFindType != PC_REPEAT_CONT)
-        return cmdCtrlFind->cmdLineParent->lineNum;
-      if (cmdPcCtrlType == PC_REPEAT_NEXT && cmdFindType != PC_REPEAT_FOR &&
-          cmdFindType != PC_REPEAT_BRK && cmdFindType != PC_REPEAT_CONT)
-        return cmdCtrlFind->cmdLineParent->lineNum;
-      else if (cmdPcCtrlType == PC_IF_ELSE_IF && cmdFindType != PC_IF &&
-          cmdFindType != PC_IF_ELSE_IF)
-        return cmdCtrlFind->cmdLineParent->lineNum;
-      else if (cmdPcCtrlType == PC_IF_ELSE && cmdFindType != PC_IF &&
-          cmdFindType != PC_IF_ELSE_IF)
-        return cmdCtrlFind->cmdLineParent->lineNum;
-      else if (cmdPcCtrlType == PC_IF_END && cmdFindType != PC_IF &&
-          cmdFindType != PC_IF_ELSE_IF && cmdFindType != PC_IF_ELSE)
-        return cmdCtrlFind->cmdLineParent->lineNum;
+      if (cmdPcbType == PCB_REPEAT_BRK && cmdFindType != PCB_REPEAT_FOR &&
+          cmdFindType != PCB_REPEAT_BRK && cmdFindType != PCB_REPEAT_CONT)
+        return cmdPcbFind->lineNum;
+      if (cmdPcbType == PCB_REPEAT_CONT && cmdFindType != PCB_REPEAT_FOR &&
+          cmdFindType != PCB_REPEAT_BRK && cmdFindType != PCB_REPEAT_CONT)
+        return cmdPcbFind->lineNum;
+      if (cmdPcbType == PCB_REPEAT_NEXT && cmdFindType != PCB_REPEAT_FOR &&
+          cmdFindType != PCB_REPEAT_BRK && cmdFindType != PCB_REPEAT_CONT)
+        return cmdPcbFind->lineNum;
+      else if (cmdPcbType == PCB_IF_ELSE_IF && cmdFindType != PCB_IF &&
+          cmdFindType != PCB_IF_ELSE_IF)
+        return cmdPcbFind->lineNum;
+      else if (cmdPcbType == PCB_IF_ELSE && cmdFindType != PCB_IF &&
+          cmdFindType != PCB_IF_ELSE_IF)
+        return cmdPcbFind->lineNum;
+      else if (cmdPcbType == PCB_IF_END && cmdFindType != PCB_IF &&
+          cmdFindType != PCB_IF_ELSE_IF && cmdFindType != PCB_IF_ELSE)
+        return cmdPcbFind->lineNum;
 
       // There's a valid match between the control block types of the current
       // command and the found open control block. Make a cross link between
       // the two.
-      cmdLine->cmdPcCtrlParent = cmdCtrlFind;
-      cmdCtrlFind->cmdLineChild = cmdLine;
+      cmdLine->pcbGrpHead = cmdPcbFind->pcbGrpHead;
+      cmdPcbFind->pcbGrpNext = cmdLine;
 
       // Fill in the tail of a complete ctrl group over all its members
-      if (cmdPcCtrlType == PC_REPEAT_NEXT || cmdPcCtrlType == PC_IF_END)
+      // when a ctrl group is being closed
+      if (cmdPcbType == PCB_REPEAT_NEXT || cmdPcbType == PCB_IF_END)
       {
-        cmdCtrlFind->cmdLineGrpTail = cmdLine;
-        while (cmdCtrlFind->cmdPcCtrlType != PC_REPEAT_FOR &&
-              cmdCtrlFind->cmdPcCtrlType != PC_IF)
+        // Start at the head of the pcb group and go down until we find ourself
+        cmdPcbFind = cmdLine->pcbGrpHead;
+        while (cmdPcbFind != cmdLine)
         {
-          cmdCtrlFind = cmdCtrlFind->cmdLineParent->cmdPcCtrlParent;
-          cmdCtrlFind->cmdLineGrpTail = cmdLine;
+          cmdPcbFind->pcbGrpTail = cmdLine;
+          cmdPcbFind = cmdPcbFind->pcbGrpNext;
         }
+        cmdLine->pcbGrpTail = cmdLine;
       }
+
+      // All is well so add the pcb to the pcb list and set new last list pcb
+      (*cmdPcbTail)->pcbNext = cmdLine;
+      cmdLine->pcbPrev = *cmdPcbTail;
+      *cmdPcbTail = cmdLine;
+
       return 0;
     }
     else
     {
       // Search not done yet, go backward
-      cmdCtrlFind = cmdCtrlFind->prev;
+      cmdPcbFind = cmdPcbFind->pcbPrev;
     }
   }
 
   // Could not find a valid unlinked control block in entire list.
   // Report error on line 1.
   return 1;
+}
+
+//
+// Function: cmdPcbOpen
+//
+// Add the command line to the pcb list and open a new pcb group. This group
+// may also be closed immediately.
+//
+static void cmdPcbOpen(cmdLine_t **cmdPcbTail, cmdLine_t *cmdLine)
+{
+  u08 cmdPcbType = cmdLine->cmdCommand->cmdPcbType;
+
+  // Make the current pcb tail and the command line point to one and another
+  if (*cmdPcbTail != NULL)
+  {
+    // Not the first in the list
+    (*cmdPcbTail)->pcbNext = cmdLine;
+  }
+  cmdLine->pcbPrev = *cmdPcbTail;
+
+  // The head of the control group is the start command (repeat/if/return) and
+  // is copied down to each other member of the control group.
+  // In case of a list return the control group open is also the group close.
+  cmdLine->pcbGrpHead = cmdLine;
+  if (cmdPcbType == PCB_RETURN)
+    cmdLine->pcbGrpTail = cmdLine;
+
+  // Make the command line the new pcb tail
+  *cmdPcbTail = cmdLine;
+}
+
+//
+// Function: cmdStackActiveGet
+//
+// Returns whether commands are currently run from the stack
+//
+u08 cmdStackActiveGet(void)
+{
+  if (cmdStack.level >= 0)
+    return MC_TRUE;
+  else
+    return MC_FALSE;
 }
 
 //
@@ -886,9 +1283,9 @@ void cmdStackInit(void)
   {
     cmdStack.cmdStackLevel[i].cmdProgCounter = NULL;
     cmdStack.cmdStackLevel[i].cmdLineRoot = NULL;
-    cmdStack.cmdStackLevel[i].cmdPcCtrlRoot = NULL;
     cmdStack.cmdStackLevel[i].cmdEcho = CMD_ECHO_NONE;
     cmdStack.cmdStackLevel[i].cmdOrigin = NULL;
+    cmdStack.cmdStackLevel[i].cmdDebugCmd = DEBUG_NONE;
   }
 
   // Init stack statistics
@@ -903,16 +1300,102 @@ void cmdStackInit(void)
 }
 
 //
-// Function: cmdStackIsActive
+// Function: cmdStackLevelGet
 //
-// Returns whether commands are currently run from the stack
+// Get the current command stack level of an active or interrupted stack
 //
-u08 cmdStackIsActive(void)
+static s08 cmdStackLevelGet(void)
 {
-  if (cmdStack.level >= 0)
-    return MC_TRUE;
+  // See if we have an active stack or an interupted stack
+  if (cmdStack.level == -1 && cmdStack.levelResume == -1)
+    return -1;
+
+  // Determine top level and x-check with requested level
+  if (cmdStack.levelResume >= 0)
+    return cmdStack.levelResume;
   else
+    return cmdStack.level;
+}
+
+//
+// Function: cmdStackListPrint
+//
+// Print stack command source list in a range surrounding its program counter
+//
+u08 cmdStackListPrint(u08 level, s16 range)
+{
+  cmdStackLevel_t *cmdStackLevel;
+  cmdLine_t *cmdLine;
+  u08 levelTop;
+  int lineOffset, lineMin, lineMax;
+
+  // Ignore if we have no stack
+  if (cmdStack.level == -1 && cmdStack.levelResume == -1)
     return MC_FALSE;
+
+  // Set and check requested stack level
+  if (cmdStack.levelResume >= 0)
+    levelTop = cmdStack.levelResume;
+  else
+    levelTop = cmdStack.level;
+  if (level > levelTop)
+    return MC_FALSE;
+
+  // Determine line number range to print, keeping in mind our program counter
+  // may point to <eof>
+  cmdStackLevel = &cmdStack.cmdStackLevel[level];
+  if (cmdStackLevel->cmdProgCounter == NULL)
+    lineOffset = cmdStackLevel->cmdLines + 1;
+  else
+    lineOffset = cmdStackLevel->cmdProgCounter->lineNum;
+  if (range == -1)
+  {
+    lineMin = 1;
+    lineMax = cmdStackLevel->cmdLines;
+  }
+  else
+  {
+    lineMin = lineOffset - range;
+    lineMax = lineOffset + range;
+  }
+
+  // Print the range of command lines
+  printf(CMD_SOURCE_NOTIFY);
+  printf(CMD_SOURCE_HEADER);
+  cmdLine = cmdStackLevel->cmdLineRoot;
+  while (cmdLine != NULL)
+  {
+    // Is command line in-scope for printing
+    if (cmdLine->lineNum >= lineMin && cmdLine->lineNum <= lineMax)
+    {
+      // Print command line with indicators for program counter and (in)active
+      // breakpoint
+      printf(CMD_SOURCE_LVL_LINE_FMT, (int)level, cmdLine->lineNum);
+      if (cmdLine == cmdStackLevel->cmdProgCounter)
+        printf(CMD_SOURCE_PC);
+      else
+        printf(CMD_SOURCE_NO_PC);
+      if (cmdLine->argInfoBp == NULL)
+        printf(CMD_SOURCE_NO_BP);
+      else if (cmdDebugActive == MC_FALSE)
+        printf(CMD_SOURCE_INACT_BP);
+      else
+        printf(CMD_SOURCE_BP);
+      printf(CMD_SOURCE_COMMAND_FMT, cmdLine->input);
+    }
+
+    // Quit when done or get next line
+    if (cmdLine->lineNum == lineMax)
+      break;
+    else
+      cmdLine = cmdLine->next;
+  }
+
+  // Print additional line in case the listing was requested at <eof>
+  if (cmdStackLevel->cmdProgCounter == NULL)
+    printf(CMD_SOURCE_EOF_FMT, (int)level);
+
+  return MC_TRUE;
 }
 
 //
@@ -944,23 +1427,27 @@ static void cmdStackPop(u08 scope)
   for (i = levelMin; i <= levelMax; i++)
   {
     cmdStackLevel = &cmdStack.cmdStackLevel[i];
-    cmdListCleanup(cmdStackLevel->cmdLineRoot, cmdStackLevel->cmdPcCtrlRoot);
     cmdStackLevel->cmdProgCounter = NULL;
+    cmdListCleanup(cmdStackLevel->cmdLineRoot);
     cmdStackLevel->cmdLineRoot = NULL;
-    cmdStackLevel->cmdPcCtrlRoot = NULL;
+    cmdStackLevel->cmdLineBpRoot = NULL;
     cmdStackLevel->cmdEcho = CMD_ECHO_NONE;
     free(cmdStackLevel->cmdOrigin);
     cmdStackLevel->cmdOrigin = NULL;
+    cmdStackLevel->cmdDebugCmd = DEBUG_NONE;
+    cmdStackLevel->cmdLines = 0;
+    cmdStackLevel->cmdDebugLines = 0;
   }
 
   // Reset stack invoke and resume command when full reset or root level reset
   // is requested
   if (levelMin == 0)
   {
-    cmdListCleanup(cmdStack.cmdLineInvoke, NULL);
+    cmdListCleanup(cmdStack.cmdLineInvoke);
+    cmdStack.levelResume = -1;
     cmdStack.cmdLineInvoke = NULL;
     cmdStack.cmdProgCtrIntr = NULL;
-    cmdStack.levelResume = -1;
+    cmdStack.bpInterrupt = MC_FALSE;
   }
 
   // Do the actual pop on the stack level
@@ -973,54 +1460,101 @@ static void cmdStackPop(u08 scope)
 //
 // Function: cmdStackPrint
 //
-// Print the stack
+// Print the stack. When interrupted by a debug step command only report the
+// stack top level.
 //
-static void cmdStackPrint(void)
+u08 cmdStackPrint(u08 status)
 {
   s08 i;
+  s08 level;
+  char *input;
   cmdStackLevel_t *cmdStackLevel;
   cmdLine_t *cmdLine;
 
   // Check if no (resume) stack present
-  if (cmdStack.level == -1)
-    return;
+  if (cmdStack.level == -1 && cmdStack.levelResume == -1)
+    return MC_FALSE;
 
-  // Print stack
-  printf(CMD_STACK_TRACE);
-  for (i = cmdStack.level; i >= 0; i--)
+  // Set stack level to start with
+  if (cmdStack.level >= 0)
+    level = cmdStack.level;
+  else
+    level = cmdStack.levelResume;
+
+  // Print stack header
+  if (cmdDebugHalted == MC_FALSE)
   {
-    // In case stack execution was interrupted we must print the command that
-    // signalled the interrupt, else take the command that failed or that is
-    // active on a higher stack level. Also, only print stacklevel when we can
-    // report on it. This will exclude only the top level when loading the
-    // file/keyboard list failed.
+    if (status == CMD_RET_INTR_CMD)
+      printf(CMD_STACK_NFY_INTR_CMD);
+    else
+      printf(CMD_STACK_NOTIFY);
+  }
+  printf(CMD_STACK_HEADER);
+
+  // Print the stack
+  for (i = level; i >= 0; i--)
+  {
     cmdStackLevel = &cmdStack.cmdStackLevel[i];
     cmdLine = NULL;
+
+    // In case stack execution was interrupted in a wait or breakpoint command
+    // or when an error occured we must print the associated command. In all
+    // other cases the command has already been completed and then we must
+    // print the next command as interrupt point.
     if (i == cmdStack.level && cmdStack.levelResume >= 0)
-      cmdLine = cmdStack.cmdProgCtrIntr;
-    else if (cmdStackLevel->cmdProgCounter != NULL)
-      cmdLine = cmdStackLevel->cmdProgCounter;
-
-    if (cmdLine != NULL)
     {
-      // Print command that signalled the end-user interrupt or error
-      printf(CMD_STACK_FMT, i, cmdStackLevel->cmdOrigin, cmdLine->lineNum,
-        cmdLine->input);
+      // This is the highest stack level and we can resume the script. Now
+      // check why we were interupted.
+      if (status == CMD_RET_INTR_CMD)
+      {
+        // Wait 'q' keypress or breakpoint command interrupt: print interrupted
+        // command
+        cmdLine = cmdStack.cmdProgCtrIntr;
+      }
+      else // CMD_RET_INTR
+      {
+        // User or debug/breakpoint interrupt: print next command on stack
+        cmdLine = cmdStackLevel->cmdProgCounter;
+      }
     }
-  }
-  // And report stack invoke command
-  if (cmdStack.cmdLineInvoke != NULL)
-    printf(CMD_STACK_INVOKE_FMT, __progname, cmdStack.cmdLineInvoke->input);
-}
+    else
+    {
+      // Report the command line. At the highest stack level this may be the
+      // line in error.
+      cmdLine = cmdStackLevel->cmdProgCounter;
+    }
 
-//
-// Function: cmdStackPrintSet
-//
-// Enable/disable printing stack command runtime statistics
-//
-void cmdStackPrintSet(u08 enable)
-{
-  cmdStackStatsEnable = enable;
+    if (cmdLine == NULL && cmdStack.levelResume >= 0)
+    {
+      // We reached the end of the command list in the highest stack level
+      printf(CMD_STACK_EOF_FMT, i, basename(cmdStackLevel->cmdOrigin));
+    }
+    else if (cmdLine != NULL)
+    {
+      // Print the designated command from the stack level where the command
+      // itself is trimmed from leading spaces and tabs
+      input = cmdLine->input;
+      printf(CMD_STACK_FMT, i, basename(cmdStackLevel->cmdOrigin),
+        cmdLine->lineNum, input + strspn(input, " \t"));
+    }
+
+    // When debugging and interrupted by a debug step command only print the
+    // stack top level
+    if (cmdDebugHalted == MC_TRUE)
+      break;
+  }
+
+  // Print the stack invoke command, trimmed from leading spaces and tabs
+  if (cmdDebugHalted == MC_FALSE && cmdStack.cmdLineInvoke != NULL)
+  {
+    input = cmdStack.cmdLineInvoke->input;
+    printf(CMD_STACK_INVOKE_FMT, __progname, input + strspn(input, " \t"));
+  }
+
+  // Clear the debug halted flag for subsequent stack prints
+  cmdDebugHalted = MC_FALSE;
+
+  return MC_TRUE;
 }
 
 //
@@ -1064,8 +1598,8 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
       cmdStack.cmdStackLevel[cmdStack.level - 1].cmdEcho;
   cmdEcho = cmdStackLevel->cmdEcho;
 
-  // See if we have an input stream, meaning that we'll take our input from
-  // the keyboard
+  // See if we have an input stream, meaning that we'll take our input from the
+  // keyboard
   if (cmdInput != NULL)
   {
     // This is a multi-line keyboard script starting with 'iif' or 'rf'
@@ -1093,18 +1627,28 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
     cmdStackStatsInit();
   }
 
+  // If we're debugging and on the first stack level or have a step-in debug
+  // command we need to halt immediately
+  if (cmdDebugActive == MC_TRUE && retVal == CMD_RET_OK)
+  {
+    if (cmdStack.level == 0 || cmdDebugCmdGet(-1) == DEBUG_STEP_IN)
+      cmdDebugCmdSet(0, DEBUG_HALT);
+  }
+
   // When loading was ok execute the command list
   if (retVal == CMD_RET_OK)
     retVal = cmdListExecute(&cmdStackLevel->cmdProgCounter,
       &cmdStack.cmdProgCtrIntr);
 
-  // If execution was 'q'-interrupted allow to resume execution at this level
-  if (retVal == CMD_RET_INTERRUPT)
+  // If execution was 'q' or debug interrupted allow to resume execution at
+  // this level
+  if (retVal == CMD_RET_INTR || retVal == CMD_RET_INTR_CMD)
     cmdStack.levelResume = cmdStack.level;
 
   // Print stack when initial error/interrupt has occured
-  if (retVal == CMD_RET_ERROR || retVal == CMD_RET_INTERRUPT)
-    cmdStackPrint();
+  if (retVal == CMD_RET_ERROR || retVal == CMD_RET_INTR ||
+      retVal == CMD_RET_INTR_CMD)
+    cmdStackPrint(retVal);
 
   // Report execution statistics when we're back at root level
   if (cmdStack.level == 0)
@@ -1116,16 +1660,17 @@ u08 cmdStackPush(cmdLine_t *cmdLine, u08 echoReq, char *cmdOrigin,
   else
     cmdEcho = cmdStack.cmdStackLevel[cmdStack.level - 1].cmdEcho;
 
-  // Pop the stack level when the stack cannot be resumed. If we can resume
-  // do an administrative pop only by decreasing the stack level.
+  // Pop the stack level when the stack cannot be resumed. If we can resume do
+  // an administrative pop only by decreasing the stack level.
   if (cmdStack.levelResume == -1)
     cmdStackPop(CMD_STACK_POP_LVL);
   else
     cmdStack.level--;
 
-  // When the stack is empty or we were user-interrupted switch back to line
-  // mode and stop keyboard timer
-  if (cmdStack.level == -1 || retVal == CMD_RET_INTERRUPT)
+  // When the stack is empty or we were 'q' or debug interrupted switch back to
+  // line mode and stop keyboard timer
+  if (cmdStack.level == -1 || retVal == CMD_RET_INTR ||
+      retVal == CMD_RET_INTR_CMD)
   {
     kbModeSet(KB_MODE_LINE);
     cmdStackTimerSet(LIST_TIMER_DISARM);
@@ -1150,7 +1695,7 @@ u08 cmdStackResume(char *cmdName)
 
   if (cmdStack.levelResume == -1)
   {
-    printf("%s: no resume command stack available\n", cmdName);
+    printf("%s: no stack available\n", cmdName);
     return CMD_RET_ERROR;
   }
 
@@ -1174,24 +1719,25 @@ u08 cmdStackResume(char *cmdName)
     retVal = cmdListExecute(&cmdStackLevel->cmdProgCounter,
       &cmdStack.cmdProgCtrIntr);
 
-    // When execution failed to complete initiate recovery or cleanup
-    if (retVal == CMD_RET_INTERRUPT)
+    // If execution was 'q' or debug interrupted allow to resume execution at
+    // this level
+    if (retVal == CMD_RET_INTR || retVal == CMD_RET_INTR_CMD)
     {
       // Signal resume capability and print the entire stack
       cmdStack.levelResume = cmdStack.level;
-      cmdStackPrint();
+      cmdStackPrint(retVal);
       cmdStack.level = -1;
     }
     else if (retVal == CMD_RET_ERROR)
     {
       // First print then clear the full stack
-      cmdStackPrint();
+      cmdStackPrint(retVal);
       cmdStackPop(CMD_STACK_POP_ALL);
     }
     else if (retVal == CMD_RET_RECOVER)
     {
-      // Depending on whether execution was interrupted keep the stack or
-      // pop everything
+      // Depending on whether execution was interrupted keep the stack or pop
+      // everything
       if (cmdStack.levelResume == -1)
         cmdStackPop(CMD_STACK_POP_ALL);
       else
@@ -1205,16 +1751,10 @@ u08 cmdStackResume(char *cmdName)
       break;
     }
 
-    // Current stack level is completed successfully
-    if (cmdStack.level == 0)
+    // If present, restore command echo and set resume point of parent level at
+    // the line after the completed 'e' command
+    if (cmdStack.level != 0)
     {
-      // We're back at root level and the stack becomes empty
-      cmdEcho = CMD_ECHO_YES;
-    }
-    else
-    {
-      // Restore command echo and set resume point of parent level (to continue
-      // at the line after the completed 'e' command)
       cmdEcho = cmdStack.cmdStackLevel[cmdStack.level - 1].cmdEcho;
       cmdStackLevel = &cmdStack.cmdStackLevel[cmdStack.level - 1];
       cmdStackLevel->cmdProgCounter = cmdStackLevel->cmdProgCounter->next;
@@ -1228,6 +1768,7 @@ u08 cmdStackResume(char *cmdName)
   cmdStackStatsPrint();
 
   // Switch back to line mode and stop keyboard timer
+  cmdEcho = CMD_ECHO_YES;
   kbModeSet(KB_MODE_LINE);
   cmdStackTimerSet(LIST_TIMER_DISARM);
 
@@ -1262,7 +1803,7 @@ static void cmdStackStatsPrint(void)
   {
     gettimeofday(&cmdTvEnd, NULL);
     secElapsed = TIMEDIFF_USEC(cmdTvEnd, cmdStack.cmdStackStats.cmdTvStart) /
-     (double)1E6;
+      (double)1E6;
     printf("time=%.3f sec, cmd=%llu, line=%llu", secElapsed,
       cmdStack.cmdStackStats.cmdCmdCount, cmdStack.cmdStackStats.cmdLineCount);
     if (secElapsed > 0.1)
@@ -1270,6 +1811,16 @@ static void cmdStackStatsPrint(void)
         secElapsed);
     printf("\n");
   }
+}
+
+//
+// Function: cmdStackStatsSet
+//
+// Enable/disable printing stack command runtime statistics
+//
+void cmdStackStatsSet(u08 enable)
+{
+  cmdStackStatsEnable = enable;
 }
 
 //

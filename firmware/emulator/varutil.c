@@ -9,11 +9,11 @@
 #include <string.h>
 #include <math.h>
 #include <regex.h>
+#include <sys/ioctl.h>
 
 // Monochron and emuchron defines
 #include "../global.h"
 #include "mchronutil.h"
-#include "scanutil.h"
 #include "varutil.h"
 
 // The administration of mchron variables.
@@ -31,8 +31,9 @@
 #define VAR_BUCKET_SIZE_COUNT	(~((~(int)0) << VAR_BUCKET_SIZE_BITS) + 1)
 
 // Variable printing spacing (in characters)
-#define VAR_WIDTH_VAR		14
-#define VAR_WIDTH_LINE		70
+#define VAR_WIDTH_VAR		16
+#define VAR_WIDTH_COLUMNS_MAX	10
+#define VAR_WIDTH_LINE_MAX	(VAR_WIDTH_VAR * VAR_WIDTH_COLUMNS_MAX)
 
 // A structure to hold runtime information for a named numeric variable
 typedef struct _varVariable_t
@@ -257,11 +258,13 @@ void varInit(void)
 u08 varPrint(char *pattern, u08 summary)
 {
   regex_t regex;
+  struct winsize termWinSize;
   int status = 0;
-  int spaceCount = 0;
   int varInUse = 0;
   int i;
   int varIdx = 0;
+  int widthNow = 0;
+  int widthReq, widthMax;
   u08 allSorted = MC_FALSE;
 
   // Validate regex pattern
@@ -270,6 +273,16 @@ u08 varPrint(char *pattern, u08 summary)
     regfree(&regex);
     return CMD_RET_ERROR;
   }
+
+  // Get the mchron terminal width as this determines how many vars we can
+  // print on a single line. Use a min and max width size though to try to keep
+  // things readable.
+  ioctl(0, TIOCGWINSZ, &termWinSize);
+  widthMax = (termWinSize.ws_col / VAR_WIDTH_VAR) * VAR_WIDTH_VAR;
+  if (widthMax == 0)
+    widthMax = VAR_WIDTH_VAR;
+  else if (widthMax > VAR_WIDTH_LINE_MAX)
+    widthMax = VAR_WIDTH_LINE_MAX;
 
   if (varCount != 0)
   {
@@ -289,7 +302,7 @@ u08 varPrint(char *pattern, u08 summary)
       }
     }
 
-    // Sort the array based on var name
+    // Bubblesort the array based on var name
     while (allSorted == MC_FALSE)
     {
       allSorted = MC_TRUE;
@@ -309,33 +322,43 @@ u08 varPrint(char *pattern, u08 summary)
     // Print the vars from the sorted array
     for (i = 0; i < varCount; i++)
     {
-      if (varSort[i]->active == MC_TRUE)
+      // Print variable only when active and it matches the regex pattern
+      if (varSort[i]->active == MC_FALSE)
+        continue;
+      status = regexec(&regex, varSort[i]->varName, (size_t)0, NULL, 0);
+      if (status != 0)
+        continue;
+
+      // Look at what width is requested and available, then print it
+      varInUse++;
+      widthReq = strlen(varSort[i]->varName) + 1 +
+        emuValuePrint(varSort[i]->varValue, MC_FALSE, MC_FALSE, MC_FALSE);
+      if (widthNow + widthReq >= widthMax)
       {
-        // See if variable name matches regex pattern
-        status = regexec(&regex, varSort[i]->varName, (size_t)0, NULL, 0);
-        if (status == 0)
-        {
-          varInUse++;
-          spaceCount = spaceCount + printf("%s=", varSort[i]->varName) +
-            cmdArgValuePrint(varSort[i]->varValue, MC_FALSE, MC_FALSE);
-          if (spaceCount % VAR_WIDTH_VAR != 0 && spaceCount < VAR_WIDTH_LINE)
-          {
-            printf("%*s", VAR_WIDTH_VAR - spaceCount % VAR_WIDTH_VAR, "");
-            spaceCount = spaceCount + VAR_WIDTH_VAR -
-              spaceCount % VAR_WIDTH_VAR;
-          }
-          if (spaceCount >= VAR_WIDTH_LINE)
-          {
-            spaceCount = 0;
-            printf("\n");
-          }
-        }
+        printf("\n");
+        widthNow = 0;
+      }
+      printf("%s=", varSort[i]->varName);
+      emuValuePrint(varSort[i]->varValue, MC_FALSE, MC_FALSE, MC_TRUE);
+      widthNow = widthNow + widthReq;
+
+      // When appropriate pad with spaces to starting point for next var
+      widthReq = VAR_WIDTH_VAR - widthNow % VAR_WIDTH_VAR;
+      if (widthNow + widthReq >= widthMax)
+      {
+        printf("\n");
+        widthNow = 0;
+      }
+      else if (widthReq > 0)
+      {
+        printf("%*s", VAR_WIDTH_VAR - widthNow % VAR_WIDTH_VAR, "");
+        widthNow = widthNow + widthReq;
       }
     }
   }
 
   // End on newline if needed and provide variable summary
-  if (spaceCount != 0)
+  if (widthNow != 0)
     printf("\n");
   if (summary == MC_TRUE && varInUse != 1)
     printf("registered variables: %d\n", varInUse);

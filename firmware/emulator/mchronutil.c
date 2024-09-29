@@ -7,12 +7,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <regex.h>
 #include <ctype.h>
+#include <errno.h>
+#include <math.h>
+#include <regex.h>
 #include <signal.h>
 #include <unistd.h>
 #include <time.h>
-#include <errno.h>
 
 // Monochron defines
 #include "../global.h"
@@ -412,6 +413,16 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 }
 
 //
+// Function: emuClockPoolCleanup
+//
+// Release the emuMonochron clock pool
+//
+void emuClockPoolCleanup(clockDriver_t *clockDriver)
+{
+  free(clockDriver);
+}
+
+//
 // Function: emuClockPoolInit
 //
 // Build the mchron clock pool based on emuClockDict[]
@@ -444,16 +455,6 @@ clockDriver_t *emuClockPoolInit(int *count)
 }
 
 //
-// Function: emuClockPoolReset
-//
-// Release the emuMonochron clock pool
-//
-void emuClockPoolReset(clockDriver_t *clockDriver)
-{
-  free(clockDriver);
-}
-
-//
 // Function: emuClockPrint
 //
 // Print an overview of all clocks in the Emuchron clock dictionary
@@ -465,7 +466,7 @@ void emuClockPrint(void)
 
   // All Emuchron clocks
   printf("clocks:\n");
-  printf("clock clockId              description\n");
+  printf("clock  clockId              description\n");
 
   // Do this per entry
   for (i = 0; i < emuClockDictCount; i++)
@@ -475,7 +476,7 @@ void emuClockPrint(void)
       active = '*';
     else
       active = ' ';
-    printf("%2d%c   %-20s %s\n", i, active, emuClockDict[i].clockName,
+    printf("  %2d%c  %-20s %s\n", i, active, emuClockDict[i].clockName,
         emuClockDict[i].clockDesc);
   }
 }
@@ -543,6 +544,39 @@ void emuClockUpdate(void)
   // Update clock layout
   ctrlLcdFlush();
   rtcTimeEvent = MC_FALSE;
+}
+
+//
+// Function: emuCmdPromptCleanup
+//
+// Reset the mchron command line prompt by returning the heap space
+//
+void emuCmdPromptCleanup(char *prompt)
+{
+  free(prompt);
+}
+
+//
+// Function: emuCmdPromptInit
+//
+// Init the mchron command line prompt by reserving enough heap space
+//
+char *emuCmdPromptInit(void)
+{
+  return malloc(strlen(__progname) + 5);
+}
+
+//
+// Function: emuCmdPromptSet
+//
+// Set the mchron command line prompt
+//
+void emuCmdPromptSet(char *prompt)
+{
+  if (cmdDebugActiveGet() == MC_FALSE)
+    sprintf(prompt, "%s> ", __progname);
+  else
+    sprintf(prompt, "%s-D> ", __progname);
 }
 
 //
@@ -641,6 +675,34 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
 }
 
 //
+// Function: emuDebugCmdSet
+//
+// Set stack debug command
+//
+u08 emuDebugCmdSet(char *cmdName, u08 command)
+{
+  u08 retVal = CMD_RET_OK;
+
+  if (cmdStackActiveGet() == MC_TRUE)
+  {
+    printf("%s: use only at command prompt\n", cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+  else if (cmdDebugActiveGet() == MC_FALSE)
+  {
+    printf("%s: debugging is inactive\n", cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+  else if (cmdDebugCmdSet(0, command) == MC_FALSE)
+  {
+    printf("%s: no stack available\n", cmdName);
+    retVal = CMD_RET_ERROR;
+  }
+
+ return retVal;
+}
+
+//
 // Function: emuEchoReqGet
 //
 // Get the requested list command echo, used for tracing command files
@@ -687,7 +749,7 @@ void emuEepromPrint(void)
     printf("invalid\n");
 
   // All Monochron eeprom settings
-  printf("byte address name            value\n");
+  printf("byte  address  name              value  value\n");
 
   // Copy all id's, sort them and then print them
   for (i = 0; i < eepDictCount; i++)
@@ -710,10 +772,56 @@ void emuEepromPrint(void)
   for (i = 0; i < eepDictCount; i++)
   {
     value = eeprom_read_byte((uint8_t *)(size_t)dictSort[i]->eepItemId);
-    printf("%2d   0x%03x   %-15s %3d (0x%02x)\n",
+    printf("  %2d    0x%03x  %-15s     %3d   0x%02x\n",
       dictSort[i]->eepItemId - EE_OFFSET, dictSort[i]->eepItemId,
       dictSort[i]->eepItemName, value, value);
   }
+}
+
+//
+// Function: emuEnvirCheck
+//
+// Do generic environment cross checks for mchron commands.
+// Arguments checkStack and checkDebug indicate if we need to check whether we
+// run command from the stack and/or whether script debugging is active.
+// Arguments stackActive and debugActive indicate the valid state for each
+// check. If a valid state is not met, an error is returned.
+//
+u08 emuEnvirCheck(char *cmdName, u08 checkStack, u08 stackActive,
+  u08 checkDebug, u08 debugActive)
+{
+  u08 status;
+
+  if (checkStack == MC_TRUE)
+  {
+    status = cmdStackActiveGet();
+    if (status == MC_TRUE && stackActive == MC_FALSE)
+    {
+      printf("%s: use only at command prompt\n", cmdName);
+      return CMD_RET_ERROR;
+    }
+    if (status == MC_FALSE && stackActive == MC_TRUE)
+    {
+      printf("%s: use only in command list\n", cmdName);
+      return CMD_RET_ERROR;
+    }
+  }
+  if (checkDebug == MC_TRUE)
+  {
+    status = cmdDebugActiveGet();
+    if (status == MC_TRUE && debugActive == MC_FALSE)
+    {
+      printf("%s: debugging is active\n", cmdName);
+      return CMD_RET_ERROR;
+    }
+    if (status == MC_FALSE && debugActive == MC_TRUE)
+    {
+      printf("%s: debugging is inactive\n", cmdName);
+      return CMD_RET_ERROR;
+    }
+  }
+
+  return CMD_RET_OK;
 }
 
 //
@@ -726,7 +834,7 @@ u08 emuFontGet(char *fontName)
   // Get font
   if (strcmp(fontName, "5x5p") == 0)
     return FONT_5X5P;
-  else // fontName == "5x7n")
+  else // fontName == "5x7m")
     return FONT_5X7M;
 }
 
@@ -967,6 +1075,82 @@ void emuTimeSync(void)
   DEBUGTP("Clear time event");
   rtcTimeEvent = MC_FALSE;
   rtcMchronTimeInit();
+}
+
+//
+// Function: emuValuePrint
+//
+// Print a number in the desired format and return print length in characters
+// including optional newline char.
+// Note: In case argument print is MC_FALSE, no printing will be done and only
+// the string length is returned.
+//
+u08 emuValuePrint(double value, u08 detail, u08 newline, u08 print)
+{
+  char buffer[25];	// Size must be large enough to hold formatted string
+  u08 length = 0;
+
+  if (fabs(value) >= 10000 || fabs(value) < 0.01L)
+  {
+    if (detail == MC_TRUE)
+    {
+      if ((double)((long long)value) == value && fabs(value) < 10E9L)
+      {
+        if (print == MC_TRUE)
+          length = printf("%lld", (long long)value);
+        else
+          length = sprintf(buffer, "%lld", (long long)value);
+      }
+      else
+      {
+        if (print == MC_TRUE)
+          length = printf("%.6g", value);
+        else
+          length = sprintf(buffer, "%.6g", value);
+      }
+    }
+    else
+    {
+      if (print == MC_TRUE)
+        length = printf("%.3g", value);
+      else
+        length = sprintf(buffer, "%.3g", value);
+    }
+  }
+  else
+  {
+    if ((double)((long long)value) == value)
+    {
+      if (print == MC_TRUE)
+        length = printf("%lld", (long long)value);
+      else
+        length = sprintf(buffer, "%lld", (long long)value);
+    }
+    else if (detail == MC_TRUE)
+    {
+      if (print == MC_TRUE)
+        length = printf("%.6f", value);
+      else
+        length = sprintf(buffer, "%.6f", value);
+    }
+    else
+    {
+      if (print == MC_TRUE)
+        length = printf("%.2f", value);
+      else
+        length = sprintf(buffer, "%.2f", value);
+    }
+  }
+
+  if (newline == MC_TRUE)
+  {
+    if (print == MC_TRUE)
+      length = length + printf("\n");
+    else
+      length = length + 1;
+  }
+
+  return length;
 }
 
 //

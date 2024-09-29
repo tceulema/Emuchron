@@ -22,14 +22,14 @@ rf k=0 k<10 k=k+1
     iif l==1
       rc
     ien
-    iif l<3
-      rc
+    iif l==8
+      rb
     ien
     rf m=0 m<10 m=m+1
       rf n=0 n<10 n=n+1
         # Cutoff 40% of all n values
-        iif n==3
-          rc
+        iif n==6
+          rb
         ien
         iif n>6
           rc
@@ -38,11 +38,11 @@ rf k=0 k<10 k=k+1
         ien
       rn
       # Cutoff 50% of all m values
-      iif m==8
+      iif m==4
         rb
       ien
-      iif m>=4
-        rb
+      iif m<4
+        rc
       ien
     rn
   rn

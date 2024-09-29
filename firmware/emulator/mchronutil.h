@@ -81,14 +81,23 @@ void emuSigSetup(void);
 void emuShutdown(void);
 
 // mchron interpreter support functions
+void emuClockPoolCleanup(clockDriver_t *clockDriver);
 clockDriver_t *emuClockPoolInit(int *count);
-void emuClockPoolReset(clockDriver_t *clockDriver);
 void emuClockPrint(void);
 void emuClockRelease(u08 echoCmd);
 void emuClockUpdate(void);
+u08 emuDebugCmdSet(char *cmdName, u08 command);
 void emuEepromPrint(void);
+u08 emuEnvirCheck(char *cmdName, u08 checkStack, u08 stackActive,
+  u08 checkDebug, u08 debugActive);
 void emuTimePrint(u08 type);
 void emuTimeSync(void);
+u08 emuValuePrint(double value, u08 detail, u08 newline, u08 print);
+
+// mchron command prompt support functions
+void emuCmdPromptCleanup(char *prompt);
+char *emuCmdPromptInit(void);
+void emuCmdPromptSet(char *prompt);
 
 // mchron delay, sleep and timer functions
 char waitDelay(int delay);

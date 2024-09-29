@@ -1083,17 +1083,17 @@ void ctrlStatsReset(u08 type)
 {
   u08 i;
 
-  // Lcd glcd statistics. Note that the resetting the cycle statistics is
-  // copying the aggregated statistics so we can calculate the delta between
-  // the up-to-date aggregated stats and its earlier made copy.
+  // Lcd glcd statistics. Note that resetting the cycle statistics means:
+  // copy the aggregated statistics so we can calculate the delta between the
+  // up-to-date aggregated stats and its earlier made copy.
   if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
     memset(&ctrlGlcdStats, 0, sizeof(ctrlGlcdStats_t));
   if ((type & CTRL_STATS_GLCD_CYCLE) != CTRL_STATS_NULL)
     ctrlGlcdStatsCopy = ctrlGlcdStats;
 
-  // Lcd controller statistics. Note that the resetting the cycle statistics is
-  // copying the aggregated statistics so we can calculate the delta between
-  // the up-to-date aggregated stats and its earlier made copy.
+  // Lcd controller statistics. Note that resetting the cycle statistics means:
+  // copy the aggregated statistics so we can calculate the delta between the
+  // up-to-date aggregated stats and its earlier made copy.
   if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
       memset(&ctrlControllers[i].ctrlStats, 0, sizeof(ctrlStats_t));

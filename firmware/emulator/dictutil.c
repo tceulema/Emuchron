@@ -308,7 +308,7 @@ u08 dictVerify(void)
       }
 
       // Verify that a proper command handler has been assigned
-      if (cmdCommand->cmdPcCtrlType == PC_CONTINUE &&
+      if (cmdCommand->cmdPcbType == PCB_CONTINUE &&
           cmdCommand->cmdHandler == NULL)
       {
         printf("%s: dict: regular command is missing command handler\n",
@@ -316,8 +316,8 @@ u08 dictVerify(void)
         printf("  command = '%s'\n", cmdCommand->cmdName);
         issueCount++;
       }
-      if (cmdCommand->cmdPcCtrlType != PC_CONTINUE &&
-          cmdCommand->cbHandler == NULL)
+      if (cmdCommand->cmdPcbType != PCB_CONTINUE &&
+          cmdCommand->pcbHandler == NULL)
       {
         printf("%s: dict: control block command is missing control block handler\n",
           __progname);

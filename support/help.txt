@@ -44,11 +44,40 @@ Commands:
                      16 = bar, 17 = cross, 18 = line, 19 = pie, 20 = bigdigOne,
                      21 = bigdigTwo, 22 = qrHMS, 23 = qrHM, 24 = marioworld,
                      25 = wave, 26 = dali, 27 = perftest
+  'dba' - Add/update breakpoint
+          Arguments: <stacklevel> <linenumber> <condition>
+              stacklevel: 0..7
+              linenumber: 1..10000
+              condition: expression determining execution halt
+  'dbd' - Delete breakpoint
+          Arguments: <stacklevel> <breakpoint>
+              stacklevel: 0..7
+              breakpoint: 0..1000 (breakpoint number, 0 = all)
+  'dbp' - Print breakpoints
+  'dc'  - Debug continue
+  'dcc' - Check conditional breakpoint
+          Argument: <condition>
+              condition: expression determining execution halt
+  'di'  - Debug step in
+  'dn'  - Debug step next
+  'do'  - Debug step out
+  'dps' - Set top stack program counter
+          Argument: <linenumber>
+              linenumber: 0..10000 (script line number, 0 = <eof>)
+  'dss' - Set script debugging
+          Argument: <enable>
+              enable: 0, 1 (0 = off, 1 = on)
   'e'   - Execute commands from file
           Arguments: <echo> <filename>
               echo: 'e' = echo commands, 'i' = inherit, 's' = silent
               filename: full filepath or relative to startup folder mchron
+  'elp' - Print source list
+          Arguments: <stacklevel> <range>
+              stacklevel: 0..7
+              range: -1..10000 (script line number range, -1 = full range)
+  'elr' - Return from current stack level
   'er'  - Resume interrupted execution
+  'esp' - Print command stack
   'gbc' - Copy graphics buffer
           Arguments: <from> <to>
               from: 0..9
