@@ -39,11 +39,11 @@ Commands:
           Argument: <clock>
               clock: 0 = [detach], 1 = example, 2 = analogHMS, 3 = analogHM,
                      4 = digitalHMS, 5 = digitalHM, 6 = mosquito, 7 = nerd,
-                     8 = pong, 9 = puzzle, 10 = slider, 11 = cascade,
-                     12 = speed, 13 = spider, 14 = thermometer, 15 = traffic,
-                     16 = bar, 17 = cross, 18 = line, 19 = pie, 20 = bigdigOne,
-                     21 = bigdigTwo, 22 = qrHMS, 23 = qrHM, 24 = marioworld,
-                     25 = wave, 26 = dali, 27 = perftest
+                     8 = pong, 9 = pong+beeps, 10 = puzzle, 11 = slider,
+                     12 = cascade, 13 = speed, 14 = spider, 15 = thermometer,
+                     16 = traffic, 17 = bar, 18 = cross, 19 = line, 20 = pie,
+                     21 = bigdigOne, 22 = bigdigTwo, 23 = qrHMS, 24 = qrHM,
+                     25 = marioworld, 26 = wave, 27 = dali, 28 = perftest
   'dba' - Add/update breakpoint
           Arguments: <stacklevel> <linenumber> <condition>
               stacklevel: 0..7

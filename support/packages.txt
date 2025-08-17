@@ -38,7 +38,7 @@ apt-get --yes install libreadline-dev
 # Read Monochron debug strings from FTDI port
 apt-get --yes install minicom
 
-# Main menu editor and program launcher utility
-apt-get --yes install alacarte
+# Main menu and main menu editor and program launcher utility
+apt-get --yes install gnome-shell-extensions alacarte
 
 echo "done"

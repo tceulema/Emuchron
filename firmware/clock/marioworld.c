@@ -48,8 +48,10 @@
 #define BLOCK_STOP	255	// No block animation
 #define BLOCK_START	0	// Start block animation
 #define BLOCK_BOUNCE	3	// Block bounce height
-#define BLOCK_END	(BLOCK_BOUNCE * 2) // End bounce animation
-#define BLOCK_COIN	(BLOCK_END - 2)	// Bounce step to trigger coin anim
+#define BLOCK_ROTATE	(2 * BLOCK_BOUNCE) // Bounce step to trigger rotate '?'
+#define BLOCK_MOVE	3	// Rotate '?' delay animation cycles
+#define BLOCK_END	(BLOCK_ROTATE + 6 * BLOCK_MOVE) // End rotate animation
+#define BLOCK_COIN	(BLOCK_BOUNCE + 1) // Bounce step to trigger coin anim
 
 // The coin emerging from bouncing block
 #define COIN_WIDTH	8	// Coin sprite width
@@ -237,16 +239,16 @@ static const uint16_t __attribute__ ((progmem)) mario[] = // 9x12 frame
   // Select one of the two Mario sprite frame sets below
 
   // Mario frames in which the head moves along with the *body* while walking
-  0x0100,0x0492,0x07d6,0x06c3,0x07cb,0x0ec6,0x0e9c,0x0918,0x0000, // <-- frame 0
-  0x0900,0x0e92,0x0fd6,0x06c3,0x07cb,0x06c6,0x049c,0x0118,0x0000, // <-- frame 1
-  0x0000,0x0918,0x0e9c,0x0ec6,0x07cb,0x06c3,0x07d6,0x0492,0x0100, // --> frame 0
-  0x0000,0x0118,0x049c,0x06c6,0x07cb,0x06c3,0x0fd6,0x0e92,0x0900  // --> frame 1
+  //0x0100,0x0492,0x07d6,0x06c3,0x07cb,0x0ec6,0x0e9c,0x0818,0x0000, // <-- frame 0
+  //0x0840,0x0e92,0x0fd6,0x06c3,0x07cb,0x06c6,0x049c,0x0118,0x0000, // <-- frame 1
+  //0x0000,0x0818,0x0e9c,0x0ec6,0x07cb,0x06c3,0x07d6,0x0492,0x0100, // --> frame 0
+  //0x0000,0x0118,0x049c,0x06c6,0x07cb,0x06c3,0x0fd6,0x0e92,0x0840  // --> frame 1
 
   // Mario frames in which the head moves along with the *feet* while walking
-  //0x0100,0x0492,0x07d6,0x06c3,0x07cb,0x0ec6,0x0e9c,0x0918,0x0000, // <-- frame 0
-  //0x0912,0x0e96,0x0fc3,0x06cb,0x07c6,0x06dc,0x0498,0x0100,0x0000, // <-- frame 1
-  //0x0000,0x0918,0x0e9c,0x0ec6,0x07cb,0x06c3,0x07d6,0x0492,0x0100, // --> frame 0
-  //0x0000,0x0100,0x0498,0x06dc,0x07c6,0x06cb,0x0fc3,0x0e96,0x0912  // --> frame 1
+  0x0100,0x0492,0x07d6,0x06c3,0x07cb,0x0ec6,0x0e9c,0x0818,0x0000, // <-- frame 0
+  0x0852,0x0e96,0x0fc3,0x06cb,0x07c6,0x06dc,0x0498,0x0100,0x0000, // <-- frame 1
+  0x0000,0x0818,0x0e9c,0x0ec6,0x07cb,0x06c3,0x07d6,0x0492,0x0100, // --> frame 0
+  0x0000,0x0100,0x0498,0x06dc,0x07c6,0x06cb,0x0fc3,0x0e96,0x0852  // --> frame 1
 };
 
 // Administer piranha plant animation
@@ -296,6 +298,7 @@ static const uint16_t __attribute__ ((progmem)) wa7x7m[] = // 40x16 frame
 // Local function prototypes
 static void marioAlmAreaUpdate(void);
 static void marioBlock(void);
+static void marioBlockPaint(u08 x, u08 y);
 static void marioBufFill(u08 left, u08 separator, u08 right, u08 yOffset,
   uint16_t *buf);
 static void marioBufFillElm(u08 element, u08 yOffset, uint16_t *buf);
@@ -378,7 +381,7 @@ static void marioAlmAreaUpdate(void)
 //
 // Function: marioBlock
 //
-// Animate block
+// Animate hour and minute '?' blocks
 //
 static void marioBlock(void)
 {
@@ -400,8 +403,10 @@ static void marioBlock(void)
     // Set the bouncing block y position
     if (blockAnim < BLOCK_BOUNCE)
       posY = BLOCK_Y - 1 - blockAnim;
+    else if (blockAnim < 2 * BLOCK_BOUNCE)
+      posY = BLOCK_Y - BLOCK_BOUNCE - 2 + blockAnim;
     else
-      posY = BLOCK_Y - BLOCK_END + 1 + blockAnim;
+      posY = BLOCK_Y;
     if (blockAnimX == BLOCK_HOUR_X)
       blockHourY = posY;
     else
@@ -415,16 +420,57 @@ static void marioBlock(void)
   // Update the blocks when needed
   if (blockUpdate == MC_TRUE)
   {
-    glcdBitmap16Pm(BLOCK_HOUR_X, blockHourY, BLOCK_WIDTH, BLOCK_HEIGHT,
-      block + blockFrame * BLOCK_WIDTH);
-    glcdBitmap16Pm(BLOCK_MIN_X, blockMinY, BLOCK_WIDTH, BLOCK_HEIGHT,
-      block + blockFrame * BLOCK_WIDTH);
+    marioBlockPaint(BLOCK_HOUR_X, blockHourY);
+    marioBlockPaint(BLOCK_MIN_X, blockMinY);
     blockUpdate = MC_FALSE;
   }
 
-  // Detect end of block bounce
+  // Detect end of block bounce and rotate animation
   if (blockAnim == BLOCK_END)
     blockAnim = BLOCK_STOP;
+}
+
+//
+// Function: marioBlockPaint
+//
+// Paint a block sprite with potentially upward rotating '?' in block
+//
+static void marioBlockPaint(u08 x, u08 y)
+{
+  u08 step = (blockAnim - BLOCK_ROTATE) / BLOCK_MOVE + 1;
+  void *bitmap = (uint16_t *)block + blockFrame * BLOCK_WIDTH;
+
+  if (blockAnim == BLOCK_END || blockAnim == BLOCK_STOP || x != blockAnimX ||
+    blockAnim < BLOCK_ROTATE)
+  {
+    // Just paint the block sprite
+    glcdBitmap16Pm(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, bitmap);
+  }
+  else
+  {
+    // Paint block sprite enclosure top-bottom-left-right
+    glcdBitmap(x + 2, y, 2, 0, BLOCK_WIDTH - 4, 2, ELM_WORD, DATA_PMEM,
+      bitmap);
+    glcdBitmap(x + 2, y + BLOCK_HEIGHT - 2, 2, BLOCK_HEIGHT - 2,
+      BLOCK_WIDTH - 4, 2, ELM_WORD, DATA_PMEM, bitmap);
+    glcdBitmap(x, y, 0, 0, 2, BLOCK_HEIGHT, ELM_WORD, DATA_PMEM,
+      bitmap);
+    glcdBitmap(x + BLOCK_WIDTH - 2, y, BLOCK_WIDTH - 2, 0, 2, BLOCK_HEIGHT,
+      ELM_WORD, DATA_PMEM, bitmap);
+
+    // Paint vertically upward rotating '?' in block from block sprite
+    // Remaining bottom part of '?' above spacer line
+    if (step < 6)
+      glcdBitmap(x + 2, y + 2, 2, step + 2, 4, 6 - step, ELM_WORD, DATA_PMEM,
+        bitmap);
+    // Spacer line (taken from sprite so it'll draw correct b/w color)
+    glcdBitmap(x + 2, y + 8 - step, 2, 6, 4, 1, ELM_WORD, DATA_PMEM,
+      bitmap);
+    // Starting top part of '?' below spacer line
+    if (step >= 2)
+      glcdBitmap(x + 2, y + 9 - step, 2, 2, 4, step - 1, ELM_WORD, DATA_PMEM,
+        bitmap);
+   }
 }
 
 //

@@ -117,6 +117,11 @@ int main(int argc, char *argv[])
   if (success == MC_FALSE)
     return CMD_RET_ERROR;
 
+  // Create mchron config folder (if not already there)
+  success = emuConfigCreate();
+  if (success == MC_FALSE)
+    return CMD_RET_ERROR;
+
   // Setup signal handlers to either recover from signal or to attempt graceful
   // non-standard exit
   emuSigSetup();

@@ -123,9 +123,9 @@ static int yyerror(char *s)
 // The supported tokens from flex
 %token NUMBER IDENTIFIER IS
 %token QMARK COLON
-%token PLUS MINUS TIMES DIVIDE MODULO POWER
-%token SIN COS ABS FRAC INTEGER RAND
-%token AND OR
+%token PLUS MINUS MULT DIVIDE MODULO POWER
+%token SIN COS ABS FRAC INTEGER RAND ROUND
+%token AND OR NOT
 %token BITAND BITOR BITNOT SHIFTL SHIFTR
 %token LET GET LT GT EQ NEQ
 %token LEFT RIGHT
@@ -144,11 +144,11 @@ static int yyerror(char *s)
 %left EQ NEQ
 %left LET GET LT GT
 %left SHIFTL SHIFTR
-%left PLUS MINUS BITNOT
-%left TIMES DIVIDE MODULO
+%left PLUS MINUS
+%left MULT DIVIDE MODULO
 %left POWER
-%left NEG
-%left SIN COS ABS FRAC INTEGER RAND
+%left NEG NOT BITNOT
+%left SIN COS ABS FRAC INTEGER RAND ROUND
 
 // Our bison parser
 %start Input
@@ -183,7 +183,7 @@ Expression:
     // Mathematical operator expressions
     | Expression PLUS Expression { $$ = $1 + $3; }
     | Expression MINUS Expression { $$ = $1 - $3; }
-    | Expression TIMES Expression { $$ = $1 * $3; }
+    | Expression MULT Expression { $$ = $1 * $3; }
     | Expression DIVIDE Expression { $$ = $1 / $3; }
     | Expression MODULO Expression { $$ = fmod($1, $3); }
     | Expression POWER Expression { $$ = pow($1, $3); }
@@ -205,6 +205,7 @@ Expression:
         else
           srand(time(NULL));
         $$ = (double)rand() / RAND_MAX; exprConst = MC_FALSE;}
+    | ROUND LEFT Expression RIGHT { $$ = round($3); }
     | SIN LEFT Expression RIGHT { $$ = sin($3); }
     // Bit operators
     // Note: Bit operations are done on type unsigned int
@@ -221,6 +222,7 @@ Expression:
     // Note that function exprCompare() is defined at the top of this file
     | Expression AND Expression { $$ = $1 && $3; }
     | Expression OR Expression { $$ = $1 || $3; }
+    | NOT Expression { $$ = !$2; }
     | Expression GT Expression { $$ = exprCompare($1, $3, COND_GT); }
     | Expression LT Expression { $$ = exprCompare($1, $3, COND_LT); }
     | Expression GET Expression { $$ = exprCompare($1, $3, COND_GET); }

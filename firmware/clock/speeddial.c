@@ -18,10 +18,11 @@
 #define SPEED_RADIUS		15
 #define SPEED_VALUE_X_OFFSET	-5
 #define SPEED_VALUE_Y_OFFSET	6
-#define SPEED_NDL_RADIUS	(SPEED_RADIUS - 2)
-#define SPEED_NDL_RADIAL_STEPS	60L
-#define SPEED_NDL_RADIAL_START	(-0.75L * M_PI)
-#define SPEED_NDL_RADIAL_SIZE	(1.50L * M_PI)
+#define SPEED_MARK_RADIUS	(SPEED_RADIUS - 1.6)
+#define SPEED_NDL_RADIUS	(SPEED_RADIUS - 1.6)
+#define SPEED_NDL_RADIAL_STEPS	60.0
+#define SPEED_NDL_RADIAL_START	(-0.75 * M_PI)
+#define SPEED_NDL_RADIAL_SIZE	(1.50 * M_PI)
 
 // Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
@@ -101,16 +102,16 @@ static void spotSpeedNeedleUpdate(u08 x, u08 oldVal, u08 newVal)
   // Calculate changes in needle
   tmp = sin(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * oldVal +
     SPEED_NDL_RADIAL_START);
-  oldDx = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
+  oldDx = (s08)(tmp * SPEED_NDL_RADIUS);
   tmp = -cos(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * oldVal +
     SPEED_NDL_RADIAL_START);
-  oldDy = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
+  oldDy = (s08)(tmp * SPEED_NDL_RADIUS);
   tmp = sin(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * newVal +
     SPEED_NDL_RADIAL_START);
-  newDx = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
+  newDx = (s08)(tmp * SPEED_NDL_RADIUS);
   tmp = -cos(SPEED_NDL_RADIAL_SIZE / SPEED_NDL_RADIAL_STEPS * newVal +
     SPEED_NDL_RADIAL_START);
-  newDy = (s08)(tmp * (SPEED_NDL_RADIUS + 0.4L));
+  newDy = (s08)(tmp * SPEED_NDL_RADIUS);
 
   // Only work on the needle when it has changed
   if (oldDx != newDx || oldDy != newDy || mcClockInit == MC_TRUE)
@@ -145,9 +146,9 @@ static void spotSpeedDialMarkerUpdate(u08 x, u08 marker)
   float tmp;
 
   // Paint 10-minute marker in speed dial
-  tmp = sin(SPEED_NDL_RADIAL_SIZE / 6.00 * marker + SPEED_NDL_RADIAL_START);
-  dx = (s08)(tmp * (SPEED_RADIUS - 2 + 0.4L));
-  tmp = -cos(SPEED_NDL_RADIAL_SIZE / 6.00 * marker + SPEED_NDL_RADIAL_START);
-  dy = (s08)(tmp * (SPEED_RADIUS - 2 + 0.4L));
+  tmp = sin(SPEED_NDL_RADIAL_SIZE / 6.0 * marker + SPEED_NDL_RADIAL_START);
+  dx = (s08)(tmp * SPEED_MARK_RADIUS);
+  tmp = -cos(SPEED_NDL_RADIAL_SIZE / 6.0 * marker + SPEED_NDL_RADIAL_START);
+  dy = (s08)(tmp * SPEED_MARK_RADIUS);
   glcdDot(x + dx, SPEED_Y_START + dy);
 }

@@ -25,11 +25,12 @@
 // additional steps are added to be *really* sure we'll never overflow.
 #define BALL_SPEED_MAX		5
 #define BALL_ANGLE_MIN		40
-#define BALL_WIDLEN		2	// Square ball width and length
+#define BALL_WIDLEN		2	// Square ball width and height
 #define TRAJ_LEN		38
 
-// Create a new ball motion angle
+// Create a new ball motion angle and encode ball hitting top/bottom bar
 #define ANGLE_NEW		255
+#define BAR_HIT			128
 
 // Pixel height of the top+bottom bars and pixel width of dashed middle line
 #define BAR_H			2
@@ -69,14 +70,21 @@
 #define COLL_CONF		2
 
 // Time in app cycles (representing ~3 secs) for non-time info to be displayed
-#define COUNTDOWN_SCORE		(u08)(1000L * 3 / ANIM_TICK_CYCLE_MS)
+#define COUNTDOWN_SCORE		(u08)(1000 * 3 / ANIM_TICK_CYCLE_MS)
 
 // Time in app cycles (representing ~2 sec) to pauze before starting a new game
-#define COUNTDOWN_GAME		(u08)(1000L * 2 / ANIM_TICK_CYCLE_MS)
+#define COUNTDOWN_GAME		(u08)(1000 * 2 / ANIM_TICK_CYCLE_MS)
 
 // Uncomment this if you want to keep the ball always in the vertical centre
 // of the display. Give it a try and you'll see what I mean...
 //#define BALL_VCENTERED
+
+// Uncomment this if you want the clock layout to better resemble the original
+// arcade Atari PONG game layout. This means: no top/bottom horizontal bars,
+// the score digits '6' and '9' look a bit awkward due to not having a mid-top
+// resp. mid-bottom digit segment, and the ball won’t show until the game
+// starts.
+//#define PONG_ATARI
 
 // Monochron environment variables
 extern volatile uint8_t mcClockOldTM, mcClockOldTH;
@@ -84,24 +92,35 @@ extern volatile uint8_t mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
 extern volatile uint8_t mcAlarming, mcAlarmH, mcAlarmM;
+extern volatile uint8_t mcSnoozing;
 extern volatile uint8_t mcAlarmSwitch;
 extern volatile uint8_t mcAlarmSwitchEvent;
 extern volatile uint8_t mcCycleCounter;
 extern volatile uint8_t mcClockTimeEvent;
 extern volatile uint8_t mcFgColor;
+extern volatile uint8_t mcMchronClock;
+extern clockDriver_t *mcClockPool;
 // mcU8Util1 = flashing state of the paddles during alarm/snooze
 // mcU8Util2 = new score mode
 // mcU8Util3 = current score mode
 // mcU8Util4 = score display timeout timer
 extern volatile uint8_t mcU8Util1, mcU8Util2, mcU8Util3, mcU8Util4;
 
-// The big digit font character set describes seven segment bits per digit.
+// The score digit font character set describes seven segment bits per digit.
 // Per bit segment in a font byte (MSB..LSB):
 // 0-midbottom-midcenter-midtop-rightbottom-righttop-leftbottom-lefttop
-static const unsigned char __attribute__ ((progmem)) bigFont[] =
+// There are two versions. The first shows the '6' and '9' as in the original
+// arcade Atari PONG with a cleared mid-top resp. mid-bottom segment. The
+// second has better readable '6' and '9', with a mid-top resp. mid-bottom
+// segment.
+static const unsigned char __attribute__ ((progmem)) scoreFont[] =
 {
   // 0     1     2     3     4     5     6     7     8     9
+#ifdef PONG_ATARI
+  0x5f, 0x0c, 0x76, 0x7c, 0x2d, 0x79, 0x6b, 0x1c, 0x7f, 0x3d
+#else
   0x5f, 0x0c, 0x76, 0x7c, 0x2d, 0x79, 0x7b, 0x1c, 0x7f, 0x7d
+#endif
 };
 
 // The stored ball trajectory and its metadata
@@ -127,6 +146,10 @@ static u08 scoreRedraw;
 static u08 minuteChanged, hourChanged;
 static u08 countdown;
 
+// The pong clock id so we know when to play with beeps
+static u08 clockId;
+static u08 trajId;
+
 // Random value for determining the direction angle of the ball
 static u16 pongRandBase = M_PI * M_PI * 1000;
 static const float pongRandSeed = 3.9147258617;
@@ -136,7 +159,7 @@ static u16 pongRandVal = 0x5a3c;
 static u08 pongBallIntersect(u08 x1, u08 y1, u08 x2, u08 y2, u08 w2, u08 h2);
 static void pongBallTraject(void);
 static void pongBallVector(float *ballDx, float *ballDy);
-static float pongBarBounce(float y, float *ballDy);
+static float pongBarBounce(float y, float *ballDy, u08 *hitBar);
 static void pongDrawBall(u08 remove);
 static void pongDrawBigDigit(u08 x, u08 value, u08 high);
 static void pongDrawPaddle(s08 x, s08 oldY, s08 newY);
@@ -166,6 +189,8 @@ void pongButton(u08 pressedButton)
 //
 void pongCycle(void)
 {
+  u08 hitBar = MC_FALSE;
+
   // Signal a change in minutes or hours if not signalled earlier
   if (mcClockTimeEvent == MC_TRUE && minuteChanged == MC_FALSE &&
       hourChanged == MC_FALSE)
@@ -218,8 +243,13 @@ void pongCycle(void)
     }
   }
 
-  // Determine the next pong gameplay step
+  // Determine the next pong gameplay step and detect step top/bottom bar hit
   pongGameStep();
+  if (trajY[tickNow] >= BAR_HIT)
+  {
+    trajY[tickNow] = trajY[tickNow] - BAR_HIT;
+    hitBar = MC_TRUE;
+  }
 
   // Draw the ball
   if (countdown == 0)
@@ -259,6 +289,20 @@ void pongCycle(void)
   // Draw score and redraw ball in case it got removed by the score draw
   pongDrawScore();
   pongDrawBall(MC_FALSE);
+
+  // Beep when the ball hits a paddle, end of game (=score) or hit a bar
+  // (top/bottom). Play audio only when there's no audible alarm.
+  if (clockId == CHRON_PONG_BEEP &&
+      (mcAlarming == MC_FALSE || mcSnoozing == MC_TRUE))
+  {
+    if (tickNow == paddleTick && tickNow == ticksPlay)
+      beep(425, 25);
+    else if (trajId > 1 &&
+       (tickNow == ticksPlay || countdown >= COUNTDOWN_GAME - 5))
+      beep(300, 50);
+    else if (hitBar == MC_TRUE)
+      beep(600, 25);
+  }
 }
 
 //
@@ -268,9 +312,14 @@ void pongCycle(void)
 //
 void pongInit(u08 mode)
 {
-  // Draw top+bottom bar and dotted vertical line in middle
+  // Get the clockId to determine whether to play audio
+  clockId = mcClockPool[mcMchronClock].clockId;
+
+  // Draw (optional) top+bottom bar and dotted vertical line in middle
+#ifndef PONG_ATARI
   glcdFillRectangle(0, 0, GLCD_XPIXELS, BAR_H);
   glcdFillRectangle(0, GLCD_YPIXELS - BAR_H, GLCD_XPIXELS, BAR_H);
+#endif
   pongDrawMidLine();
 
   // Init pong score and paddle positions
@@ -281,6 +330,7 @@ void pongInit(u08 mode)
   oldLeftPaddleY = oldRightPaddleY = leftPaddleY = rightPaddleY = 25;
 
   // Init calculating first ball trajectory
+  trajId = 0;
   ticksPlay = tickNow = 0;
   paddleTick = 1;
   ballDirX = pongRandGet(2);
@@ -329,6 +379,11 @@ static void pongBallTraject(void)
   u08 bounceY;
   u08 keepoutTop, keepoutBot, ballEndY;
   u08 avoidPaddle;
+  u08 hitBar;
+
+  // Signal first and subsequent calculated trajectories
+  if (trajId < 2)
+    trajId++;
 
   // Start trajectory at the last ball position and get ball motion vectors
   ballX = trajX[0] = trajX[ticksPlay];
@@ -386,14 +441,14 @@ static void pongBallTraject(void)
       // Determine the vertical bounce position and ball bounce tick
       paddleColl = COLL_CONF;
       dy = (dx / ballDx) * ballDy;
-      bounceY = pongBarBounce(oldBallY + dy, 0);
+      bounceY = pongBarBounce(oldBallY + dy, 0, &hitBar);
       paddleTick = tix;
       if (avoidPaddle == MC_FALSE)
       {
         // Set final ball position in bounce trajectory and bounce the ball x
         // direction in preparation for the next trajectory calculation
         trajX[tix] = oldBallX + dx;
-        trajY[tix] = pongBarBounce(oldBallY + dy, &ballDy);
+        trajY[tix] = pongBarBounce(oldBallY + dy, &ballDy, &hitBar);
         ballDirX = -ballDirX;
         ballAngle = ANGLE_NEW;
         break;
@@ -401,10 +456,16 @@ static void pongBallTraject(void)
     }
 
     // Next ball position in trajectory
-    ballY = pongBarBounce(ballY, &ballDy);
+    ballY = pongBarBounce(ballY, &ballDy, &hitBar);
     trajX[tix] = ballX;
     trajY[tix] = ballY;
+
+    // Mark a bar hit in the trajectory so we know when to beep
+    if (hitBar == MC_TRUE)
+      trajY[tix] = trajY[tix] + BAR_HIT;
   }
+
+  // Mark end of trajectory and set trajectory run to start a first tick
   ticksPlay = tix;
   tickNow = 0;
 
@@ -413,9 +474,10 @@ static void pongBallTraject(void)
   keepoutTop = keepoutBot = 0;
   if (avoidPaddle == MC_TRUE)
   {
-    // We left the play field so set final trajectory ball to start position
+    // We left the play field so set final trajectory ball to next start
+    // position: x is in the middle, y is where the ball left the field
     trajX[tix] = GLCD_XPIXELS / 2 - BALL_WIDLEN;
-    trajY[tix] = GLCD_YPIXELS / 2 - BALL_WIDLEN;
+    trajY[tix] = trajY[tix - 1];
     if (bounceY > ballEndY)
     {
       keepoutTop = ballEndY;
@@ -528,8 +590,9 @@ static void pongBallVector(float *ballDx, float *ballDy)
 // Bounce a ball against a top/bottom bar and flip its y direction on request.
 // Return the (corrected) ball y position.
 //
-static float pongBarBounce(float y, float *ballDy)
+static float pongBarBounce(float y, float *ballDy, u08 *hitBar)
 {
+  *hitBar = MC_FALSE;
   if (ballDy != 0)
   {
     // When bouncing at bottom or top bar flip y direction
@@ -538,6 +601,7 @@ static float pongBarBounce(float y, float *ballDy)
     {
       *ballDy = -*ballDy;
       ballDirY = -ballDirY;
+      *hitBar = MC_TRUE;
     }
   }
 
@@ -554,7 +618,8 @@ static float pongBarBounce(float y, float *ballDy)
 // Function: pongDrawBall
 //
 // Optionally remove the ball from its previous location and draw the ball at
-// its new location
+// its new location. Do not draw ball when we (re)start the game if we run in
+// ATARI legacy mode.
 //
 static void pongDrawBall(u08 remove)
 {
@@ -565,8 +630,14 @@ static void pongDrawBall(u08 remove)
        BALL_WIDLEN * 2);
     glcdColorSetFg();
   }
+#ifdef PONG_ATARI
+  if (countdown == 0 && (tickNow == paddleTick || tickNow != ticksPlay))
+    glcdFillRectangle(trajX[tickNow], trajY[tickNow], BALL_WIDLEN * 2,
+      BALL_WIDLEN * 2);
+#else
   glcdFillRectangle(trajX[tickNow], trajY[tickNow], BALL_WIDLEN * 2,
     BALL_WIDLEN * 2);
+#endif
 }
 
 //
@@ -590,7 +661,7 @@ static void pongDrawBigDigit(u08 x, u08 value, u08 high)
       value = value / 10;
     else
       value = value % 10;
-    segment = pgm_read_byte(bigFont + value);
+    segment = pgm_read_byte(scoreFont + value);
 
     // Draw two vertical segments on the left and the right
     for (i = 0; i < 2; i++)
@@ -636,19 +707,20 @@ static void pongDrawMidLine(void)
 {
   u08 i;
 
-  for (i = 0; i < GLCD_YPIXELS / 8 - 1; i++)
+  for (i = 0; i < GLCD_YPIXELS / 8; i++)
   {
     glcdSetAddress((GLCD_XPIXELS - MIDLINE_W) / 2, i);
     if (mcFgColor)
-      glcdDataWrite(0x0f);
+      glcdDataWrite(0x99);
     else
-      glcdDataWrite(0xf0);
+      glcdDataWrite(0x66);
   }
-  glcdSetAddress((GLCD_XPIXELS - MIDLINE_W) / 2, i);
-  if (mcFgColor)
-    glcdDataWrite(0xcf);
-  else
-    glcdDataWrite(0x30);
+
+#ifndef PONG_ATARI
+  // Repair top/bottom bar
+  glcdDot((GLCD_XPIXELS - MIDLINE_W) / 2, 1);
+  glcdDot((GLCD_XPIXELS - MIDLINE_W) / 2, 62);
+#endif
 }
 
 //

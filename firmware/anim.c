@@ -181,6 +181,7 @@ clockDriver_t monochron[] =
   //,{CHRON_MOSQUITO,    DRAW_INIT_FULL,    mosquitoInit,       mosquitoCycle,       0}
   //,{CHRON_NERD,        DRAW_INIT_FULL,    nerdInit,           nerdCycle,           0}
   //,{CHRON_PONG,        DRAW_INIT_FULL,    pongInit,           pongCycle,           pongButton}
+  //,{CHRON_PONG_BEEP,   DRAW_INIT_FULL,    pongInit,           pongCycle,           pongButton}
   ,{CHRON_PUZZLE,      DRAW_INIT_FULL,    puzzleInit,         puzzleCycle,         puzzleButton}
   //,{CHRON_QR_HMS,      DRAW_INIT_FULL,    qrInit,             qrCycle,             0}
   //,{CHRON_QR_HM,       DRAW_INIT_PARTIAL, qrInit,             qrCycle,             0}

@@ -75,6 +75,7 @@ u08 emuStartModeGet(char startId);
 
 // mchron environment functions
 u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv);
+u08 emuConfigCreate(void);
 void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
   int arg3, int arg4);
 void emuSigSetup(void);

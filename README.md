@@ -1,7 +1,7 @@
 ## Project Emuchron
 ### What is Emuchron
 Emuchron is a lightweight [Adafruit Monochron](http://www.adafruit.com/product/204)
-(product discontinued) emulator for Debian Linux 11 and 12.\
+(product discontinued) emulator for Debian Linux 12 and 13.\
 It features a test and debugging platform for Monochron clocks and high-level
 glcd graphics functions, and a software framework for clock plugins.
 
@@ -34,8 +34,8 @@ standard gdb debugger and a gdb front-end gui this is a powerful means to test
 specific functionality and find and solve bugs.
 
 The *mchron* interpreter supports named variables representing numeric values,
-repeat and if-then-else logic constructs, and basic mathematical expression
-evaluation for numeric command arguments.
+repeat, if-then-else and return logic constructs, and basic mathematical
+expression evaluation for numeric command arguments.
 
 ### What comes extra with Emuchron
 Compared to the original Monochron [firmware](https://github.com/adafruit/monochron),

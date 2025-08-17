@@ -14,20 +14,20 @@
 #define ANA_X_START			64
 #define ANA_Y_START			31
 #define ANA_RADIUS			30
-#define ANA_DOT_RADIUS			(ANA_RADIUS - 1.9L)
-#define ANA_SEC_RADIUS_LINE		(ANA_RADIUS - 3.9L)
-#define ANA_SEC_RADIUS_ARROW		(ANA_RADIUS - 2.3L)
-#define ANA_MIN_RADIUS			(ANA_RADIUS - 2.9L)
-#define ANA_HOUR_RADIUS			(ANA_RADIUS - 9.9L)
-#define ANA_SEC_LEG_RADIUS		(ANA_RADIUS - 7.0L)
+#define ANA_DOT_RADIUS			(ANA_RADIUS - 1.9)
+#define ANA_SEC_RADIUS_LINE		(ANA_RADIUS - 3.9)
+#define ANA_SEC_RADIUS_ARROW		(ANA_RADIUS - 2.3)
+#define ANA_MIN_RADIUS			(ANA_RADIUS - 2.9)
+#define ANA_HOUR_RADIUS			(ANA_RADIUS - 9.9)
+#define ANA_SEC_LEG_RADIUS		(ANA_RADIUS - 7.0)
 #define ANA_MIN_LEG_RADIUS		8
 #define ANA_HOUR_LEG_RADIUS		5
-#define ANA_SEC_STEPS			60L
-#define ANA_MIN_STEPS			60L
-#define ANA_HOUR_STEPS			12L
-#define ANA_SEC_LEG_RADIAL_OFFSET	(0.10L)
-#define ANA_MIN_LEG_RADIAL_OFFSET	(2L * M_PI / 2.50L)
-#define ANA_HOUR_LEG_RADIAL_OFFSET	(2L * M_PI / 2.50L)
+#define ANA_SEC_STEPS			60.0
+#define ANA_MIN_STEPS			60.0
+#define ANA_HOUR_STEPS			12.0
+#define ANA_SEC_LEG_RADIAL_OFFSET	(0.1)
+#define ANA_MIN_LEG_RADIAL_OFFSET	(2.0 * M_PI / 2.5)
+#define ANA_HOUR_LEG_RADIAL_OFFSET	(2.0 * M_PI / 2.5)
 
 // Specifics for alarm and date element areas
 #define ANA_ALARM_X_START		118
@@ -135,13 +135,13 @@ void analogCycle(void)
     if (ANA_SEC_MOVE == 0)
     {
       // Move at time event (once per second or init)
-      radElement = (2L * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS;
+      radElement = (2.0 * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS;
     }
     else
     {
       // Move when leg position changes
-      radElement = (2L * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS +
-        (2L * M_PI / ANA_SEC_STEPS / (1000L / ANIM_TICK_CYCLE_MS + 0.5)) *
+      radElement = (2.0 * M_PI / ANA_SEC_STEPS) * (float)mcClockNewTS +
+        (2.0 * M_PI / ANA_SEC_STEPS / (1000.0 / ANIM_TICK_CYCLE_MS + 0.5)) *
         mcU8Util2;
     }
 
@@ -149,7 +149,7 @@ void analogCycle(void)
     {
       // Needle indicator
       secElementChanged = analogElementCalc(posSec, posSecNew, radElement,
-        0L, ANA_SEC_RADIUS_LINE, 0, 2);
+        0.0, ANA_SEC_RADIUS_LINE, 0, 2);
     }
     else
     {
@@ -165,13 +165,13 @@ void analogCycle(void)
     if (ANA_MIN_MOVE == 0)
     {
       // Move once per minute
-      radElement = (2L * M_PI / ANA_MIN_STEPS) * (float)mcClockNewTM;
+      radElement = (2.0 * M_PI / ANA_MIN_STEPS) * (float)mcClockNewTM;
     }
     else
     {
       // Move when tip position changes
-      radElement = (2L * M_PI / ANA_MIN_STEPS) * (float)mcClockNewTM  +
-        (2L * M_PI / ANA_SEC_STEPS / ANA_MIN_STEPS) * (float)mcClockNewTS;
+      radElement = (2.0 * M_PI / ANA_MIN_STEPS) * (float)mcClockNewTM  +
+        (2.0 * M_PI / ANA_SEC_STEPS / ANA_MIN_STEPS) * (float)mcClockNewTS;
     }
     minElementChanged = analogElementCalc(posMin, posMinNew, radElement,
       ANA_MIN_LEG_RADIAL_OFFSET, ANA_MIN_RADIUS, ANA_MIN_LEG_RADIUS, 2);
@@ -182,8 +182,8 @@ void analogCycle(void)
     if (minElementChanged == MC_TRUE || mcClockOldTH != mcClockNewTH ||
         mcClockInit == MC_TRUE)
     {
-      radElement = (2L * M_PI / ANA_HOUR_STEPS) * (float)(mcClockNewTH % 12) +
-        (2L * M_PI / ANA_MIN_STEPS / ANA_HOUR_STEPS) * (float)mcClockNewTM;
+      radElement = (2.0 * M_PI / ANA_HOUR_STEPS) * (float)(mcClockNewTH % 12) +
+        (2.0 * M_PI / ANA_MIN_STEPS / ANA_HOUR_STEPS) * (float)mcClockNewTM;
       hourElementChanged = analogElementCalc(posHour, posHourNew, radElement,
         ANA_HOUR_LEG_RADIAL_OFFSET, ANA_HOUR_RADIUS, ANA_HOUR_LEG_RADIUS, 6);
     }
@@ -290,11 +290,11 @@ static void analogAlarmAreaUpdate(void)
       float radM, radH;
 
       // Prepare the analog alarm clock
-      radM = (2L * M_PI / ANA_MIN_STEPS) * (float)mcAlarmM;
+      radM = (2.0 * M_PI / ANA_MIN_STEPS) * (float)mcAlarmM;
       dxM = (s08)(sin(radM) * ANA_ALARM_MIN_RADIUS);
       dyM = (s08)(-cos(radM) * ANA_ALARM_MIN_RADIUS);
-      radH = (2L * M_PI / ANA_HOUR_STEPS) * (float)(mcAlarmH % 12) +
-        (2L * M_PI / ANA_MIN_STEPS / ANA_HOUR_STEPS) * (float)mcAlarmM;
+      radH = (2.0 * M_PI / ANA_HOUR_STEPS) * (float)(mcAlarmH % 12) +
+        (2.0 * M_PI / ANA_MIN_STEPS / ANA_HOUR_STEPS) * (float)mcAlarmM;
       dxH = (s08)(sin(radH) * ANA_ALARM_HOUR_RADIUS);
       dyH = (s08)(-cos(radH) * ANA_ALARM_HOUR_RADIUS);
 
@@ -309,11 +309,8 @@ static void analogAlarmAreaUpdate(void)
     else
     {
       // Clear alarm area
-      glcdColorSetBg();
-      glcdFillRectangle(ANA_ALARM_X_START - ANA_ALARM_RADIUS - 1,
-        ANA_ALARM_Y_START - ANA_ALARM_RADIUS - 1, ANA_ALARM_RADIUS * 2 + 3,
-        ANA_ALARM_RADIUS * 2 + 3);
-      glcdColorSetFg();
+      glcdFillCircle2(ANA_ALARM_X_START, ANA_ALARM_Y_START,
+        ANA_ALARM_RADIUS + 1, FILL_BLANK);
       mcU8Util1 = MC_FALSE;
     }
   }
@@ -327,9 +324,8 @@ static void analogAlarmAreaUpdate(void)
   {
     // Inverse the alarm area
     mcU8Util1 = newAlmDisplayState;
-    glcdFillRectangle2(ANA_ALARM_X_START - ANA_ALARM_RADIUS - 1,
-      ANA_ALARM_Y_START - ANA_ALARM_RADIUS - 1, ANA_ALARM_RADIUS * 2 + 3,
-      ANA_ALARM_RADIUS * 2 + 3, ALIGN_AUTO, FILL_INVERSE);
+    glcdFillCircle2(ANA_ALARM_X_START, ANA_ALARM_Y_START, ANA_ALARM_RADIUS + 1,
+      FILL_INVERSE);
   }
 }
 
@@ -421,8 +417,8 @@ static void analogInit(u08 mode)
     for (i = 0; i < 12; i++)
     {
       // The 5-minute markers
-      dxDot = (s08)(sin(2L * M_PI / 12L * i) * ANA_DOT_RADIUS);
-      dyDot = (s08)(-cos(2L * M_PI / 12L * i) * ANA_DOT_RADIUS);
+      dxDot = (s08)(sin(2.0 * M_PI / 12.0 * i) * ANA_DOT_RADIUS);
+      dyDot = (s08)(-cos(2.0 * M_PI / 12.0 * i) * ANA_DOT_RADIUS);
       glcdDot(ANA_X_START + dxDot, ANA_Y_START + dyDot);
 
       // The additional 15-minute markers

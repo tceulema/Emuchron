@@ -16,8 +16,8 @@
 // This clock displays a QR redundancy 1 (L), level 2 (25x25) QR, allowing to
 // encode a text string up to 32 characters.
 // An initial estimate of calculating and drawing a QR from scratch shows this
-// will take about 0.25 seconds of raw Atmel CPU power (avr-gcc 4.8.1 with
-// Emuchron v3.0 code base).
+// will take about 0.25 seconds of raw Atmel CPU power (avr-gcc 14.2.0 with
+// Emuchron v8.2 code base).
 // If this were to be done in a single clock cycle, that is scheduled to last
 // up to 75 msec, the button user interface and blinking elements such as the
 // alarm time, would freeze in that period. From a UI perspective this is not
@@ -25,17 +25,17 @@
 // To overcome this behavior we need to split up the QR generation process in
 // chunks where each chunk is executed in a single clock cycle, limited by its
 // 75 msec duration. So, the QR generation process must be put into a state
-// that the clock code will use to execute a manageable chunck of work.
+// that the clock code will use to execute a manageable chunck of work, limited
+// by the single clock cycle duration of 75 msec.
 // Splitting up the CPU workload over multiple clock cycles means that we need
 // to wait more time before the actual QR is drawn on the lcd display, but we
-// won't have any UI lag, and that's what matters most. We must make sure
-// though that each chunk of work fits within a single clock cycle of 75 msec.
+// won't have any UI lag, and that's what matters most.
 // There is another benefit of splitting up the CPU load over clock cycles.
 // The number of clock cycles needed to generate the QR will always be the same
 // and therefor always a constant x times 75 msec cycles. In addition to that,
-// the last step, being the QR Draw, requires an almost constant amount of CPU
-// time regardless the encoded string, making the QR always appear at the same
-// moment between consecutive seconds. This is good UI.
+// the last step, being the QR Draw, requires a quite stable amount of CPU
+// time regardless the encoded string, making the QR appear pretty much at the
+// same moment between consecutive seconds. This is good UI.
 //
 // For a single QR 8 different masks are tried (evaluated), and the best mask
 // will be used for displaying the QR. A mask is a method of dispersing the
@@ -47,41 +47,43 @@
 // For our QR generation process the following split-up is implemented using a
 // process state variable. Each single process state is processed in a single
 // clock cycle of 75 msec:
-// 0    - Idle (no QR generation active).
-// 1    - Init QR generation process and try mask 0+1.
-// 2    - Try mask 2+5.
-// 3    - Try mask 3+6.
-// 4    - Try mask 4+7, apply best mask and complete QR.
-// 5    - Draw QR.
+// 0 - Idle (no QR generation active).
+// 1 - Init QR generation process and try mask 0+1.
+// 2 - Try mask 2+5.
+// 3 - Try mask 3+6.
+// 4 - Try mask 4+7, apply best mask and complete QR.
+// 5 - Draw QR.
 //
 // Using a debug version of the firmware we can find out how much CPU time each
 // state has left from its 75 msec cycle. Note that this time also includes
 // interrupt handler time (1-msec handler, RTC handler, button handler) and
 // blinking the alarm time during alarming. The latter appears to cost somewhat
-// more than 1 msec. However, it also includes time to send the debug strings
-// over the FTDI port and it is therefore believed that the actual numbers per
-// cycle are slightly higher than shown here, so consider them worst-case
-// scenario values.
-// The following numbers are obtained using avr-gcc 4.8.1 (Debian 8) and the
-// Emuchron v3.0 code base while the clock is alarming:
+// more than 1 msec. However, as it also includes the time to send the debug
+// strings over the FTDI port it is assumed that the actual numbers per cycle
+// are slightly better than shown here, so consider them worst-case scenario
+// values.
+// The numbers below are obtained over a run period of 10 minutes while the
+// clock is alarming. The firmware is built with avr-gcc 14.2.0 (Debian 13)
+// and the Emuchron v8.2 code base.
 //
 // State    Min time      Avg time
 //         left (msec)   left (msec)
-//   1         9            10.8
-//   2        21            22.8
-//   3        20            21.2
-//   4        13            17.1
-//   5        63            63.8
+//   1         6            10.0
+//   2        17            21,3
+//   3        15            19,6
+//   4        11            15,5
+//   5        56            60,1
 //
 // Seeing the result for state 2 and 3, trying a single mask will take on
-// average about 27 msec of raw CPU power. State 1 is the most CPU intensive,
-// but having 9 msec left within its cycle as a worst-case is well within cycle
-// 'safety limits'.
+// average about 27.5 msec of raw CPU power. State 1 is the most CPU intensive,
+// but having 6 msec left within its cycle as a worst-case value is within
+// cycle 'safety limits'. Note that over a run period of 10 minutes the 6 msec
+// time left value occured only 7 times.
 //
 // So, how long will it take to generate and display a QR from scratch?
 // We need in total 5 clock cycles. Cycles 1..4  will take 75 msec each.
-// Drawing the QR in cycle 5 takes about 11 msec to complete.
-// This means that a total of 4 x 0.075 + 0.011 = 0.311 seconds is required.
+// Drawing the QR in cycle 5 takes on average 15 msec to complete.
+// This means that a total of 4 x 0.075 + 0.015 = 0.315 seconds is required.
 // You will notice this timelag upon initializing a QR clock.
 //
 
@@ -92,6 +94,16 @@
 #define QR_Y_START		7
 #define QR_BORDER		4
 #define QR_PIX_FACTOR		2
+
+// A QR message consists of two elements: time and date.
+// Decide on how to separate the elements, being a newline or a (space
+// enclosed) dash.
+// Why this option? A QR scanner (example: iOS camera QR scanner) may show only
+// a single text line and therefor omit showing the date part when the newline
+// separator is used.
+// Instruction: Comment-in one of the element separators below.
+//#define QR_ELM_SEPARATOR	'\n'
+#define QR_ELM_SEPARATOR	'-'
 
 // Monochron environment variables
 extern volatile uint8_t mcClockOldTM, mcClockOldTH;
@@ -122,8 +134,14 @@ extern volatile uint8_t mcU8Util2;
 
 // On april 1st, instead of the date, encode the message below. If you don't
 // like it make the textstring empty (""), and the clock will ignore it.
-// Note: The length of the message below will be truncated after 23 chars
-// when in HMS mode and after 26 chars when in HM mode.
+// Note: The length of the message below will be truncated when the max QR
+// string length (32 chars) is exceeded.
+// When using the newline separator:
+//  - HM mode: max 26 chars
+//  - HMS mode: max 23 chars
+// When using the (spaces enclosed) dash separator:
+//  - HM mode: max 24 chars
+//  - HMS mode: max 21 chars
 static char *qrAprilFools = "The cake is a lie.";
 
 // Local function prototypes
@@ -176,7 +194,19 @@ void qrCycle(void)
         animValToStr(mcClockNewTS, (char *)&strinbuf[6]);
         offset = 3;
       }
-      strinbuf[5 + offset] = '\n';
+
+      // Add the element separator (either a '\n' or a " - ")
+      if (QR_ELM_SEPARATOR == '-')
+      {
+        strinbuf[offset + 5] = ' ';
+        offset++;
+      }
+      strinbuf[offset + 5] = QR_ELM_SEPARATOR;
+      if (QR_ELM_SEPARATOR == '-')
+      {
+        strinbuf[offset + 6] = ' ';
+        offset++;
+      }
 
       // Add date or special message on april 1st
       if (mcClockNewDD == 1 && mcClockNewDM == 4 && qrAprilFools[0] != '\0')
@@ -198,27 +228,27 @@ void qrCycle(void)
         }
 
         // Fill up with spaces
-        strinbuf[9 + offset]  = ' ';
-        strinbuf[13 + offset] = ' ';
+        strinbuf[offset + 9]  = ' ';
+        strinbuf[offset + 13] = ' ';
 
         // Put day in QR string while excluding prefix 0
         if (mcClockNewDD < 10)
         {
-          strinbuf[14 + offset] = '0' + mcClockNewDD;
-          offset--;
+          strinbuf[offset + 14] = '0' + mcClockNewDD;
         }
         else
         {
-          animValToStr(mcClockNewDD, (char *)&strinbuf[14 + offset]);
+          animValToStr(mcClockNewDD, (char *)&strinbuf[offset + 14]);
+          offset++;
         }
 
         // Fill up with comma and space
-        strinbuf[16 + offset] = ',';
-        strinbuf[17 + offset] = ' ';
+        strinbuf[offset + 15] = ',';
+        strinbuf[offset + 16] = ' ';
 
         // Put year in QR string
-        animValToStr(20, (char *)&strinbuf[18 + offset]);
-        animValToStr(mcClockNewDY, (char *)&strinbuf[20 + offset]);
+        animValToStr(20, (char *)&strinbuf[offset + 17]);
+        animValToStr(mcClockNewDY, (char *)&strinbuf[offset + 19]);
       }
 
       // Start first cycle in generation of QR

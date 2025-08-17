@@ -16,14 +16,14 @@
 #define PIE_HOUR_X_START	17
 #define PIE_Y_START		36
 #define PIE_RADIUS		15
-#define PIE_LINE_RADIUS		(PIE_RADIUS - 1)
-#define PIE_LINE_RADIAL_STEPS	60L
-#define PIE_LINE_RADIAL_START	0L
-#define PIE_LINE_RADIAL_SIZE	(2L * M_PI)
+#define PIE_LINE_RADIUS		(PIE_RADIUS - 0.5)
+#define PIE_LINE_RADIAL_STEPS	60.0
+#define PIE_LINE_RADIAL_START	0.0
+#define PIE_LINE_RADIAL_SIZE	(2.0 * M_PI)
 #define PIE_VALUE_X_OFFSET	-3
 #define PIE_VALUE_Y_OFFSET	-2
-#define PIE_VALUE_RADIUS	(PIE_RADIUS - 6)
-#define PIE_VALUE_ELLIPS_Y	1.1L
+#define PIE_VALUE_RADIUS	(PIE_RADIUS - 5.5)
+#define PIE_VALUE_ELLIPS_Y	1.1
 
 // Monochron environment variables
 extern volatile uint8_t mcClockOldTS, mcClockOldTM, mcClockOldTH;
@@ -214,22 +214,24 @@ static void pieLineUpdate(u08 x, u08 oldVal, u08 newVal)
   // Calculate changes in pie line
   arcLineOld = PIE_LINE_RADIAL_SIZE / PIE_LINE_RADIAL_STEPS * oldVal +
     PIE_LINE_RADIAL_START;
-  oldLineDx = (s08)(sin(arcLineOld) * (PIE_LINE_RADIUS + 0.5L));
-  oldLineDy = (s08)(-cos(arcLineOld) * (PIE_LINE_RADIUS + 0.5L));
+  oldLineDx = (s08)(sin(arcLineOld) * PIE_LINE_RADIUS);
+  oldLineDy = (s08)(-cos(arcLineOld) * PIE_LINE_RADIUS);
   arcLineNew = PIE_LINE_RADIAL_SIZE / PIE_LINE_RADIAL_STEPS * newVal +
     PIE_LINE_RADIAL_START;
-  newLineDx = (s08)(sin(arcLineNew) * (PIE_LINE_RADIUS + 0.5L));
-  newLineDy = (s08)(-cos(arcLineNew) * (PIE_LINE_RADIUS + 0.5L));
+  newLineDx = (s08)(sin(arcLineNew) * PIE_LINE_RADIUS);
+  newLineDy = (s08)(-cos(arcLineNew) * PIE_LINE_RADIUS);
 
   // Calculate changes in pie value
-  arcValOld = (arcLineOld - PIE_LINE_RADIAL_START)/2L + PIE_LINE_RADIAL_START;
-  oldValDx = (s08)(sin(arcValOld) * (PIE_VALUE_RADIUS + 0.5L));
+  arcValOld = (arcLineOld - PIE_LINE_RADIAL_START) / 2.0 +
+    PIE_LINE_RADIAL_START;
+  oldValDx = (s08)(sin(arcValOld) * PIE_VALUE_RADIUS);
   oldValDy =
-    (s08)(-cos(arcValOld) * (PIE_VALUE_RADIUS + 0.5L) * PIE_VALUE_ELLIPS_Y);
-  arcValNew = (arcLineNew - PIE_LINE_RADIAL_START)/2L + PIE_LINE_RADIAL_START;
-  newValDx = (s08)(sin(arcValNew) * (PIE_VALUE_RADIUS + 0.5L));
+    (s08)(-cos(arcValOld) * PIE_VALUE_RADIUS * PIE_VALUE_ELLIPS_Y);
+  arcValNew = (arcLineNew - PIE_LINE_RADIAL_START) / 2.0 +
+    PIE_LINE_RADIAL_START;
+  newValDx = (s08)(sin(arcValNew) * PIE_VALUE_RADIUS);
   newValDy =
-    (s08)(-cos(arcValNew) * (PIE_VALUE_RADIUS + 0.5L) * PIE_VALUE_ELLIPS_Y);
+    (s08)(-cos(arcValNew) * PIE_VALUE_RADIUS * PIE_VALUE_ELLIPS_Y);
 
   // Remove old pie line
   glcdColorSetBg();
@@ -259,8 +261,8 @@ static void pieLineUpdate(u08 x, u08 oldVal, u08 newVal)
   // cause it to (partly) disappear
   glcdColorSetFg();
   glcdLine(x, PIE_Y_START,
-    x + (s08)(sin(PIE_LINE_RADIAL_START) * (PIE_RADIUS + 0.5L)),
-    PIE_Y_START + (s08)(-cos(PIE_LINE_RADIAL_START) * (PIE_RADIUS + 0.5L)));
+    x + (s08)(sin(PIE_LINE_RADIAL_START) * (PIE_RADIUS + 0.5)),
+    PIE_Y_START + (s08)(-cos(PIE_LINE_RADIAL_START) * (PIE_RADIUS + 0.5)));
 
   // Add new pie line
   glcdLine(x, PIE_Y_START, x + newLineDx, PIE_Y_START + newLineDy);
@@ -276,11 +278,11 @@ static void pieLineUpdate(u08 x, u08 oldVal, u08 newVal)
 
   // Update the global pie arc info that is used to draw the arc
   centerX = x;
-  startX = (s08)(sin(arcLineOld) * (PIE_RADIUS + 0.5L));
-  startY = (s08)(-cos(arcLineOld) * (PIE_RADIUS + 0.5L));
+  startX = (s08)(sin(arcLineOld) * (PIE_RADIUS + 0.5));
+  startY = (s08)(-cos(arcLineOld) * (PIE_RADIUS + 0.5));
   startQ = (u08)(arcLineOld * 4 / PIE_LINE_RADIAL_SIZE);
-  endX = (s08)(sin(arcLineNew) * (PIE_RADIUS + 0.5L));
-  endY = (s08)(-cos(arcLineNew) * (PIE_RADIUS + 0.5L));
+  endX = (s08)(sin(arcLineNew) * (PIE_RADIUS + 0.5));
+  endY = (s08)(-cos(arcLineNew) * (PIE_RADIUS + 0.5));
   endQ = (u08)(arcLineNew * 4 / PIE_LINE_RADIAL_SIZE);
   pieArc();
 }

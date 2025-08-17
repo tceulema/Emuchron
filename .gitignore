@@ -42,3 +42,4 @@ core
 .vscode
 gede2.ini
 *.anjuta*
+*.geany

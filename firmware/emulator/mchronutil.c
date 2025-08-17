@@ -12,6 +12,7 @@
 #include <math.h>
 #include <regex.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <time.h>
 
@@ -148,6 +149,7 @@ static emuClockDict_t emuClockDict[] =
  ,{ CLOCKNAME(CHRON_MOSQUITO),		mosquitoInit,       mosquitoCycle,       0,		"mosquito" }
  ,{ CLOCKNAME(CHRON_NERD),		nerdInit,           nerdCycle,           0,		"nerd" }
  ,{ CLOCKNAME(CHRON_PONG),		pongInit,           pongCycle,           pongButton,	"pong" }
+ ,{ CLOCKNAME(CHRON_PONG_BEEP),		pongInit,           pongCycle,           pongButton,	"pong with beeps" }
  ,{ CLOCKNAME(CHRON_PUZZLE),		puzzleInit,         puzzleCycle,         puzzleButton,	"puzzle" }
  ,{ CLOCKNAME(CHRON_SLIDER),		sliderInit,         sliderCycle,         0,		"slider" }
  ,{ CLOCKNAME(CHRON_CASCADE),		spotCascadeInit,    spotCascadeCycle,    0,		"spotfire cascade" }
@@ -363,11 +365,11 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     char *fullPath;
     int ttyLen = 0;
 
-    // Get the full path to $HOME/.mchron
+    // Get the tty file in the mchron config folder
     home = getenv("HOME");
     if (home == NULL)
     {
-      printf("%s: cannot get $HOME\n", __progname);
+      printf("%s: tty: cannot get $HOME\n", __progname);
       printf("- Use switch \"-t <tty>\" to set lcd output device\n");
       return MC_FALSE;
     }
@@ -577,6 +579,46 @@ void emuCmdPromptSet(char *prompt)
     sprintf(prompt, "%s> ", __progname);
   else
     sprintf(prompt, "%s-D> ", __progname);
+}
+
+//
+// Function: emuConfigCreate
+//
+// Create a folder for the mchron config files if it doesn't exist yet
+//
+u08 emuConfigCreate(void)
+{
+  char *home;
+  char *configFolder;
+  int result;
+
+  // Get the full path to $HOME/.config/mchron
+  home = getenv("HOME");
+  if (home == NULL)
+  {
+    printf("%s: config: cannot get $HOME\n", __progname);
+    return MC_FALSE;
+  }
+  else
+  {
+    // Combine $HOME and config folder and attempt to create it. Note that the
+    // mkdir 0777 mode will be umask-ed and normally will result in 0755.
+    configFolder = malloc(strlen(home) + strlen(MCHRON_CONFIG) + 1);
+    sprintf(configFolder, "%s%s", home, MCHRON_CONFIG);
+    result = mkdir(configFolder, 0777);
+    free(configFolder);
+
+    // Give error in case it could not created, but ignore when it's already
+    // there
+    if (result < 0 && errno != EEXIST)
+    {
+      printf("%s: config: cannot create mchron config folder %s%s\n", __progname,
+        home, MCHRON_CONFIG);
+      return MC_FALSE;
+    }
+  }
+
+  return MC_TRUE;
 }
 
 //

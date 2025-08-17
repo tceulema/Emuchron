@@ -82,7 +82,7 @@ DOMAIN(domNumCirclePattern, \
 
 // Clock: >=0, manually limited by number of clocks in emuMonochron[]
 DOMAIN(domNumClock, \
-  DOM_NUM_RANGE, NULL, 0, 27, "0 = detach from clock, other = select clock");
+  DOM_NUM_RANGE, NULL, 0, 28, "0 = detach from clock, other = select clock");
 
 // Fill pattern: 0..5
 DOMAIN(domNumFillPattern, \

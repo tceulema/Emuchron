@@ -29,13 +29,14 @@ var [a-zA-Z_]+
 
 "+"	{ return PLUS; }
 "-"	{ return MINUS; }
-"*"	{ return TIMES; }
+"*"	{ return MULT; }
 "/"	{ return DIVIDE; }
 "%"	{ return MODULO; }
 "^"	{ return POWER; }
 
 "&&"	{ return AND; }
 "||"	{ return OR; }
+"!"	{ return NOT; }
 
 "&"	{ return BITAND; }
 "|"	{ return BITOR; }
@@ -55,6 +56,7 @@ var [a-zA-Z_]+
 "frac"	{ return FRAC; }
 "int"	{ return INTEGER; }
 "rand"	{ return RAND; }
+"round"	{ return ROUND; }
 "sin"	{ return SIN; }
 
 "("	{ return LEFT; }

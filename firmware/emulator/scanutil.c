@@ -716,7 +716,7 @@ void cmdInputInit(cmdInput_t *cmdInput, FILE *file, u08 readMethod)
     home = getenv("HOME");
     if (home == NULL)
     {
-      printf("%s: readline: cannot get $HOME\n", __progname);
+      printf("\n%s: readline: cannot get $HOME\n", __progname);
     }
     else
     {
@@ -727,9 +727,9 @@ void cmdInputInit(cmdInput_t *cmdInput, FILE *file, u08 readMethod)
       fp = fopen(rlHistoryFile, "a");
       if (fp == NULL)
       {
-        printf("%s: readline: cannot open file \"%s%s%s\"\n", __progname, "~",
-          MCHRON_CONFIG, READLINE_HISFILE);
-        printf("- manually create folder ~%s\n", MCHRON_CONFIG);
+        printf("\n%s: readline: cannot open file \"%s%s%s\"\n", __progname,
+          "~", MCHRON_CONFIG, READLINE_HISFILE);
+        printf("- Manually create folder ~%s\n", MCHRON_CONFIG);
         free(rlHistoryFile);
         rlHistoryFile = NULL;
       }

@@ -11,7 +11,7 @@
 //
 // Monochron has a built-in Analog to Digital Converter (ADC).
 // For more info on what it does and how it works refer to:
-// http://apcmag.com/arduino-analog-to-digital-converter-how-it-works.htm/
+// https://electronicshacks.com/arduino-adc-guide/
 //
 // Normally an ADC is used for measuring signals, and therefor requires a fast
 // and continuous ADC scan, called a conversion. The ADC can operate between a

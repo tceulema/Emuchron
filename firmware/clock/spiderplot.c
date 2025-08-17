@@ -12,16 +12,16 @@
 
 // Specifics for spider plot clock
 #define SQRT2			(sqrt(2.0))
-#define SINPI3			(sin(M_PI/3))
-#define COSPI3			(cos(M_PI/3))
+#define SINPI3			(sin(M_PI / 3.0))
+#define COSPI3			(cos(M_PI / 3.0))
 #define SPDR_AXIS_SEC		0
 #define SPDR_AXIS_MIN		1
 #define SPDR_AXIS_HOUR		2
 #define SPDR_X_START		52
 #define SPDR_Y_START		39
 #define SPDR_RADIUS		22
-#define SPDR_AXIS_MS_STEPS	60L
-#define SPDR_AXIS_H_STEPS	24L
+#define SPDR_AXIS_MS_STEPS	60.0
+#define SPDR_AXIS_H_STEPS	24.0
 #define SPDR_SEC_VAL_X_START	79
 #define SPDR_SEC_VAL_Y_START	33
 #define SPDR_MIN_VAL_X_START	16
@@ -121,10 +121,12 @@ void spotSpiderPlotCycle(void)
   // Repaint the dotted inner circles at logical position 20 and 40 in case
   // they got distorted by updating the connector and axis lines
   glcdCircle2(SPDR_X_START, SPDR_Y_START,
-    (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / 3L + SPDR_AXIS_VAL_BEGIN),
+    (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / 3.0 +
+      SPDR_AXIS_VAL_BEGIN),
     CIRCLE_THIRD);
   glcdCircle2(SPDR_X_START, SPDR_Y_START,
-    (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / 3L * 2L + SPDR_AXIS_VAL_BEGIN),
+    (u08)((float)(SPDR_AXIS_VAL_END - SPDR_AXIS_VAL_BEGIN) / 3.0 * 2.0 +
+      SPDR_AXIS_VAL_BEGIN),
     CIRCLE_HALF_E);
 }
 
