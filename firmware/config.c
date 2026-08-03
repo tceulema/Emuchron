@@ -825,7 +825,7 @@ static void cfgSetBacklight(void)
       // Increment brightness
       if (mode == EDIT_BRIGHTNESS)
       {
-        if (OCR2B >= OCR2A_VALUE)
+        if (OCR2B >= OCR2A_MAX)
           OCR2B = 0;
         else
           OCR2B = OCR2B + OCR2B_PLUS;

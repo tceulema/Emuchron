@@ -1,19 +1,36 @@
-# This file contains the shell commands to use when configuring a Monochron
-# ncurses terminal and the Gede gdb debugger gui
+#
+# This file contains the shell commands to use when configuring the Monochron
+# lcd and Emuchron monitor ncurses terminals and the Gede gdb debugger gui.
+#
+# Command 1..3: configure and use the Monochron ncurses lcd terminal
+# Command 4..6: configure and use the Emuchron ncurses monitor terminal
+# Command 7..8: use Gede gdb debugger gui
+#
 
 # 1 - Command to use in the Monochron terminal profile (copy/paste)
 bash -c "tty > ~/.config/mchron/tty; bash --noprofile --norc"
 
-# 2 - Command to use in the Monochron ncurses terminal main menu program
+# 2 - Command to use in the Monochron ncurses lcd terminal main menu program
 #     launcher (copy/paste)
-gnome-terminal --window-with-profile=Monochron --hide-menubar --title 'Monochron (ncurses)'
+gnome-terminal --window-with-profile=Monochron --hide-menubar --title 'Monochron lcd (ncurses)'
 
-# 3 - Command to use to start a Monochron ncurses terminal in a command
+# 3 - Command to use to start a Monochron ncurses lcd terminal in a command
 #     shell (copy/paste)
-gnome-terminal --window-with-profile=Monochron --hide-menubar --title 'Monochron (ncurses)' 1>/dev/null
+gnome-terminal --window-with-profile=Monochron --hide-menubar --title 'Monochron lcd (ncurses)' 1>/dev/null
 
-# 4 - Command to use in the Gede main menu program launcher (copy/paste)
+# 4 - Command to use in the Emuchron ncurses monitor terminal profile (copy/paste)
+bash -c "tty > ~/.config/mchron/ttyMon; bash --noprofile --norc"
+
+# 5 - Command to use in the Emuchron ncurses monitor terminal main menu program
+#     launcher (copy/paste)
+gnome-terminal --window-with-profile=Emuchron --hide-menubar --title 'Emuchron monitor (ncurses)'
+
+# 6 - Command to use to start a Emuchron ncurses monitor terminal in a command
+#     shell (copy/paste)
+gnome-terminal --window-with-profile=Emuchron --hide-menubar --title 'Emuchron monitor (ncurses)' 1>/dev/null
+
+# 7 - Command to use in the Gede main menu program launcher (copy/paste)
 /usr/local/bin/gede
 
-# 5 - Command to use to start Gede in a command shell (copy/paste)
+# 8 - Command to use to start Gede in a command shell (copy/paste)
 gede 1>/dev/null &

@@ -19,28 +19,27 @@ typedef struct _lcdGlutInitArgs_t
 // Definition of a structure to communicate about a double-clicked pixel
 typedef struct _lcdGlutGlcdPix_t
 {
-  unsigned char active;		// Is toggle pixel functionality active
-  unsigned char pixelLock;	// Double-click event occured
-  unsigned char glcdX;		// The glcd x pixel coordinate
-  unsigned char glcdY;		// The glcd y pixel coordinate
+  u08 active;			// Is toggle pixel functionality active
+  u08 pixelLock;		// Double-click event occured
+  u08 glcdX;			// The glcd x pixel coordinate
+  u08 glcdY;			// The glcd y pixel coordinate
 } lcdGlutGlcdPix_t;
 
 // Lcd device control methods
 void lcdGlutCleanup(void);
 void lcdGlutFlush(void);
-unsigned char lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet);
+u08 lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet);
 
 // Lcd device statistics methods
 void lcdGlutStatsPrint(void);
 void lcdGlutStatsReset(void);
 
 // Lcd device content methods
-void lcdGlutBacklightSet(unsigned char backlight);
-void lcdGlutDataWrite(unsigned char x, unsigned char y, unsigned char data);
-void lcdGlutDisplaySet(unsigned char controller, unsigned char display);
-void lcdGlutGraphicsSet(unsigned char bezel, unsigned char grid);
-void lcdGlutHighlightSet(unsigned char highlight, unsigned char x,
-  unsigned char y);
-void lcdGlutSizeSet(unsigned char axis, unsigned int size);
-void lcdGlutStartLineSet(unsigned char controller, unsigned char startline);
+void lcdGlutBacklightSet(u08 backlight);
+void lcdGlutDataWrite(u08 x, u08 y, u08 data);
+void lcdGlutDisplaySet(u08 controller, u08 display);
+void lcdGlutGraphicsSet(u08 bezel, u08 grid);
+void lcdGlutHighlightSet(u08 highlight, u08 x, u08 y);
+void lcdGlutSizeSet(char axis, u16 size);
+void lcdGlutStartLineSet(u08 controller, u08 startline);
 #endif

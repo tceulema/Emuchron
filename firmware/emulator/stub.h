@@ -27,6 +27,24 @@
 #define EMU_KEYS_CLEAR		\
   "                                                                           "
 
+// Definition of an eeprom dictionary used for reporting purposres
+typedef struct _eepDict_t
+{
+  size_t eepItemId;		// The eeprom item id
+  char *eepItemName;		// The eeprom item id as a string
+} eepDict_t;
+
+// Definition of a structure holding stub runtime statistics
+typedef struct _stubStats_t
+{
+  u08 cycle;
+  int inTimeCount;
+  int outTimeCount;
+  int singleCycleCount;
+  long long waitTotal;
+  int minSleep;
+} stubStats_t;
+
 // Eeprom stubs
 uint8_t eeprom_read_byte(uint8_t *eprombyte);
 void eeprom_write_byte(uint8_t *eprombyte, uint8_t value);
@@ -75,6 +93,7 @@ u08 kbModeGet(void);
 void kbModeSet(u08 mode);
 
 // Statistics
+void stubStatsGet(stubStats_t *stubStat);
 void stubStatsPrint(void);
 void stubStatsReset(void);
 #endif

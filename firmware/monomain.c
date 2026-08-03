@@ -72,6 +72,7 @@ extern volatile uint8_t btnTickerConv;
 volatile rtcDateTime_t rtcDateTime = { 0, 0, 12, 1, 1, 22 };
 volatile rtcDateTime_t rtcDateTimeNext;
 volatile uint8_t rtcTimeEvent = MC_FALSE;
+static uint8_t rtcLastSec = 60;
 
 // The following variables drive the Monochron alarm
 volatile uint8_t almAlarmEvent = MC_FALSE;
@@ -106,7 +107,6 @@ static uint8_t t2divider1 = 0;
 //static uint8_t t2divider2 = 0;
 
 // Local function prototypes
-static void almSnoozeSet(void);
 static void almSoundReset(void);
 static void rtcFailure(uint8_t code, uint8_t id);
 
@@ -199,7 +199,8 @@ int main(void)
   TCCR2A |= _BV(WGM21) | _BV(WGM20); // fast PWM
   TCCR2B |= _BV(WGM22);
   OCR2A = OCR2A_VALUE;
-  OCR2B = eeprom_read_byte((uint8_t *)EE_BRIGHT) % 17 << OCR2B_BITSHIFT;
+  OCR2B = eeprom_read_byte((uint8_t *)EE_BRIGHT) % (OCR2A_MAX + 1) <<
+    OCR2B_BITSHIFT;
 #endif
   DDRB |= _BV(5);
 
@@ -210,7 +211,7 @@ int main(void)
   // result. This is why we are using a watch dog timer. The lcd should be
   // initialized in way less than 500 ms.
   DEBUGP("*** LCD");
-  beep(4000, 100);
+  monoBeep(4000, 100);
   wdt_enable(WDTO_2S);
   glcdInit();
   glcdClearScreen();
@@ -471,9 +472,6 @@ SIGNAL(TIMER2_OVF_vect)
 
   // The code below runs at approx 5.7Hz, 8.5Hz or 13.6Hz.
   // For this refer to defs of TIMER2_RETURN_x above.
-
-  uint8_t lastSec = rtcDateTime.timeSec;
-
   //DEBUGP("* RTC");
 
   // Check alarm/snooze stop request from menu button
@@ -488,9 +486,10 @@ SIGNAL(TIMER2_OVF_vect)
 
   // Get RTC time and compare with saved one
   rtcTimeRead();
-  if (rtcDateTime.timeSec != lastSec)
+  if (rtcDateTime.timeSec != rtcLastSec)
   {
-    // Log new time
+    // Log last second and new time
+    rtcLastSec = rtcDateTime.timeSec;
     DEBUGT(putstring("**** "));
     DEBUGT(uart_put_dec(rtcDateTime.timeHour); uart_putchar(':'));
     DEBUGT(uart_put_dec(rtcDateTime.timeMin); uart_putchar(':'));
@@ -597,14 +596,12 @@ SIGNAL(TIMER1_COMPA_vect)
 //
 // Make the alarm go snoozing
 //
-static void almSnoozeSet(void)
+void almSnoozeSet(void)
 {
   DEBUGP("Alarm -> Snooze");
   almTickerSnooze = ALM_TICK_SNOOZE_SEC;
-  if (almSnoozeEvent == MC_FALSE)
-    almSnoozeEvent = MC_TRUE;
+  almSnoozeEvent = MC_TRUE;
   almSnoozing = MC_TRUE;
-  mcTickerSnooze = almTickerSnooze;
   almTickerAlarm = ALM_TICK_ALARM_SEC + ALM_TICK_SNOOZE_SEC;
   TCCR1B = 0;
   // Turn off piezo
@@ -729,12 +726,12 @@ uint8_t bcdEncode(uint8_t x)
 }
 
 //
-// Function: beep
+// Function: monoBeep
 //
 // Sound beep.
 // Note: The beep duration granularity is 25 msec
 //
-void beep(uint16_t freq, uint8_t duration)
+void monoBeep(uint16_t freq, uint8_t duration)
 {
 #ifdef EMULIN
   stubBeep(freq, duration);
@@ -792,9 +789,9 @@ static void rtcFailure(uint8_t code, uint8_t id)
   sei();
   while (1)
   {
-    beep(4000, 100);
+    monoBeep(4000, 100);
     _delay_ms(100);
-    beep(4000, 100);
+    monoBeep(4000, 100);
     _delay_ms(1000);
   }
 }

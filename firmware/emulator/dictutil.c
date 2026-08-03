@@ -17,6 +17,9 @@
 // This is me
 extern const char *__progname;
 
+// Number of clocks defined
+extern int emuClockDictCount;
+
 // Local function prototypes
 static void dictCmdPrint(cmdCommand_t *cmdCommand);
 
@@ -101,13 +104,17 @@ static void dictCmdPrint(cmdCommand_t *cmdCommand)
     cmdArg = &cmdCommand->cmdArg[argCount];
 
     // Argument name
-    printf("         %s: ", cmdArg->argName);
+    if (argCount == 0)
+      printf("argmnt : <%s>: ", cmdArg->argName);
+    else
+      printf("       : <%s>: ", cmdArg->argName);
 
     // Argument domain info
     cmdDomain = cmdArg->cmdDomain;
     switch (cmdDomain->domType)
     {
     case DOM_CHAR_VAL:
+    case DOM_CHAR_VAL_OPT:
       domChar = cmdDomain->domTextList;
       while (*domChar != '\0')
       {
@@ -275,6 +282,26 @@ u08 dictVerify(void)
   int numCount;
   int issueCount = 0;
 
+  // Domain domNumClock vs emuClockDict[] [emulator/mchronutil.c]
+  if (emuClockDictCount - 1 != (int)domNumClock.domNumMax)
+  {
+    printf("%s: dict: domain domNumClock: incorrect max clock id\n",
+      __progname);
+    printf("  actual = %d, dict = %d\n",
+      emuClockDictCount - 1, (int)domNumClock.domNumMax);
+    issueCount++;
+  }
+
+  // Domain domNumStackLevel vs CMD_STACK_DEPTH_MAX [emulator/interpreter.h]
+  if (CMD_STACK_DEPTH_MAX - 1 != (int)domNumStackLevel.domNumMax)
+  {
+    printf("%s: dict: domain domNumStackLevel: incorrect max stack level\n",
+      __progname);
+    printf("  actual = %d, dict = %d\n",
+      CMD_STACK_DEPTH_MAX - 1, (int)domNumStackLevel.domNumMax);
+    issueCount++;
+  }
+
   // Loop through each command group
   for (i = 0; i < cmdDictCount; i++)
   {
@@ -351,12 +378,14 @@ u08 dictVerify(void)
             cmdArg->argType != ARG_NUM)
         {
           printf("%s: dict: unsupported argumenttype\n", __progname);
-          printf("  command = '%s', argument = '%s'\n", cmdCommand->cmdName,
-            cmdArg->argName);
-          printf("  info: argtype = '%s'\n", cmdArg->argTypeName);
+          printf("  command = '%s', argStruct = '%s'\n", cmdCommand->cmdName,
+            cmdCommand->cmdArgName);
+          printf("  info: argName = '%s', argtype = '%s'\n",
+            cmdArg->argName, cmdArg->argTypeName);
           issueCount++;
         }
         else if (cmdDomain->domType != DOM_CHAR_VAL &&
+            cmdDomain->domType != DOM_CHAR_VAL_OPT &&
             cmdDomain->domType != DOM_WORD_VAL &&
             cmdDomain->domType != DOM_WORD_REGEX &&
             cmdDomain->domType != DOM_STRING &&
@@ -366,15 +395,15 @@ u08 dictVerify(void)
             cmdDomain->domType != DOM_NUM_ASSIGN)
         {
           printf("%s: dict: unsupported domaintype\n", __progname);
-          printf("  command = '%s', argument = '%s'\n",
-            cmdCommand->cmdName, cmdArg->argName);
+          printf("  command = '%s', argStruct = '%s'\n", cmdCommand->cmdName,
+            cmdCommand->cmdArgName);
           printf("  info: argName = '%s', domName = '%s', domType = '%s'\n",
-            cmdCommand->cmdArgName, cmdDomain->domName,
-            cmdDomain->domTypeName);
+            cmdArg->argName, cmdDomain->domName, cmdDomain->domTypeName);
           issueCount++;
         }
         else if ((cmdArg->argType == ARG_CHAR &&
-            cmdDomain->domType != DOM_CHAR_VAL) ||
+            cmdDomain->domType != DOM_CHAR_VAL &&
+            cmdDomain->domType != DOM_CHAR_VAL_OPT) ||
             (cmdArg->argType == ARG_STRING &&
             cmdDomain->domType != DOM_WORD_VAL &&
             cmdDomain->domType != DOM_WORD_REGEX &&
@@ -387,12 +416,26 @@ u08 dictVerify(void)
         {
           printf("%s: dict: invalid combination argumenttype + domaintype\n",
             __progname);
-          printf("  command = '%s', argument = '%s'\n",
-            cmdCommand->cmdName, cmdArg->argName);
-          printf("  info: argName = '%s', domName = '%s'\n",
-            cmdCommand->cmdArgName, cmdDomain->domName);
-          printf("        argType = '%s', domType = '%s'\n", cmdArg->argTypeName,
-            cmdDomain->domTypeName);
+          printf("  command = '%s', argStruct = '%s'\n", cmdCommand->cmdName,
+            cmdCommand->cmdArgName);
+          printf("  info: argName = '%s', domName = '%s'\n", cmdArg->argName,
+            cmdDomain->domName);
+          printf("        argType = '%s', domType = '%s'\n",
+            cmdArg->argTypeName, cmdDomain->domTypeName);
+          issueCount++;
+        }
+
+        // Verify that an optional argument is the last argument
+        if ((cmdDomain->domType == DOM_CHAR_VAL_OPT ||
+            cmdDomain->domType == DOM_STRING_OPT) &&
+            k + 1 != cmdCommand->argCount)
+        {
+          printf("%s: dict: optional cmd argument is not the last argument\n",
+            __progname);
+          printf("  command = '%s', argStruct = '%s'\n", cmdCommand->cmdName,
+            cmdCommand->cmdArgName);
+          printf("  info: argument = '%s', domName = '%s'\n", cmdArg->argName,
+            cmdDomain->domName);
           issueCount++;
         }
 
@@ -404,10 +447,10 @@ u08 dictVerify(void)
             cmdDomain->domTextList[0] == '\0'))
         {
           printf("%s: dict: missing domain validation info\n", __progname);
-          printf("  command = '%s', argument = '%s'\n", cmdCommand->cmdName,
-            cmdArg->argName);
-          printf("  info: argName = '%s', domName = '%s'\n",
-            cmdCommand->cmdArgName, cmdDomain->domName);
+          printf("  command = '%s', argStruct = '%s'\n", cmdCommand->cmdName,
+            cmdCommand->cmdArgName);
+          printf("  info: argument = '%s', domName = '%s'\n", cmdArg->argName,
+            cmdDomain->domName);
           issueCount++;
         }
         else if (cmdDomain->domType == DOM_WORD_REGEX)
@@ -422,10 +465,10 @@ u08 dictVerify(void)
           {
             printf("%s: dict: invalid regex domain validation info\n",
               __progname);
-            printf("  command = '%s', argument = '%s'\n", cmdCommand->cmdName,
-              cmdArg->argName);
+            printf("  command = '%s', argStruct = '%s'\n", cmdCommand->cmdName,
+              cmdCommand->cmdArgName);
             printf("  info: argName = '%s', domName = '%s'\n",
-              cmdCommand->cmdArgName, cmdDomain->domName);
+              cmdArg->argName, cmdDomain->domName);
             printf("        domType = '%s'\n", cmdDomain->domTypeName);
             regerror(retVal, &regex, errMsg, 100);
             printf("        error = %s\n", errMsg);
@@ -439,10 +482,10 @@ u08 dictVerify(void)
             cmdDomain->domNumMin > cmdDomain->domNumMax)
         {
           printf("%s: dict: invalid numeric domain range\n", __progname);
-          printf("  command = '%s', argument = '%s'\n", cmdCommand->cmdName,
-            cmdArg->argName);
-          printf("  info: argName = '%s', domName = '%s'\n",
-            cmdCommand->cmdArgName, cmdDomain->domName);
+          printf("  command = '%s', argStruct = '%s'\n", cmdCommand->cmdName,
+            cmdCommand->cmdArgName);
+          printf("  info: argument = '%s', domName = '%s'\n", cmdArg->argName,
+            cmdDomain->domName);
           issueCount++;
         }
 
@@ -454,10 +497,10 @@ u08 dictVerify(void)
         {
           printf("%s: dict: missing domain info for printing command dictionary\n",
             __progname);
-          printf("  command = '%s', argument = '%s'\n", cmdCommand->cmdName,
-            cmdArg->argName);
-          printf("  info: argName = '%s', domName = '%s'\n",
-            cmdCommand->cmdArgName, cmdDomain->domName);
+          printf("  command = '%s', argStruct = '%s'\n", cmdCommand->cmdName,
+            cmdCommand->cmdArgName);
+          printf("  info: argument = '%s', domName = '%s'\n", cmdArg->argName,
+            cmdDomain->domName);
           issueCount++;
         }
       }

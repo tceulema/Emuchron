@@ -45,7 +45,7 @@
 // Instructions for adding a new entry/entries:
 // 1 - Add new define(s) at bottom of the list.
 // 2 - Add default value(s) in eepDefault[] in monomain.c [firmware].
-// 3 - Add new define(s) in eepDict[] in mchronutil.c [firmware/emulator].
+// 3 - Add new define(s) in eepDict[] in stub.c [firmware/emulator].
 // Warning: Keep defines EE_ALARM_HOUR1..EE_ALARM_MIN4 together in a single
 //          range block and in sequential order.
 #define EE_INIT		(EE_OFFSET + 0)
@@ -77,6 +77,7 @@ typedef struct _rtcDateTime_t
 } rtcDateTime_t;
 
 // Function prototypes for managing alarms
+void almSnoozeSet(void);
 void almStateSet(void);
 void almTimeGet(uint8_t alarmId, volatile uint8_t *hour,
   volatile uint8_t *min);
@@ -96,7 +97,7 @@ void monoTimer(void);
 
 // Miscellaneous
 void eepInit(void);
-void beep(uint16_t freq, uint8_t duration);
+void monoBeep(uint16_t freq, uint8_t duration);
 uint8_t bcdDecode(uint8_t x, uint8_t nibbleMask);
 uint8_t bcdEncode(uint8_t x);
 #endif

@@ -55,9 +55,6 @@
 #include "varutil.h"
 #include "mchronutil.h"
 
-// Avoid typos in eeprom item name when printing the eeprom contents
-#define EEPNAME(a)	a, #a
-
 // Avoid typos in clock id name when printing the clock dictionary contents
 #define CLOCKNAME(a)	a, #a
 
@@ -69,13 +66,6 @@
 
 // The graphics data buffer lcd controller origin (as opposed to filename)
 #define GRAPH_ORIGIN_CTRL	"lcd controllers"
-
-// Definition of an eeprom dictionary used to always print in sorted order
-typedef struct _eepDict_t
-{
-  uint8_t eepItemId;		// The eeprom item id
-  char *eepItemName;		// The eeprom item id as a string
-} eepDict_t;
 
 // Definition of a clock dictionary used to build the mchron clock pool and
 // print an overview of available clocks
@@ -110,29 +100,9 @@ extern cmdInput_t cmdInput;
 // This is me
 extern const char *__progname;
 
-// The eeprom dictionary. When printing the eeprom contents using command 'mep'
-// the dictionary will be sorted on id value first so it will be printed in
-// the proper id order.
-static eepDict_t eepDict[] =
-{
-  { EEPNAME(EE_INIT) }
- ,{ EEPNAME(EE_BRIGHT) }
- ,{ EEPNAME(EE_VOLUME) }
- ,{ EEPNAME(EE_REGION) }
- ,{ EEPNAME(EE_TIME_FORMAT) }
- ,{ EEPNAME(EE_SNOOZE) }
- ,{ EEPNAME(EE_BGCOLOR) }
- ,{ EEPNAME(EE_ALARM_SELECT) }
- ,{ EEPNAME(EE_ALARM_HOUR1) }
- ,{ EEPNAME(EE_ALARM_MIN1) }
- ,{ EEPNAME(EE_ALARM_HOUR2) }
- ,{ EEPNAME(EE_ALARM_MIN2) }
- ,{ EEPNAME(EE_ALARM_HOUR3) }
- ,{ EEPNAME(EE_ALARM_MIN3) }
- ,{ EEPNAME(EE_ALARM_HOUR4) }
- ,{ EEPNAME(EE_ALARM_MIN4) }
-};
-static int eepDictCount = sizeof(eepDict) / sizeof(eepDict_t);
+// The eeprom dictionary used for printing it
+extern eepDict_t eepDict[];
+extern int eepDictCount;
 
 // The emuchron clock dictionary. It is used to build the mchron clock pool
 // and print available mchron clocks. The sequence of the clocks in this
@@ -170,7 +140,7 @@ static emuClockDict_t emuClockDict[] =
  ,{ CLOCKNAME(CHRON_DALI),		daliInit,           daliCycle,           daliButton,	"dali" }
  ,{ CLOCKNAME(CHRON_PERFTEST),		perfInit,           perfCycle,           0,		"performance test" }
 };
-static int emuClockDictCount = sizeof(emuClockDict) / sizeof(emuClockDict_t);
+int emuClockDictCount = sizeof(emuClockDict) / sizeof(emuClockDict_t);
 
 // Flags indicating active state upon exit
 u08 invokeExit = MC_FALSE;
@@ -178,6 +148,7 @@ static u08 closeWinMsg = MC_FALSE;
 
 // Local function prototypes
 static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
+static u08 emuTtyNameRead(char *ttyFile, char cmdArg, char *ttyName);
 
 //
 // Function: emuArgcArgvGet
@@ -187,9 +158,7 @@ static void emuSigCatch(int sig, siginfo_t *siginfo, void *context);
 //
 u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 {
-  FILE *fp;
   int argCount = 1;
-  char *tty = emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.tty;
   u08 argHelp = MC_FALSE;
   u08 argError = MC_FALSE;
 
@@ -197,14 +166,20 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   emuArgcArgv->argDebug = 0;
   emuArgcArgv->argGlutGeometry = 0;
   emuArgcArgv->argGlutPosition = 0;
-  emuArgcArgv->argTty = 0;
+  emuArgcArgv->argTtyLcd = 0;
+  emuArgcArgv->argMonColor = 0;
   emuArgcArgv->argLcdType = 0;
 
   // Init the lcd device data
-  emuArgcArgv->ctrlDeviceArgs.useNcurses = MC_FALSE;
-  emuArgcArgv->ctrlDeviceArgs.useGlut = MC_TRUE;
-  emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.tty[0] = '\0';
-  emuArgcArgv->ctrlDeviceArgs.lcdNcurInitArgs.winClose = emuShutdown;
+  emuArgcArgv->ctrlDeviceArgs.useNcurLcd = MC_FALSE;
+  emuArgcArgv->ctrlDeviceArgs.useGlutLcd = MC_TRUE;
+  emuArgcArgv->ctrlDeviceArgs.useNcurMon = MC_FALSE;
+  emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.useLcd = MC_FALSE;
+  emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.useMon = MC_FALSE;
+  emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.ttyLcd[0] = '\0';
+  emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.ttyMon[0] = '\0';
+  emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.monColor = '\0';
+  emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.winClose = emuShutdown;
   emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.posX = 100;
   emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.posY = 100;
   emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.sizeX = 520;
@@ -239,6 +214,12 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
       emuArgcArgv->argLcdType = argCount + 1;
       argCount = argCount + 2;
     }
+    else if (strncmp(argv[argCount], "-m", 4) == 0)
+    {
+      // Ncurses monitor color
+      emuArgcArgv->argMonColor = argCount + 1;
+      argCount = argCount + 2;
+    }
     else if (strncmp(argv[argCount], "-p", 4) == 0)
     {
       // Glut window position
@@ -247,8 +228,8 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     }
     else if (strncmp(argv[argCount], "-t", 4) == 0)
     {
-      // Ncurses tty device
-      emuArgcArgv->argTty = argCount + 1;
+      // Ncurses lcd tty device
+      emuArgcArgv->argTtyLcd = argCount + 1;
       argCount = argCount + 2;
     }
     else
@@ -263,10 +244,10 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
 
   // Check result of command line processing
   if (argError == MC_TRUE)
-    printf("%s: invalid/incomplete command argument\n\n", __progname);
+    printf("%s: invalid/incomplete command argument\n", __progname);
   if (argHelp == MC_TRUE || argError == MC_TRUE)
   {
-    system("/usr/bin/head -24 ../support/help.txt | /usr/bin/tail -21 2>&1");
+    system("/usr/bin/head -30 ../support/help.txt | /usr/bin/tail -28 2>&1");
     return MC_FALSE;
   }
 
@@ -275,18 +256,18 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   {
     if (strcmp(argv[emuArgcArgv->argLcdType], "glut") == 0)
     {
-      emuArgcArgv->ctrlDeviceArgs.useGlut = MC_TRUE;
-      emuArgcArgv->ctrlDeviceArgs.useNcurses = MC_FALSE;
+      emuArgcArgv->ctrlDeviceArgs.useGlutLcd = MC_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurLcd = MC_FALSE;
     }
     else if (strcmp(argv[emuArgcArgv->argLcdType], "ncurses") == 0)
     {
-      emuArgcArgv->ctrlDeviceArgs.useGlut = MC_FALSE;
-      emuArgcArgv->ctrlDeviceArgs.useNcurses = MC_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useGlutLcd = MC_FALSE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurLcd = MC_TRUE;
     }
     else if (strcmp(argv[emuArgcArgv->argLcdType], "all") == 0)
     {
-      emuArgcArgv->ctrlDeviceArgs.useGlut = MC_TRUE;
-      emuArgcArgv->ctrlDeviceArgs.useNcurses = MC_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useGlutLcd = MC_TRUE;
+      emuArgcArgv->ctrlDeviceArgs.useNcurLcd = MC_TRUE;
     }
     else
     {
@@ -299,16 +280,11 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   // Validate glut window geometry
   if (emuArgcArgv->argGlutGeometry > 0)
   {
-    regex_t regex;
-    int status;
     char *input = argv[emuArgcArgv->argGlutGeometry];
     char *separator;
 
     // Scan the geometry argument using a regex pattern
-    regcomp(&regex, "^[0-9]+x[0-9]+$", REG_EXTENDED | REG_NOSUB);
-    status = regexec(&regex, input, (size_t)0, NULL, 0);
-    regfree(&regex);
-    if (status != 0)
+    if (emuValidateRegex(input, "^[0-9]+x[0-9]+$") == MC_FALSE)
     {
       printf("%s: -g: invalid glut geometry\n", __progname);
       return MC_FALSE;
@@ -324,16 +300,11 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   // Validate glut window position
   if (emuArgcArgv->argGlutPosition > 0)
   {
-    regex_t regex;
-    int status;
     char *input = argv[emuArgcArgv->argGlutPosition];
     char *separator;
 
     // Scan the position argument using a regex pattern
-    regcomp(&regex, "^[0-9]+,[0-9]+$", REG_EXTENDED | REG_NOSUB);
-    status = regexec(&regex, input, (size_t)0, NULL, 0);
-    regfree(&regex);
-    if (status != 0)
+    if (emuValidateRegex(input, "^[0-9]+,[0-9]+$") == MC_FALSE)
     {
       printf("%s: -p: invalid glut position\n", __progname);
       return MC_FALSE;
@@ -346,68 +317,48 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
     emuArgcArgv->ctrlDeviceArgs.lcdGlutInitArgs.posY = atoi(separator + 1);
   }
 
-  // Get the ncurses output device
-  if (emuArgcArgv->argTty != 0)
+  // Validate use of ncurses monitor and its color scheme and tty device
+  if (emuArgcArgv->argMonColor != 0)
   {
-    // Got it from the command line
-    if (strlen(argv[emuArgcArgv->argTty]) >= NCURSES_TTYLEN)
+    char *input = argv[emuArgcArgv->argMonColor];
+
+    // Scan the monitor color scheme using a regex pattern
+    if (emuValidateRegex(input, "^[bw]$") == MC_FALSE)
+    {
+      printf("%s: -m: invalid monitor color scheme\n", __progname);
+      return MC_FALSE;
+    }
+    // Get the monitor tty from the config folder
+    if (emuTtyNameRead(MON_TTYFILE, 'm',
+        emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.ttyMon) == MC_FALSE)
+      return MC_FALSE;
+
+    emuArgcArgv->ctrlDeviceArgs.useNcurMon = MC_TRUE;
+    emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.useMon = MC_TRUE;
+    emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.monColor = input[0];
+  }
+
+  // Get the ncurses lcd output device
+  if (emuArgcArgv->argTtyLcd != 0)
+  {
+    // Get the lcd tty from the command line
+    if (strlen(argv[emuArgcArgv->argTtyLcd]) >= NCURSES_TTYLEN)
     {
       printf("%s: -t: tty too long (max = %d chars)\n", __progname,
         NCURSES_TTYLEN - 1);
       return MC_FALSE;
     }
-    strcpy(tty, argv[emuArgcArgv->argTty]);
+    strcpy(emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.ttyLcd,
+      argv[emuArgcArgv->argTtyLcd]);
+    emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.useLcd = MC_TRUE;
   }
-  else if (emuArgcArgv->ctrlDeviceArgs.useNcurses == 1)
+  else if (emuArgcArgv->ctrlDeviceArgs.useNcurLcd == 1)
   {
-    // Get the tty device if not specified on the command line
-    char *home;
-    char *fullPath;
-    int ttyLen = 0;
-
-    // Get the tty file in the mchron config folder
-    home = getenv("HOME");
-    if (home == NULL)
-    {
-      printf("%s: tty: cannot get $HOME\n", __progname);
-      printf("- Use switch \"-t <tty>\" to set lcd output device\n");
+    // Get the lcd tty from the config folder
+    if (emuTtyNameRead(LCD_TTYFILE, 't',
+        emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.ttyLcd) == MC_FALSE)
       return MC_FALSE;
-    }
-    fullPath = malloc(strlen(home) + strlen(MCHRON_CONFIG) +
-      strlen(NCURSES_TTYFILE) + 1);
-    sprintf(fullPath,"%s%s%s", home, MCHRON_CONFIG, NCURSES_TTYFILE);
-
-    // Open the file with the tty device
-    fp = fopen(fullPath, "r");
-    free(fullPath);
-    if (fp == NULL)
-    {
-      printf("%s: cannot open file \"%s%s%s\".\n", __progname, "~",
-        MCHRON_CONFIG, NCURSES_TTYFILE);
-      printf("- Manually create folder ~%s\n", MCHRON_CONFIG);
-      printf("- Start a new monochron ncurses terminal or use switch \"-t <tty>\" to set\n");
-      printf("  mchron ncurses terminal tty\n");
-      return MC_FALSE;
-    }
-
-    // Read output device in first line. It has a fixed max length.
-    fgets(tty, NCURSES_TTYLEN, fp);
-
-    // Kill all \r or \n in the tty string as ncurses doesn't like this.
-    // Assume that \r and \n are trailing characters in the string.
-    if (strlen(tty) > 0)
-    {
-      for (ttyLen = strlen(tty) - 1; ttyLen >= 0; ttyLen--)
-      {
-        if (tty[ttyLen] == '\n' || tty[ttyLen] == '\r')
-          tty[ttyLen] = '\0';
-        else
-          break;
-      }
-    }
-
-    // Clean up our stuff
-    fclose(fp);
+    emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.useLcd = MC_TRUE;
   }
 
   // All seems to be ok
@@ -689,13 +640,15 @@ void emuCoreDump(u08 origin, const char *location, int arg1, int arg2,
 
   // Depending on the lcd device(s) used we'll see the latest image or not.
   // In case we're using ncurses, regardless with or without glut, flush the
-  // screen. After aborting mchron, the ncurses image will be retained.
-  // In case we're only using the glut device, give end-user the means to have
-  // a look at the glut device to get a clue what's going on before its display
-  // is killed by aborting mchron. Note that at this point glut is still
-  // running in its own thread and will have its layout constantly refreshed.
+  // screen. After aborting mchron, the ncurses lcd and monitor image will be
+  // retained.
+  // In case we're only using the glut lcd device, give end-user the means to
+  // have a look at the glut device to get a clue what's going on before its
+  // display is killed by aborting mchron. Note that at this point glut and the
+  // ncurses monitor are still running in its own thread and will have its
+  // layout constantly refreshed.
   // This allows a glut screendump to be made if needed.
-  if (ctrlDeviceActive(CTRL_DEVICE_NCURSES) == MC_TRUE)
+  if (ctrlDeviceActive(CTRL_DEVICE_NCURLCD) == MC_TRUE)
   {
     // Flush the ncurses device so we get its contents as-is at the time of
     // the forced coredump
@@ -761,6 +714,22 @@ u08 emuEchoReqGet(char echo)
 }
 
 //
+// Function: emuMonModeGet
+//
+// Get the requested Emuchron monitor mode
+//
+u08 emuMonModeGet(char mode)
+{
+  // Get requested command list echo type
+  if (mode == 'a')
+    return MON_MODE_AGGREGATE;
+  else if (mode == 'p')
+    return MON_MODE_PAUSED;
+  else // 's'
+    return MON_MODE_SNAPSHOT;
+}
+
+//
 // Function: emuEepromPrint
 //
 // Prints the eeprom contents using the sorted id's defined in the eeprom
@@ -813,9 +782,9 @@ void emuEepromPrint(void)
   }
   for (i = 0; i < eepDictCount; i++)
   {
-    value = eeprom_read_byte((uint8_t *)(size_t)dictSort[i]->eepItemId);
+    value = eeprom_read_byte((uint8_t *)dictSort[i]->eepItemId);
     printf("  %2d    0x%03x  %-15s     %3d   0x%02x\n",
-      dictSort[i]->eepItemId - EE_OFFSET, dictSort[i]->eepItemId,
+      (int)dictSort[i]->eepItemId - EE_OFFSET, (int)dictSort[i]->eepItemId,
       dictSort[i]->eepItemName, value, value);
   }
 }
@@ -952,7 +921,7 @@ u08 emuSearchTypeGet(char searchType)
 // Function: emuShutdown
 //
 // This function is used in two ways. First, it is used to implement a graceful
-// shutdown when an lcd device window is closed, by using it as a callback
+// shutdown when an lcd/mon device window is closed, by using it as a callback
 // function. Second, it is used in non-standard shutdown circumstances, created
 // by system signal handlers such as ctrl-c.
 //
@@ -965,7 +934,7 @@ void emuShutdown(void)
   if (invokeExit == MC_FALSE && closeWinMsg == MC_FALSE)
   {
     closeWinMsg = MC_TRUE;
-    printf("\nlcd device closed - exit\n");
+    printf("\nlcd or monitor device closed - exit\n");
   }
   exit(-1);
 }
@@ -1120,6 +1089,63 @@ void emuTimeSync(void)
 }
 
 //
+// Function: emuTtyNameRead
+//
+// Read a tty name from a file in the mchron config folder
+//
+static u08 emuTtyNameRead(char *ttyFile, char cmdArg, char *ttyName)
+{
+  // Get the tty device if not specified on the command line
+  FILE *fp;
+  char *home;
+  char *fullPath;
+  int ttyLen = 0;
+
+  // Get the tty file in the mchron config folder
+  home = getenv("HOME");
+  if (home == NULL)
+  {
+    printf("%s: tty: cannot get $HOME\n", __progname);
+    return MC_FALSE;
+  }
+  fullPath = malloc(strlen(home) + strlen(MCHRON_CONFIG) + strlen(ttyFile) +
+    1);
+  sprintf(fullPath,"%s%s%s", home, MCHRON_CONFIG, ttyFile);
+
+  // Open the file with the tty device
+  fp = fopen(fullPath, "r");
+  free(fullPath);
+  if (fp == NULL)
+  {
+    printf("%s: -%c: cannot open file \"%s%s%s\".\n", __progname, cmdArg, "~",
+      MCHRON_CONFIG, ttyFile);
+    printf("- Ref Emuchron manual section 3.6 and 3.8.\n");
+    return MC_FALSE;
+  }
+
+  // Read output device in first line. It has a fixed max length.
+  fgets(ttyName, NCURSES_TTYLEN, fp);
+
+  // Kill all \r or \n in the tty string as ncurses doesn't like this.
+  // Assume that \r and \n are trailing characters in the string.
+  if (strlen(ttyName) > 0)
+  {
+    for (ttyLen = strlen(ttyName) - 1; ttyLen >= 0; ttyLen--)
+    {
+      if (ttyName[ttyLen] == '\n' || ttyName[ttyLen] == '\r')
+        ttyName[ttyLen] = '\0';
+      else
+        break;
+    }
+  }
+
+  // Clean up our stuff
+  fclose(fp);
+
+  return MC_TRUE;
+}
+
+//
 // Function: emuValuePrint
 //
 // Print a number in the desired format and return print length in characters
@@ -1193,6 +1219,26 @@ u08 emuValuePrint(double value, u08 detail, u08 newline, u08 print)
   }
 
   return length;
+}
+
+//
+// Function: emuValidateRegex
+//
+// Validate a string using a regex pattern
+//
+u08 emuValidateRegex(char *input, char *pattern)
+{
+  regex_t regex;
+  int status;
+
+  // Validate a string using a regex pattern
+  regcomp(&regex, pattern, REG_EXTENDED | REG_NOSUB);
+  status = regexec(&regex, input, (size_t)0, NULL, 0);
+  regfree(&regex);
+  if (status != 0)
+    return MC_FALSE;
+
+  return MC_TRUE;
 }
 
 //

@@ -18,7 +18,7 @@
 // Project/system dependent defines
 
 // Version of our Emuchron project code base
-#define EMUCHRON_VERSION		"v8.2"
+#define EMUCHRON_VERSION		"v9.0"
 
 // Our own definition of the Monochron/Emuchron truth.
 // Why do we do this? It turns out that gcc sometimes get utterly confused
@@ -112,4 +112,5 @@
 #define OCR2B_BITSHIFT			0
 #define OCR2B_PLUS			1
 #define OCR2A_VALUE			16
+#define OCR2A_MAX			16
 #endif

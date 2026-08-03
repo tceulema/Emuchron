@@ -1,9 +1,10 @@
 
 mchron - Emuchron emulator command line tool
 
-Use: mchron [-d <logfile>] [-g <geometry>] [-h] [-l <device>] [-p <position>]
-            [-t <tty>]
+mchron [-d <logfile>] [-g <geometry>] [-h] [-l <device>] [-m <color>]
+       [-p <position>] [-t <tty>]
 
+Arguments:
   -d <logfile>  - Debug logfile name
   -g <geometry> - Geometry (x,y) of glut window
                   Default: "520x264"
@@ -12,344 +13,398 @@ Use: mchron [-d <logfile>] [-g <geometry>] [-h] [-l <device>] [-p <position>]
   -l <device>   - Lcd stub device type
                   Values: "glut" or "ncurses" or "all"
                   Default: "glut"
+  -m <color>    - Use Emuchron ncurses monitor (124x24 sized terminal)
+                  Values: "b" (black-on-white) or "w" (white-on-black)
+                  Get ncurses tty from ~/.config/mchron/ttyMon
   -p <position> - Position (x,y) of glut window
                   Default: "100,100"
-  -t <tty>      - tty device for ncurses of 258x66 sized terminal
-                  Default: get <tty> from ~/.config/mchron/tty
+  -t <tty>      - tty device for Monochron ncurses lcd (258x66 sized terminal)
+                  Default: get ncurses <tty> from ~/.config/mchron/tty
 
 Examples:
   ./mchron
   ./mchron -l glut -p 768,128
   ./mchron -l ncurses
   ./mchron -l ncurses -t /dev/pts/1 -d debug.log
+  ./mchron -m b
 
 Commands:
   '#'   - Comments
-          Argument: <comments>
-              comments: optional ascii text
+          Usage: # <comments>
+          <comments>: optional ascii text
   'b'   - Play beep
-          Arguments: <frequency> <duration>
-              frequency: 150..10000 (Hz)
-              duration: 1..255 (msec)
+          Usage: b <frequency> <duration>
+          <frequency>: 150..10000 (Hz)
+          <duration>: 1..255 (msec)
+  'cc'  - Execute single clock cycle
+          Usage: cc <button>
+          <button>: '+' = + button, 's' = s button, '-' = no button
   'cf'  - Feed clock with time and keyboard events
-          Argument: <startmode>
-              startmode: 'c' = single cycle, 'r' = run
+          Usage: cf <startmode>
+          <startmode>: 'c' = single cycle, 'r' = run
   'cp'  - Print overview of available clocks for command 'cs'
+          Usage: cp
   'cs'  - Select clock
-          Argument: <clock>
-              clock: 0 = [detach], 1 = example, 2 = analogHMS, 3 = analogHM,
-                     4 = digitalHMS, 5 = digitalHM, 6 = mosquito, 7 = nerd,
-                     8 = pong, 9 = pong+beeps, 10 = puzzle, 11 = slider,
-                     12 = cascade, 13 = speed, 14 = spider, 15 = thermometer,
-                     16 = traffic, 17 = bar, 18 = cross, 19 = line, 20 = pie,
-                     21 = bigdigOne, 22 = bigdigTwo, 23 = qrHMS, 24 = qrHM,
-                     25 = marioworld, 26 = wave, 27 = dali, 28 = perftest
+          Usage: cs <clock>
+          <clock>: 0 = [detach], 1 = example, 2 = analogHMS, 3 = analogHM,
+                   4 = digitalHMS, 5 = digitalHM, 6 = mosquito, 7 = nerd,
+                   8 = pong, 9 = pong+beeps, 10 = puzzle, 11 = slider,
+                  12 = cascade, 13 = speed, 14 = spider, 15 = thermometer,
+                  16 = traffic, 17 = bar, 18 = cross, 19 = line, 20 = pie,
+                  21 = bigdigOne, 22 = bigdigTwo, 23 = qrHMS, 24 = qrHM,
+                  25 = marioworld, 26 = wave, 27 = dali, 28 = perftest
   'dba' - Add/update breakpoint
-          Arguments: <stacklevel> <linenumber> <condition>
-              stacklevel: 0..7
-              linenumber: 1..10000
-              condition: expression determining execution halt
+          Usage: dba <stacklevel> <linenumber> <condition>
+          <stacklevel>: 0..7
+          <linenumber>: 1..10000
+          <condition>: expression determining execution halt
   'dbd' - Delete breakpoint
-          Arguments: <stacklevel> <breakpoint>
-              stacklevel: 0..7
-              breakpoint: 0..1000 (breakpoint number, 0 = all)
+          Usage: dbd <stacklevel> <breakpoint>
+          <stacklevel>: 0..7
+          <breakpoint>: 0..1000 (breakpoint number, 0 = all)
   'dbp' - Print breakpoints
+          Usage: dbp
+  'dbs' - Set breakpoint state
+          Usage: dbs <stacklevel> <breakpoint> <enable>
+          <stacklevel>: 0..7 (script execution stack level)
+          <breakpoint>: 0..1000 (breakpoint number, 0 = all)
+          <enable>: 0, 1 (0 = off, 1 = on)
   'dc'  - Debug continue
+          Usage: dc
   'dcc' - Check conditional breakpoint
-          Argument: <condition>
-              condition: expression determining execution halt
+          Usage: dcc <condition>
+          <condition>: expression determining execution halt
   'di'  - Debug step in
+          Usage: di
   'dn'  - Debug step next
+          Usage: dn
   'do'  - Debug step out
+          Usage: do
   'dps' - Set top stack program counter
-          Argument: <linenumber>
-              linenumber: 0..10000 (script line number, 0 = <eof>)
+          Usage: dps <linenumber>
+          <linenumber>: 0..10000 (script line number, 0 = <eof>)
   'dss' - Set script debugging
-          Argument: <enable>
-              enable: 0, 1 (0 = off, 1 = on)
+          Usage: dss <enable>
+          <enable>: 0, 1 (0 = off, 1 = on)
   'e'   - Execute commands from file
-          Arguments: <echo> <filename>
-              echo: 'e' = echo commands, 'i' = inherit, 's' = silent
-              filename: full filepath or relative to startup folder mchron
+          Usage: e <echo> <filename>
+          <echo>: 'e' = echo commands, 'i' = inherit, 's' = silent
+          <filename>: full filepath or relative to startup folder mchron
   'elp' - Print source list
-          Arguments: <stacklevel> <range>
-              stacklevel: 0..7
-              range: -1..10000 (script line number range, -1 = full range)
+          Usage: elp <stacklevel> <range>
+          <stacklevel>: 0..7
+          <range>: -1..10000 (script line number range, -1 = full range)
   'elr' - Return from current stack level
+          Usage: elr
   'er'  - Resume interrupted execution
+          Usage: er
   'esp' - Print command stack
+          Usage: esp
   'gbc' - Copy graphics buffer
-          Arguments: <from> <to>
-              from: 0..9
-              to: 0..9
+          Usage: gbc <from> <to>
+          <from>: 0..9
+          <to>: 0..9
   'gbi' - Show graphics buffer info
-          Argument: <buffer>
-              buffer: -1..9 (-1 = all, other = buffer)
+          Usage: gbi <buffer>
+          <buffer>: -1..9 (-1 = all, other = buffer)
   'gbr' - Reset graphics buffer
-          Argument: <buffer>
-              buffer: -1..9 (-1 = all, other = buffer)
+          Usage: gbr <buffer>
+          <buffer>: -1..9 (-1 = all, other = buffer)
   'gbs' - Save graphics buffer to file
-          Arguments: <buffer> <width> <filename>
-              buffer: 0..9
-              width: 0..128 (0 = max 80 chars/line, other = elements/line)
-              filename: full path or relative to startup directory mchron
+          Usage: gbs <buffer> <width> <filename>
+          <buffer>: 0..9
+          <width>: 0..128 (0 = max 80 chars/line, other = elements/line)
+          <filename>: full path or relative to startup directory mchron
   'gci' - Load lcd controller image data
-          Arguments: <buffer> <format> <x> <y> <xsize> <ysize>
-              buffer: 0..9
-              format: 'b','w','d' (b = 8-bit, w = 16-bit, d = 32-bit)
-              x: 0..127
-              y: 0..63
-              xsize: 1..128
-              ysize: 1..64
+          Usage: gci <buffer> <format> <x> <y> <xsize> <ysize>
+          <buffer>: 0..9
+          <format>: 'b' = 8-bit, 'w' = 16-bit, 'd' = 32-bit
+          <x>: 0..127
+          <y>: 0..63
+          <xsize>: 1..128
+          <ysize>: 1..64
   'gf'  - Load file graphics data
-          Arguments: <buffer> <format> <filename>
-              buffer: 0..9
-              format: 'b','w','d' (b = 8-bit, w = 16-bit, d = 32-bit)
-              filename: full path or relative to startup directory mchron
+          Usage: gf <buffer> <format> <filename>
+          <buffer>: 0..9
+          <format>: 'b' = 8-bit, 'w' = 16-bit, 'd' = 32-bit
+          <filename>: full path or relative to startup directory mchron
   'gfi' - Load file image data
-          Arguments: <buffer> <format> <xsize> <ysize> <filename>
-              buffer: 0..9
-              format: 'b','w','d' (b = 8-bit, w = 16-bit, d = 32-bit)
-              xsize: 1..128 (image width)
-              ysize: 1..64 (image height)
-              filename: full path or relative to startup directory mchron
+          Usage: gfi <buffer> <format> <xsize> <ysize> <filename>
+          <buffer>: 0..9
+          <format>: 'b' = 8-bit, 'w' = 16-bit, 'd' = 32-bit
+          <xsize>: 1..128 (image width)
+          <ysize>: 1..64 (image height)
+          <filename>: full path or relative to startup directory mchron
   'gfs' - Load file sprite data
-          Arguments: <buffer> <xsize> <ysize> <filename>
-              buffer: 0..9
-              xsize: 1..128 (sprite width)
-              ysize: 1..32 (sprite height)
-              filename: full path or relative to startup directory mchron
+          Usage: gfs <buffer> <xsize> <ysize> <filename>
+          <buffer>: 0..9
+          <xsize>: 1..128 (sprite width)
+          <ysize>: 1..32 (sprite height)
+          <filename>: full path or relative to startup directory mchron
   'h'   - Help
+          Usage: h
   'hc'  - Search command
-          Arguments: <search> <pattern>
-              search: 'a','d','n','.' (a = arg, d = descr, n = name, . = all)
-              pattern: mchron command search regex pattern, '.' = all
+          Usage: hc <search> <pattern>
+          <search>: 'a' = arg, 'd' = descr, 'n' = name, '.' = all
+          <pattern>: mchron command search regex pattern, '.' = all
   'he'  - Show expression result
-          Argument: <number>
-              number: expression
+          Usage: he <number>
+          <number>: expression
   'hm'  - Show help message
-          Argument: <message>
-              message: optional ascii text
+          Usage: hm <message>
+          <message>: optional ascii text
   'iei' - If else if
-          Argument: <condition>
-              condition: expression determining block execution
+          Usage: iei <condition>
+          <condition>: expression determining block execution
   'iel' - If else
+          Usage: iel
   'ien' - If end
+          Usage: ien
   'iif' - If
-          Argument: <condition>
-              condition: expression determining block execution
+          Usage: iif <condition>
+          <condition>: expression determining block execution
   'las' - Set active lcd controller
           Argument <controller>
-              controller: 0, 1
+          <controller>: 0, 1
   'lbs' - Set lcd backlight brightness
-          Argument: <backlight>
-              backlight: 0..16 (0 = dim .. 16 = bright)
+          Usage: lbs <backlight>
+          <backlight>: 0..16 (0 = dim .. 16 = bright)
   'lcr' - Reset lcd cursor administration
+          Usage: lcr
   'lds' - Switch lcd controller display on/off
-          Arguments: <controller-0> <controller-1>
-              controller-0: 0 = off, 1 = on
-              controller-1: 0 = off, 1 = on
+          Usage: lds <controller-0> <controller-1>
+          <controller-0>: 0 = off, 1 = on, -1 = do not change
+          <controller-1>: 0 = off, 1 = on, -1 = do not change
   'le'  - Erase lcd display
+          Usage: le
   'lge' - Edit glut lcd display
+          Usage: lge
   'lgg' - Set glut graphics options
-          Arguments: <pixelbezel> <gridlines>
-              pixelbezel: 0 = off, 1 = on
-              gridlines: 0 = off, 1 = on
+          Usage: lgg <pixelbezel> <gridlines>
+          <pixelbezel>: 0 = off, 1 = on
+          <gridlines>: 0 = off, 1 = on
   'lgs' - Set glut window size
-          Arguments: <axis> <size>
-              axis: 'w','h' (w = width, h = height)
-              size: 66..2080 (width-range = 130..2080, height-range = 66..1056)
+          Usage: lgs <axis> <size>
+          <axis>: 'w' = width, 'h' = height
+          <size>: 66..2080 (width-range = 130..2080, height-range = 66..1056)
   'lhr' - Reset glut glcd pixel highlight
+          Usage: lhr
   'lhs' - Set glut glcd pixel highlight
-          Arguments: <x> <y>
-              x: 0..127
-              y: 0..63
+          Usage: lhs <x> <y>
+          <x>: 0..127
+          <y>: 0..63
   'li'  - Inverse lcd display and draw colors
+          Usage: li
   'lng' - Set ncurses graphics options
-          Argument: <backlight>
-              backlight: 0 = off, 1 = on
+          Usage: lng <backlight>
+          <backlight>: 0 = off, 1 = on
   'lp'  - Print controller state/registers
+          Usage: lp
   'lr'  - Read data from active lcd controller
-          Argument: <variable>
-              variable: word of [a-zA-Z_] characters, 'null' = ignore
+          Usage: lr <variable>
+          <variable>: word of [a-zA-Z_] characters, 'null' = ignore
   'lss' - Set controller lcd start line
-          Arguments: <controller-0> <controller-1>
-              controller-0: 0..63
-              controller-1: 0..63
+          Usage: lss <controller-0> <controller-1>
+          <controller-0>: 0..63 = start line, -1 = do not change
+          <controller-1>: 0..63 = start line, -1 = do not change
   'lw'  - Write data to active lcd controller
-          Argument: <data>
-              data: 0..255
+          Usage: lw <data>
+          <data>: 0..255
   'lxs' - Set active lcd controller x cursor
-          Argument: <x>
-              x: 0..63
+          Usage: lxs <x>
+          <x>: 0..63
   'lys' - Set active lcd controller y cursor
-          Argument: <yline>
-              yline: 0..7
+          Usage: lys <yline>
+          <yline>: 0..7
   'm'   - Run Monochron application
-          Argument: <startmode>
-              startmode: 'c' = single cycle, 'r' = run
+          Usage: m <startmode>
+          <startmode>: 'c' = single cycle, 'r' = run
   'mc'  - Run Monochron configuration
-          Arguments: <startmode> <timeout> <restart>
-              startmode: 'c' = single cycle, 'r' = run
-              timeout: 0 = off, 1 = on
-              restart: 0 = off, 1 = on
+          Usage: mc <startmode> <timeout> <restart>
+          <startmode>: 'c' = single cycle, 'r' = run
+          <timeout>: 0 = off, 1 = on
+          <restart>: 0 = off, 1 = on
   'mep' - Print Monochron eeprom settings
+          Usage: mep
   'mer' - Reset Monochron eeprom
+          Usage: mer
   'mew' - Write data to Monochron eeprom
-          Arguments: <address> <data>
-              address: 0..1023
-              data: 0..255
+          Usage: mew <address> <data>
+          <address>: 0..1023
+          <data>: 0..255
   'pa'  - Paint ascii
-          Arguments: <x> <y> <font> <orientation> <xscale> <yscale> <text>
-              x: 0..127
-              y: 0..63
-              font: '5x5p' = 5x5 proportional, '5x7m' = 5x7 monospace
-              orientation: 'b' = bottom-up vertical, 'h' = horizontal,
-                           't' = top-down vertical
-              xscale: 1..64
-              yscale: 1..32
-              text: ascii text
+          Usage: pa <x> <y> <font> <orientation> <xscale> <yscale> <text>
+          <x>: 0..127
+          <y>: 0..63
+          <font>: '5x5p' = 5x5 proportional, '5x7m' = 5x7 monospace
+          <orientation>: 'b' = bottom-up vertical, 'h' = horizontal,
+                         't' = top-down vertical
+          <xscale>: 1..64
+          <yscale>: 1..32
+          <text: ascii text
   'pb'  - Paint buffer
-          Arguments: <buffer> <x> <y> <xo> <yo> <xsize> <ysize>
-              buffer: 0..9
-              x: 0..127
-              y: 0..63
-              xo: 0..1023 (data element x offset)
-              yo: 0..31 (data element y offset)
-              xsize: 0..128
-              ysize: 0..32
+          Usage: pb <buffer> <x> <y> <xo> <yo> <xsize> <ysize>
+          <buffer>: 0..9
+          <x>: 0..127
+          <y>: 0..63
+          <xo>: 0..1023 (data element x offset)
+          <yo>: 0..31 (data element y offset)
+          <xsize>: 0..128
+          <ysize>: 0..32
   'pbi' - Paint buffer image
-          Arguments: <buffer> <x> <y>
-              buffer: 0..9
-              x: 0..127
-              y: 0..63
+          Usage: pbi <buffer> <x> <y>
+          <buffer>: 0..9
+          <x>: 0..127
+          <y>: 0..63
   'pbs' - Paint buffer sprite
-          Arguments <buffer> <x> <y> <frame>
-              buffer: 0..9
-              x: 0..127
-              y: 0..63
-              frame: 0..127
+          Usage: pbs <buffer> <x> <y> <frame>
+          <buffer>: 0..9
+          <x>: 0..127
+          <y>: 0..63
+          <frame>: 0..127
   'pc'  - Paint circle
-          Arguments: <x> <y> <radius> <pattern>
-              x: 0..127
-              y: 0..63
-              radius: 0..31
-              pattern: 0 = full line, 1 = half (even), 2 = half (uneven),
-                       3 = 3rd line
+          Usage: pc <x> <y> <radius> <pattern>
+          <x>: 0..127
+          <y>: 0..63
+          <radius>: 0..31
+          <pattern>: 0 = full line, 1 = half (even), 2 = half (uneven),
+                     3 = 3rd line
   'pcf' - Paint circle with fill pattern
-          Arguments: <x> <y> <radius> <pattern>
-              x: 0..127
-              y: 0..63
-              radius: 0..32
-              pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
-                       4 = inverse, 5 = blank
+          Usage: pcf <x> <y> <radius> <pattern>
+          <x>: 0..127
+          <y>: 0..63
+          <radius>: 0..32
+          <pattern>: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
+                     4 = inverse, 5 = blank
   'pd'  - Paint dot
-          Arguments: <x> <y>
-              x: 0..127
-              y: 0..63
+          Usage: pd <x> <y>
+          <x>: 0..127
+          <y>: 0..63
   'pl'  - Paint line
-          Arguments: <xstart> <ystart> <xend> <yend>
-              xstart: 0..127
-              ystart: 0..63
-              xend: 0..127
-              yend: 0..63
+          Usage: pl <xstart> <ystart> <xend> <yend>
+          <xstart>: 0..127
+          <ystart>: 0..63
+          <xend>: 0..127
+          <yend>: 0..63
   'pn'  - Paint number
-          Arguments: <x> <y> <font> <orientation> <xscale> <yscale> <number>
-                     <format>
-              x: 0..127
-              y: 0..63
-              font: '5x5p' = 5x5 proportional, '5x7m' = 5x7 monospace
-              orientation: 'b' = bottom-up vertical, 'h' = horizontal,
-                           't' = top-down vertical
-              xscale: 1..64
-              yscale: 1..32
-              number: expression
-              format: 'c'-style format string containing '%f', '%e' or '%g'
-                      Other format strings such as '%d' may crash mchron
+          Usage: pn <x> <y> <font> <orientation> <xscale> <yscale> <value>
+                    <format>
+          <x>: 0..127
+          <y>: 0..63
+          <font>: '5x5p' = 5x5 proportional, '5x7m' = 5x7 monospace
+          <orientation>: 'b' = bottom-up vertical, 'h' = horizontal,
+                         't' = top-down vertical
+          <xscale>: 1..64
+          <yscale>: 1..32
+          <value>: expression
+          <format>: 'c'-style format string containing '%f', '%e' or '%g'
+                    Other format strings such as '%d' may crash mchron.
   'pr'  - Paint rectangle
-          Arguments: <x> <y> <xsize> <ysize>
-              x: 0..127
-              y: 0..63
-              xsize: 1..128
-              ysize: 1..64
+          Usage: pr <x> <y> <xsize> <ysize>
+          <x>: 0..127
+          <y>: 0..63
+          <xsize>: 1..128
+          <ysize>: 1..64
   'prf' - Paint rectangle with fill pattern
-          Arguments: <x> <y> <xsize> <ysize> <align> <pattern>
-              x: 0..127
-              y: 0..63
-              xsize: 1..128
-              ysize: 1..64
-              align (for pattern 1-3): 0 = top, 1 = bottom, 2 = auto
-              pattern: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
-                       4 = inverse, 5 = blank
+          Usage: prf <x> <y> <xsize> <ysize> <align> <pattern>
+          <x>: 0..127
+          <y>: 0..63
+          <xsize>: 1..128
+          <ysize>: 1..64
+          <align> for pattern 1-3: 0 = top, 1 = bottom, 2 = auto
+          <pattern>: 0 = full, 1 = half, 2 = 3rd up, 3 = 3rd down
+                     4 = inverse, 5 = blank
   'ps'  - Set draw color
-          Argument: <color>
-              color: 0, 1 (0 = off (black), 1 = on (white))
+          Usage: ps <color>
+          <color>: 0 = off (black), 1 = on (white)
   'psb' - Set draw color to background color
+          Usage: psb
   'psf' - Set draw color to foreground color
+          Usage: psf
   'rb'  - Repeat break
+          Usage: rb
   'rc'  - Repeat continue
+          Usage: rc
   'rf'  - Repeat for
-          Arguments: <init> <condition> <post>
-              init: expression executed once at initialization
-              condition: expression determining loop continuation
-              post: expression executed after each loop
+          Usage: rf <init> <condition> <post>
+          <init>: expression executed once at initialization
+          <condition>: expression determining loop continuation
+          <post>: expression executed after each loop
   'rn'  - Repeat next
+          Usage: rn
   'sls' - Set list runtime statistics
-          Argument: <enable>
-              enable: 0 = off, 1 = on
-  'sp'  - Print application statistics
-  'sr'  - Reset application statistics
+          Usage: sls <enable>
+          <enable>: 0 = off, 1 = on
+  'sms' - Set Emuchron monitor mode
+          Usage: sms <mode>
+          <mode>: 'a' = aggregate, 'p' = paused, 's' = snapshot
+  'sp'  - Print aggregated statistics
+          Usage: sp
+  'sr'  - Reset aggregated statistics
+          Usage: sr
+  'ssm' - Make snapshot statistics
+          Usage: ssm <print>
+          <print>: 0 = no, 1 = yes
+  'sss' - Start new snapshot
+          Usage: sss
   'tap' - Set alarm switch position
-          Argument: <position>
-              position: 0 = off, 1 = on
+          Usage: tap <position>
+          <position>: 0 = off, 1 = on
   'tas' - Set alarm time
-          Arguments: <hour> <min>
-              hour: 0..23
-              min: 0..59
+          Usage: tas <hour> <min>
+          <hour>: 0..23
+          <min>: 0..59
   'tat' - Toggle alarm switch position
+          Usage: tat
   'tdr' - Reset clock date to system date
+          Usage: tdr
   'tds' - Set date
-          Arguments: <day> <month> <year>
-              day: 1..31
-              month: 1..12
-              year: 0..99 (year in 20xx)
+          Usage: tds <day> <month> <year>
+          <day>: 1..31
+          <month>: 1..12
+          <year>: 0..99 (year in 20xx)
   'tf'  - Flush Monochron time and date to active clock
+          Usage: tf
   'tg'  - Get date/time
-          Arguments: <varday> <varmonth> <varyear> <varhour> <varmin> <varsec>
-              varyear: word of [a-zA-Z_] characters, 'null' = ignore
-              varmonth: word of [a-zA-Z_] characters, 'null' = ignore
-              varday: word of [a-zA-Z_] characters, 'null' = ignore
-              varhour: word of [a-zA-Z_] characters, 'null' = ignore
-              varmin: word of [a-zA-Z_] characters, 'null' = ignore
-              varsec: word of [a-zA-Z_] characters, 'null' = ignore
+          Usage: tg <varday> <varmonth> <varyear> <varhour> <varmin> <varsec>
+          <varyear>: word of [a-zA-Z_] characters, 'null' = ignore
+          <varmonth>: word of [a-zA-Z_] characters, 'null' = ignore
+          <varday>: word of [a-zA-Z_] characters, 'null' = ignore
+          <varhour>: word of [a-zA-Z_] characters, 'null' = ignore
+          <varmin>: word of [a-zA-Z_] characters, 'null' = ignore
+          <varsec>: word of [a-zA-Z_] characters, 'null' = ignore
   'tp'  - Print time/date/alarm
+          Usage: tp
   'tr'  - Reset time to system time
+          Usage: tr
   'ts'  - Set time
-          Arguments: <hour> <min> <sec>
-              hour: 0..23
-              min: 0..59
-              sec: 0..59
+          Usage: ts <hour> <min> <sec>
+          <hour>: 0..23
+          <min>: 0..59
+          <sec>: 0..59
   'vp'  - Print value of variable(s)
-          Argument: <pattern>
-              pattern: variable name regex pattern, '.' = all
+          Usage: vp <pattern>
+          <pattern>: variable name regex pattern, '.' = all
   'vr'  - Reset variable(s)
-          Argument: <variable>
-              variable: word of [a-zA-Z_] characters, '.' = all
+          Usage: vr <variable>
+          <variable>: word of [a-zA-Z_] characters, '.' = all
   'vs'  - Set value of variable
-          Argument: <assignment>
-              assignment: <variable>=<expression>
+          Usage: vs <assignment>
+          <assignment>: <variable>=<expression>
   'w'   - Wait for keypress or amount of time
-          Argument: <delay>
-              delay: 0 = wait for keypress, 1..1000000 = wait (msec)
+          Usage: w <delay>
+          <delay>: 0 = wait for keypress, 1..1000000 = wait (msec)
           When waiting, a 'q' keypress will return control back to the mchron
-          command prompt
+          command prompt.
   'wte' - Wait for wait timer expiry
-          Argument: <expiry>
-              expiry: 1..1000000 (msec)
+          Usage: wte <expiry>
+          <expiry>: 1..1000000 (msec)
           When waiting, a 'q' keypress will return control back to the mchron
-          command prompt
+          command prompt.
   'wts' - Start wait timer
+          Usage: wts
   'x'   - Exit
+          Usage: x
 
 Examples:
   le
@@ -366,4 +421,3 @@ Reminders:
   - Use keypress 'q' to interrupt execution of command or command file
   - To enable coredump file creation in the current (bash) shell enter the
     following command once prior to running mchron: ulimit -c unlimited
-

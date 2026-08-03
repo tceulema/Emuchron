@@ -296,12 +296,12 @@ void pongCycle(void)
       (mcAlarming == MC_FALSE || mcSnoozing == MC_TRUE))
   {
     if (tickNow == paddleTick && tickNow == ticksPlay)
-      beep(425, 25);
+      monoBeep(425, 25);
     else if (trajId > 1 &&
        (tickNow == ticksPlay || countdown >= COUNTDOWN_GAME - 5))
-      beep(300, 50);
+      monoBeep(300, 50);
     else if (hitBar == MC_TRUE)
-      beep(600, 25);
+      monoBeep(600, 25);
   }
 }
 

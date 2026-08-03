@@ -176,43 +176,6 @@
 // Definition of a structure holding the lcd image data for a controller
 typedef u08 ctrlImage_t[GLCD_CONTROLLER_XPIXELS][GLCD_CONTROLLER_YPAGES];
 
-// Definition of a structure holding the glcd interface statistics counters
-typedef struct _ctrlGlcdStats_t
-{
-  long long dataRead;			// Bytes read from lcd
-  long long dataWrite;			// Bytes written to lcd
-  long long addressSet;			// Cursor address set in lcd
-  long long ctrlSet;			// Set lcd controller
-} ctrlGlcdStats_t;
-
-// Definition of a structure holding the controller statistics counters
-typedef struct _ctrlStats_t
-{
-  long long displayReq;			// Display commands received
-  long long displayCnf;			// Display cmds leading to lcd update
-  long long startLineReq;		// Startline commands received
-  long long startLineCnf;		// Startline cmds leading to lcd update
-  long long xReq;			// Cursor x commands received
-  long long xCnf;			// Cursor x cmds leading to x update
-  long long yReq;			// Cursor y commands received
-  long long yCnf;			// Cursor y cmds leading to y update
-  long long readReq;			// Lcd read requests received
-  long long readCnf;			// Lcd read reqs leading to actual read
-  long long writeReq;			// Lcd write requests received
-  long long writeCnf;			// Lcd write reqs leading to lcd update
-} ctrlStats_t;
-
-// Definition of a structure holding the stubbed controller hardware registers
-typedef struct _ctrlRegister_t
-{
-  u08 display;				// Display on/off switch (0=off, 1=on)
-  u08 x;				// Cursor x pos (0..63)
-  u08 y;				// Cursor y page (0..7)
-  u08 startLine;			// Vertical display start line (0..63)
-  u08 dataRead;				// Last data read from the lcd
-  u08 dataWrite;			// Last data written to the lcd
-} ctrlRegister_t;
-
 // A controller is represented in the data it holds. It is a combination of its
 // current software machine state, the input/output registers, its lcd image
 // data, and for software emulation purposes a set of statistics counters.
@@ -223,7 +186,8 @@ typedef struct _ctrlController_t
   ctrlRegister_t ctrlRegister;		// Registers
   ctrlImage_t ctrlImage;		// Lcd image data
   ctrlStats_t ctrlStats;		// Aggregated statistics
-  ctrlStats_t ctrlStatsCopy;		// Copy for single cycle stats
+  ctrlStats_t ctrlStatsBase;		// Base for snapshot stats
+  ctrlStats_t ctrlStatsSnap;		// Snapshot stats
 } ctrlController_t;
 
 // Definition of a structure holding the state-event event handler and next
@@ -304,11 +268,13 @@ static ctrlController_t ctrlControllers[GLCD_NUM_CONTROLLERS];
 
 // Statistics counters on lcd glcd interface
 static ctrlGlcdStats_t ctrlGlcdStats;		// Aggregated statistics
-static ctrlGlcdStats_t ctrlGlcdStatsCopy;	// Copy for single cycle stats
+static ctrlGlcdStats_t ctrlGlcdStatsBase;	// Base for snapshot stats
+static ctrlGlcdStats_t ctrlGlcdStatsSnap;	// Snapshot stats
 
-// Identifiers to indicate what lcd stub devices are used
-static u08 useGlut = MC_FALSE;
-static u08 useNcurses = MC_FALSE;
+// Identifiers to indicate what lcd and monitor stub devices are used
+static u08 useGlutLcd = MC_FALSE;
+static u08 useNcurLcd = MC_FALSE;
+static u08 useNcurMon = MC_FALSE;
 static u08 useDevice = CTRL_DEVICE_NULL;
 
 // Local function prototypes
@@ -451,26 +417,26 @@ void ctrlExecute(u08 method)
   // Update the lcd devices if needed
   if (lcdUpdate == MC_TRUE)
   {
-    if (event == CTRL_EVENT_DISPLAY)
+    if (event == CTRL_EVENT_WRITE)
     {
-      if (useGlut == MC_TRUE)
+      if (useGlutLcd == MC_TRUE)
+        lcdGlutDataWrite(x, y, payload);
+      if (useNcurLcd == MC_TRUE)
+        lcdNcurDataWrite(x, y, payload);
+    }
+    else if (event == CTRL_EVENT_DISPLAY)
+    {
+      if (useGlutLcd == MC_TRUE)
         lcdGlutDisplaySet(controller, payload);
-      if (useNcurses == MC_TRUE)
+      if (useNcurLcd == MC_TRUE)
         lcdNcurDisplaySet(controller, payload);
     }
     else if (event == CTRL_EVENT_STARTLINE)
     {
-      if (useGlut == MC_TRUE)
+      if (useGlutLcd == MC_TRUE)
         lcdGlutStartLineSet(controller, payload);
-      if (useNcurses == MC_TRUE)
+      if (useNcurLcd == MC_TRUE)
         lcdNcurStartLineSet(controller, payload);
-    }
-    else if (event == CTRL_EVENT_WRITE)
-    {
-      if (useGlut == MC_TRUE)
-        lcdGlutDataWrite(x, y, payload);
-      if (useNcurses == MC_TRUE)
-        lcdNcurDataWrite(x, y, payload);
     }
   }
 
@@ -539,6 +505,36 @@ static u08 ctrlStartline(ctrlController_t *ctrlController, u08 payload)
   }
 
   return retVal;
+}
+
+//
+// Function: ctrlStatsGet
+//
+// Provide copies of the controller registers + statistics and glcd statistics
+//
+void ctrlStatsGet(u08 mode, u08 *ctrlActive, u08 *ctrlState0, u08 *ctrlState1,
+  ctrlRegister_t *ctrlReg0, ctrlRegister_t *ctrlReg1, ctrlStats_t *ctrlStats0,
+  ctrlStats_t *ctrlStats1, ctrlGlcdStats_t *ctrlGlcd)
+{
+  *ctrlActive = controller;
+  *ctrlState0 = ctrlControllers[0].state;
+  *ctrlState1 = ctrlControllers[1].state;
+  *ctrlReg0 = ctrlControllers[0].ctrlRegister;
+  *ctrlReg1 = ctrlControllers[1].ctrlRegister;
+  if (mode == MON_MODE_AGGREGATE)
+  {
+    // Provide glcd and controller aggregate data
+    *ctrlStats0 = ctrlControllers[0].ctrlStats;
+    *ctrlStats1 = ctrlControllers[1].ctrlStats;
+    *ctrlGlcd = ctrlGlcdStats;
+  }
+  else
+  {
+    // Provide glcd and controller snapshot data
+    *ctrlStats0 = ctrlControllers[0].ctrlStatsSnap;
+    *ctrlStats1 = ctrlControllers[1].ctrlStatsSnap;
+    *ctrlGlcd = ctrlGlcdStatsSnap;
+  }
 }
 
 //
@@ -675,6 +671,29 @@ static u08 ctrlEventGet(u08 data, u08 *command, u08 *payload)
 }
 
 //
+// Function: ctrlGlcdPixActivitySet
+//
+// Enable/disable functionality to double-click a glut pixel
+//
+void ctrlGlcdPixActivitySet(u08 enable)
+{
+  if (enable == MC_FALSE)
+  {
+    lcdGlutGlcdPix.active = MC_FALSE;
+    lcdGlutGlcdPix.pixelLock = MC_FALSE;
+    lcdGlutGlcdPix.glcdX = 0;
+    lcdGlutGlcdPix.glcdY = 0;
+  }
+  else
+  {
+    lcdGlutGlcdPix.glcdX = 0;
+    lcdGlutGlcdPix.glcdY = 0;
+    lcdGlutGlcdPix.pixelLock = MC_FALSE;
+    lcdGlutGlcdPix.active = MC_TRUE;
+  }
+}
+
+//
 // Function: ctrlGlcdPixConfirm
 //
 // Confirm a glut double-click event to allow next one
@@ -683,32 +702,6 @@ void ctrlGlcdPixConfirm(void)
 {
   if (lcdGlutGlcdPix.active == MC_TRUE && lcdGlutGlcdPix.pixelLock == MC_TRUE)
     lcdGlutGlcdPix.pixelLock = MC_FALSE;
-}
-
-//
-// Function: ctrlGlcdPixDisable
-//
-// Disable functionality to double-click a glut pixel
-//
-void ctrlGlcdPixDisable(void)
-{
-  lcdGlutGlcdPix.active = MC_FALSE;
-  lcdGlutGlcdPix.pixelLock = MC_FALSE;
-  lcdGlutGlcdPix.glcdX = 0;
-  lcdGlutGlcdPix.glcdY = 0;
-}
-
-//
-// Function: ctrlGlcdPixEnable
-//
-// Enable functionality to double-click a glut pixel
-//
-void ctrlGlcdPixEnable(void)
-{
-  lcdGlutGlcdPix.glcdX = 0;
-  lcdGlutGlcdPix.glcdY = 0;
-  lcdGlutGlcdPix.pixelLock = MC_FALSE;
-  lcdGlutGlcdPix.active = MC_TRUE;
 }
 
 //
@@ -738,16 +731,22 @@ u08 ctrlGlcdPixGet(u08 *x, u08 *y)
 u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 {
   u08 i;
-  unsigned char initOk = MC_TRUE;
+  u08 initOk = MC_TRUE;
 
-  // Administer which lcd stub devices are used
-  useGlut = ctrlDeviceArgs->useGlut;
-  useNcurses = ctrlDeviceArgs->useNcurses;
+  // Administer which stub devices are used
+  useNcurLcd = ctrlDeviceArgs->useNcurLcd;
+  useGlutLcd = ctrlDeviceArgs->useGlutLcd;
+  useNcurMon = ctrlDeviceArgs->useNcurMon;
+
+  // For the controller we're only interested in the lcd devices. However, we
+  // must also init and shutdown the ncurses monitor via the controller.
   useDevice = CTRL_DEVICE_NULL;
-  if (useNcurses == MC_TRUE)
-    useDevice = useDevice | CTRL_DEVICE_NCURSES;
-  if (useGlut == MC_TRUE)
-    useDevice = useDevice | CTRL_DEVICE_GLUT;
+  if (useNcurLcd == MC_TRUE)
+    useDevice = useDevice | CTRL_DEVICE_NCURLCD;
+  if (useGlutLcd == MC_TRUE)
+    useDevice = useDevice | CTRL_DEVICE_GLUTLCD;
+  if (useNcurMon == MC_TRUE)
+    useDevice = useDevice | CTRL_DEVICE_NCURMON;
 
   // Initialize the controller data, registers and state
   for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
@@ -757,19 +756,19 @@ u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
     ctrlControllers[i].state = CTRL_STATE_CURSOR;
   }
 
-  // Init the glut pixel double-click event data structure
-  ctrlGlcdPixDisable();
+  // Init glut double-click pixel toggle functionality
+  ctrlGlcdPixActivitySet(MC_FALSE);
 
   // Clear glcd and controller statistics before use. The stats for each lcd
   // device are cleared in their respective init method.
   ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
 
   // Init the ncurses device when requested
-  if (useNcurses == MC_TRUE)
-    initOk = lcdNcurInit(&ctrlDeviceArgs->lcdNcurInitArgs);
+  if (useNcurLcd == MC_TRUE || useNcurMon == MC_TRUE)
+    initOk = ncurInit(&ctrlDeviceArgs->ncurInitArgs);
 
   // Init the OpenGL2/GLUT device when requested
-  if (useGlut == MC_TRUE && initOk == MC_TRUE)
+  if (useGlutLcd == MC_TRUE && initOk == MC_TRUE)
     initOk = lcdGlutInit(&ctrlDeviceArgs->lcdGlutInitArgs);
 
   // Cleanup in case there was a failure
@@ -786,12 +785,13 @@ u08 ctrlInit(ctrlDeviceArgs_t *ctrlDeviceArgs)
 //
 void ctrlCleanup(void)
 {
-  if (useNcurses == MC_TRUE)
+  if (useNcurLcd == MC_TRUE || useNcurMon == MC_TRUE)
     lcdNcurCleanup();
-  if (useGlut == MC_TRUE)
+  if (useGlutLcd == MC_TRUE)
     lcdGlutCleanup();
-  useNcurses = MC_FALSE;
-  useGlut = MC_FALSE;
+  useNcurLcd = MC_FALSE;
+  useGlutLcd = MC_FALSE;
+  useNcurMon = MC_FALSE;
   useDevice = CTRL_DEVICE_NULL;
 }
 
@@ -816,10 +816,10 @@ u08 ctrlDeviceActive(u08 device)
 void ctrlLcdBacklightSet(u08 brightness)
 {
   OCR2B = (uint16_t)brightness << OCR2B_BITSHIFT;
-  if (useGlut == MC_TRUE)
-    lcdGlutBacklightSet((unsigned char)brightness);
-  if (useNcurses == MC_TRUE)
-    lcdNcurBacklightSet((unsigned char)brightness);
+  if (useGlutLcd == MC_TRUE)
+    lcdGlutBacklightSet(brightness);
+  if (useNcurLcd == MC_TRUE)
+    lcdNcurBacklightSet(brightness);
 }
 
 //
@@ -829,9 +829,9 @@ void ctrlLcdBacklightSet(u08 brightness)
 //
 void ctrlLcdFlush(void)
 {
-  if (useGlut == MC_TRUE)
+  if (useGlutLcd == MC_TRUE)
     lcdGlutFlush();
-  if (useNcurses == MC_TRUE)
+  if (useNcurLcd == MC_TRUE)
     lcdNcurFlush();
 }
 
@@ -842,8 +842,8 @@ void ctrlLcdFlush(void)
 //
 void ctrlLcdGlutGrSet(u08 bezel, u08 grid)
 {
-  if (useGlut == MC_TRUE)
-    lcdGlutGraphicsSet((unsigned char)bezel, (unsigned char)grid);
+  if (useGlutLcd == MC_TRUE)
+    lcdGlutGraphicsSet(bezel, grid);
 }
 
 //
@@ -853,9 +853,8 @@ void ctrlLcdGlutGrSet(u08 bezel, u08 grid)
 //
 void ctrlLcdGlutHlSet(u08 highlight, u08 x, u08 y)
 {
-  if (useGlut == MC_TRUE)
-    lcdGlutHighlightSet((unsigned char)highlight, (unsigned char)x,
-      (unsigned char)y);
+  if (useGlutLcd == MC_TRUE)
+    lcdGlutHighlightSet(highlight, x, y);
 }
 
 //
@@ -865,8 +864,8 @@ void ctrlLcdGlutHlSet(u08 highlight, u08 x, u08 y)
 //
 void ctrlLcdGlutSizeSet(char axis, u16 size)
 {
-  if (useGlut == MC_TRUE)
-    lcdGlutSizeSet((unsigned char)axis, (unsigned int)size);
+  if (useGlutLcd == MC_TRUE)
+    lcdGlutSizeSet(axis, size);
 }
 
 //
@@ -876,8 +875,8 @@ void ctrlLcdGlutSizeSet(char axis, u16 size)
 //
 void ctrlLcdNcurGrSet(u08 backlight)
 {
-  if (useNcurses == MC_TRUE)
-    lcdNcurGraphicsSet((unsigned char)backlight);
+  if (useNcurLcd == MC_TRUE)
+    lcdNcurGraphicsSet(backlight);
 }
 
 //
@@ -938,42 +937,44 @@ void ctrlRegPrint(void)
 // Function: ctrlStatsPrint
 //
 // Print statistics of the high level glcd interface and (optional) lcd
-// controllers and display devices
+// controllers and display devices. For the glcd and controller sets print
+// either the aggregated or the snapshot statistics. For printing both use
+// multiple calls to this function.
 //
 void ctrlStatsPrint(u08 type)
 {
   u08 i;
   ctrlStats_t *ctrlStats;
-  ctrlStats_t *ctrlStatsCopy;
+  ctrlGlcdStats_t *ctrlGlcdStatPrint = NULL;
 
-  // Report the glcd interface statistics
+  // Report the glcd statistics
   if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
+    ctrlGlcdStatPrint = &ctrlGlcdStats;
+  else if ((type & CTRL_STATS_GLCD_SNAP) != CTRL_STATS_NULL)
+    ctrlGlcdStatPrint = &ctrlGlcdStatsSnap;
+  if (ctrlGlcdStatPrint != NULL)
   {
     // Aggregated statistics
     printf("glcd   : dataWrite=%llu, dataRead=%llu, addressSet=%llu\n",
-      ctrlGlcdStats.dataWrite, ctrlGlcdStats.dataRead,
-      ctrlGlcdStats.addressSet);
+      ctrlGlcdStatPrint->dataWrite, ctrlGlcdStatPrint->dataRead,
+      ctrlGlcdStatPrint->addressSet);
     printf("       : ctrlSet=%llu\n",
-      ctrlGlcdStats.ctrlSet);
-  }
-  if ((type & CTRL_STATS_GLCD_CYCLE) != CTRL_STATS_NULL)
-  {
-    // Single cycle statistics
-    printf("glcd   : dataWrite=%llu, dataRead=%llu, addressSet=%llu\n",
-      ctrlGlcdStats.dataWrite - ctrlGlcdStatsCopy.dataWrite,
-      ctrlGlcdStats.dataRead - ctrlGlcdStatsCopy.dataRead,
-      ctrlGlcdStats.addressSet - ctrlGlcdStatsCopy.addressSet);
-    printf("       : ctrlSet=%llu\n",
-      ctrlGlcdStats.ctrlSet - ctrlGlcdStatsCopy.ctrlSet);
+      ctrlGlcdStatPrint->ctrlSet);
   }
 
   // Report controller statistics
-  if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
+  if ((type & (CTRL_STATS_CTRL | CTRL_STATS_CTRL_SNAP)) != CTRL_STATS_NULL)
   {
     // Aggregated statistics
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
     {
-      ctrlStats = &ctrlControllers[i].ctrlStats;
+      // Select what statistics to print
+      if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
+        ctrlStats = &ctrlControllers[i].ctrlStats;
+      else
+        ctrlStats = &ctrlControllers[i].ctrlStatsSnap;
+
+      // Print the selected statistics
       printf("ctrl-%d : ", i);
       if (ctrlStats->writeReq == 0)
         printf("write=%llu (-%%), ", ctrlStats->writeReq);
@@ -1007,69 +1008,13 @@ void ctrlStatsPrint(u08 type)
           ctrlStats->startLineCnf * 100 / (double)ctrlStats->startLineReq);
     }
   }
-  if ((type & CTRL_STATS_CTRL_CYCLE) != CTRL_STATS_NULL)
-  {
-    // Single cycle statistics
-    for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-    {
-      ctrlStats = &ctrlControllers[i].ctrlStats;
-      ctrlStatsCopy = &ctrlControllers[i].ctrlStatsCopy;
-      printf("ctrl-%d : ", i);
-      if (ctrlStats->writeReq - ctrlStatsCopy->writeReq == 0)
-        printf("write=%llu (-%%), ",
-          ctrlStats->writeReq - ctrlStatsCopy->writeReq);
-      else
-        printf("write=%llu (%.0f%%), ",
-          ctrlStats->writeReq - ctrlStatsCopy->writeReq,
-          (ctrlStats->writeCnf - ctrlStatsCopy->writeCnf) * 100 /
-            (double)(ctrlStats->writeReq - ctrlStatsCopy->writeReq));
-      if (ctrlStats->readReq - ctrlStatsCopy->readReq == 0)
-        printf("read=%llu (-%%), ",
-          ctrlStats->readReq - ctrlStatsCopy->readReq);
-      else
-        printf("read=%llu (%.0f%%), ",
-          ctrlStats->readReq - ctrlStatsCopy->readReq,
-          (ctrlStats->readCnf - ctrlStatsCopy->readCnf) * 100 /
-            (double)(ctrlStats->readReq - ctrlStatsCopy->readReq));
-      if (ctrlStats->displayReq - ctrlStatsCopy->displayReq == 0)
-        printf("display=%llu (-%%)\n",
-          ctrlStats->displayReq - ctrlStatsCopy->displayReq);
-      else
-        printf("display=%llu (%.0f%%)\n",
-          ctrlStats->displayReq - ctrlStatsCopy->displayReq,
-          (ctrlStats->displayCnf - ctrlStatsCopy->displayCnf) * 100 /
-            (double)(ctrlStats->displayReq - ctrlStatsCopy->displayReq));
-      if (ctrlStats->xReq - ctrlStatsCopy->xReq == 0)
-        printf("       : x=%llu (-%%), ",
-          ctrlStats->xReq - ctrlStatsCopy->xReq);
-      else
-        printf("       : x=%llu (%.0f%%), ",
-          ctrlStats->xReq - ctrlStatsCopy->xReq,
-          (ctrlStats->xCnf - ctrlStatsCopy->xCnf) * 100 /
-            (double)(ctrlStats->xReq - ctrlStatsCopy->xReq));
-      if (ctrlStats->yReq - ctrlStatsCopy->yReq == 0)
-        printf("y=%llu (-%%), ", ctrlStats->yReq - ctrlStatsCopy->yReq);
-      else
-        printf("y=%llu (%.0f%%), ", ctrlStats->yReq - ctrlStatsCopy->yReq,
-          (ctrlStats->yCnf - ctrlStatsCopy->yCnf) * 100 /
-            (double)(ctrlStats->yReq - ctrlStatsCopy->yReq));
-      if (ctrlStats->startLineReq - ctrlStatsCopy->startLineReq == 0)
-        printf("startline=%llu (-%%)\n",
-          ctrlStats->startLineReq - ctrlStatsCopy->startLineReq);
-      else
-        printf("startline=%llu (%.0f%%)\n",
-          ctrlStats->startLineReq - ctrlStatsCopy->startLineReq,
-          (ctrlStats->startLineCnf - ctrlStatsCopy->startLineCnf) * 100 /
-            (double)(ctrlStats->startLineReq - ctrlStatsCopy->startLineReq));
-    }
-  }
 
   // Report lcd stub device statistics
   if ((type & CTRL_STATS_LCD) != CTRL_STATS_NULL)
   {
-    if (useGlut == MC_TRUE)
+    if (useGlutLcd == MC_TRUE)
       lcdGlutStatsPrint();
-    if (useNcurses == MC_TRUE)
+    if (useNcurLcd == MC_TRUE)
       lcdNcurStatsPrint();
   }
 }
@@ -1083,30 +1028,89 @@ void ctrlStatsReset(u08 type)
 {
   u08 i;
 
-  // Lcd glcd statistics. Note that resetting the cycle statistics means:
+  // Lcd glcd statistics. Note that resetting the snapshot statistics means:
   // copy the aggregated statistics so we can calculate the delta between the
   // up-to-date aggregated stats and its earlier made copy.
   if ((type & CTRL_STATS_GLCD) != CTRL_STATS_NULL)
     memset(&ctrlGlcdStats, 0, sizeof(ctrlGlcdStats_t));
-  if ((type & CTRL_STATS_GLCD_CYCLE) != CTRL_STATS_NULL)
-    ctrlGlcdStatsCopy = ctrlGlcdStats;
+  if ((type & CTRL_STATS_GLCD_SNAP) != CTRL_STATS_NULL)
+    ctrlGlcdStatsBase = ctrlGlcdStats;
 
-  // Lcd controller statistics. Note that resetting the cycle statistics means:
-  // copy the aggregated statistics so we can calculate the delta between the
-  // up-to-date aggregated stats and its earlier made copy.
+  // Lcd controller statistics. Note that resetting the snapshot statistics
+  // means: copy the aggregated statistics so we can calculate the delta
+  // between the up-to-date aggregated stats and its earlier made copy.
   if ((type & CTRL_STATS_CTRL) != CTRL_STATS_NULL)
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
       memset(&ctrlControllers[i].ctrlStats, 0, sizeof(ctrlStats_t));
-  if ((type & CTRL_STATS_CTRL_CYCLE) != CTRL_STATS_NULL)
+  if ((type & CTRL_STATS_CTRL_SNAP) != CTRL_STATS_NULL)
     for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
-      ctrlControllers[i].ctrlStatsCopy = ctrlControllers[i].ctrlStats;
+      ctrlControllers[i].ctrlStatsBase = ctrlControllers[i].ctrlStats;
+
+  // When a full reset is requested reset the created snapshot data as well
+  if ((type & CTRL_STATS_ALL) == CTRL_STATS_ALL)
+  {
+    ctrlGlcdStatsSnap = ctrlGlcdStats;
+    for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+      ctrlControllers[i].ctrlStatsSnap = ctrlControllers[i].ctrlStats;
+  }
 
   // Glut and/or ncurses statistics
   if ((type & CTRL_STATS_LCD) != CTRL_STATS_NULL)
   {
-    if (useGlut == MC_TRUE)
+    if (useGlutLcd == MC_TRUE)
       lcdGlutStatsReset();
-    if (useNcurses == MC_TRUE)
+    if (useNcurLcd == MC_TRUE)
       lcdNcurStatsReset();
   }
+}
+
+//
+// Function: ctrlStatsSnapMake
+//
+// Make a glcd and controller snapshot statistics dataset and create a new
+// snapshot offset for the next one
+//
+void ctrlStatsSnapMake(void)
+{
+  u08 i;
+  ctrlStats_t *ctrlStats;
+  ctrlStats_t *ctrlStatsBase;
+  ctrlStats_t *ctrlStatsSnap;
+
+  // Make glcd snapshot
+  ctrlGlcdStatsSnap.dataWrite =
+    ctrlGlcdStats.dataWrite - ctrlGlcdStatsBase.dataWrite;
+  ctrlGlcdStatsSnap.dataRead =
+    ctrlGlcdStats.dataRead - ctrlGlcdStatsBase.dataRead;
+  ctrlGlcdStatsSnap.addressSet =
+    ctrlGlcdStats.addressSet - ctrlGlcdStatsBase.addressSet;
+  ctrlGlcdStatsSnap.ctrlSet =
+    ctrlGlcdStats.ctrlSet - ctrlGlcdStatsBase.ctrlSet;
+
+  // Make controllers snapshot
+  for (i = 0; i < GLCD_NUM_CONTROLLERS; i++)
+  {
+    ctrlStats = &ctrlControllers[i].ctrlStats;
+    ctrlStatsBase = &ctrlControllers[i].ctrlStatsBase;
+    ctrlStatsSnap = &ctrlControllers[i].ctrlStatsSnap;
+    ctrlStatsSnap->writeReq = ctrlStats->writeReq - ctrlStatsBase->writeReq;
+    ctrlStatsSnap->writeCnf = ctrlStats->writeCnf - ctrlStatsBase->writeCnf;
+    ctrlStatsSnap->readReq = ctrlStats->readReq - ctrlStatsBase->readReq;
+    ctrlStatsSnap->readCnf = ctrlStats->readCnf - ctrlStatsBase->readCnf;
+    ctrlStatsSnap->displayReq = ctrlStats->displayReq -
+      ctrlStatsBase->displayReq;
+    ctrlStatsSnap->displayCnf = ctrlStats->displayCnf -
+      ctrlStatsBase->displayCnf;
+    ctrlStatsSnap->xReq = ctrlStats->xReq - ctrlStatsBase->xReq;
+    ctrlStatsSnap->xCnf = ctrlStats->xCnf - ctrlStatsBase->xCnf;
+    ctrlStatsSnap->yReq = ctrlStats->yReq - ctrlStatsBase->yReq;
+    ctrlStatsSnap->yCnf = ctrlStats->yCnf - ctrlStatsBase->yCnf;
+    ctrlStatsSnap->startLineReq = ctrlStats->startLineReq -
+      ctrlStatsBase->startLineReq;
+    ctrlStatsSnap->startLineCnf = ctrlStats->startLineCnf -
+      ctrlStatsBase->startLineCnf;
+  }
+
+  // Create a new offset for the next snapshot
+  ctrlStatsReset(CTRL_STATS_SNAPSHOT);
 }

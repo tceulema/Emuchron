@@ -40,8 +40,8 @@
   #a, NULL, a
 
 //
-// Building the mchron command dictionary is done in four steps where
-// each step is built on top of its preceding step.
+// Building the mchron command dictionary is done in four steps where each step
+// is built on top of its preceding step.
 // - Step 1: Argument domain value profiles
 // - Step 2: Command argument profiles
 // - Step 3: Command group profiles
@@ -59,6 +59,10 @@
 //    "0 = off, 1 = on"};
 DOMAIN(domNumOffOn, \
   DOM_NUM_RANGE, NULL, 0, 1, "0 = off, 1 = on");
+
+// Answer no/yes
+DOMAIN(domNumNoYes, \
+  DOM_NUM_RANGE, NULL, 0, 1, "0 = no, 1 = yes");
 
 // Beep duration: 1..255
 DOMAIN(domNumDuration, \
@@ -120,9 +124,9 @@ DOMAIN(domCharEcho, \
 DOMAIN(domCharMode, \
   DOM_CHAR_VAL, "cr", 0, 0, "c = single cycle, r = run");
 
-// Lcd backlight: 0..16
+// Lcd backlight: 0..OCR2A_MAX (16)
 DOMAIN(domNumBacklight, \
-  DOM_NUM_RANGE, NULL, 0, 16, "0 = dim .. 16 = bright");
+  DOM_NUM_RANGE, NULL, 0, OCR2A_MAX, "0 = dim .. 16 = bright");
 
 // Lcd color: 0..1: 0 = GLCD_OFF, 1 = GLCD_ON
 DOMAIN(domNumColor, \
@@ -148,9 +152,13 @@ DOMAIN(domNumCtrlPosX, \
 DOMAIN(domNumCtrlPageY, \
   DOM_NUM_RANGE, NULL, 0, GLCD_CONTROLLER_YPAGES - 1, NULL);
 
-// Lcd controller x position: 0..63
+// Lcd controller display
+DOMAIN(domNumCtrlDispSet, \
+  DOM_NUM_RANGE, NULL, -1, 1, "0 = off, 1 = on, -1 = do not change");
+
+// Lcd controller start line
 DOMAIN(domNumCtrlStartLine, \
-  DOM_NUM_RANGE, NULL, 0, GLCD_CONTROLLER_YPIXELS - 1, NULL);
+  DOM_NUM_RANGE, NULL, -1, GLCD_CONTROLLER_YPIXELS - 1, "0..63 = start line, -1 = do not change");
 
 // Lcd glut window resize axis: w, h
 DOMAIN(domCharAxisResize, \
@@ -218,11 +226,11 @@ DOMAIN(domNumElements, \
 
 // Text font: '5x5-proportional, 5x7-monospace
 DOMAIN(domWordFont, \
-  DOM_WORD_VAL, "5x5p\n5x7m", 0, 0, "5x5p = 5x5 proportional, 5x7m = 5x7 monospace");
+  DOM_WORD_VAL, "5x5p\n5x7m", 0, 0, "5x5p = 5x5 prop, 5x7m = 5x7 monospace");
 
 // Text orientation: 'b'ottom-up, 'h'orizontal, 't'op-down
 DOMAIN(domCharOrient, \
-  DOM_CHAR_VAL, "bht", 0, 0, "b = bottom-up, h = horizontal, t = top-down");
+  DOM_CHAR_VAL, "bht", 0, 0, "b = bottom-up, h = hor, t = top-down");
 
 // Text scale x (horizontal): 1..64
 DOMAIN(domNumScaleX, \
@@ -260,7 +268,7 @@ DOMAIN(domNumDelay, \
 DOMAIN(domNumExpiry, \
   DOM_NUM_RANGE, NULL, 1, 1E6, "msec");
 
-// Comments: info
+// Comments: optional info
 DOMAIN(domStrComments, \
   DOM_STRING_OPT, "", 0, 0, "optional ascii text");
 
@@ -270,7 +278,7 @@ DOMAIN(domStrFileName, \
 
 // Help: command search property: 'a'rgument, 'd'escription, 'n'ame, '.' = all
 DOMAIN(domCharSearch, \
-  DOM_CHAR_VAL, "adn.", 0, 0, "a = argument, d = descr, n = name, . = all");
+  DOM_CHAR_VAL, "adn.", 0, 0, "a = arg, d = descr, n = name, . = all");
 
 // Help: command search regex pattern
 DOMAIN(domStrSearchPattern, \
@@ -286,7 +294,7 @@ DOMAIN(domNumConditionBlock, \
 
 // Stack level: 0..(CMD_STACK_DEPTH_MAX - 1)
 DOMAIN(domNumStackLevel, \
-  DOM_NUM_RANGE, NULL, 0, 7, "script execution stack level");
+  DOM_NUM_RANGE, NULL, 0, CMD_STACK_DEPTH_MAX - 1, "script execution stack level");
 
 // Script line number: 1..10000
 DOMAIN(domNumLineNumber, \
@@ -332,6 +340,14 @@ DOMAIN(domNumPost, \
 DOMAIN(domNumAssign, \
   DOM_NUM_ASSIGN, NULL, 0, 0, "<variable>=<expression>");
 
+// Operating mode ncurses Emuchron monitor: 'a'ggregate, 'p'aused, 's'snapshot
+DOMAIN(domCharMonMode, \
+  DOM_CHAR_VAL, "aps", 0, 0, "a = aggregate, p = paused, s = snapshot");
+
+// Clock cycle button press
+DOMAIN(domCharCycleBtn, \
+  DOM_CHAR_VAL, "+s-", 0, 0, "+ = + button, s = s button, - = no button");
+
 //
 // Dictionary build-up step 2: command argument profiles
 //
@@ -351,6 +367,9 @@ cmdArg_t argBeep[] =
   { ARGTYPE(ARG_NUM),    "duration",     &domNumDuration } };
 
 // Command 'c*'
+// Argument profile for clock cycle
+cmdArg_t argClockCycle[] =
+{ { ARGTYPE(ARG_CHAR),   "button",       &domCharCycleBtn } };
 // Argument profile for clock feed
 cmdArg_t argClockFeed[] =
 { { ARGTYPE(ARG_CHAR),   "startmode",    &domCharMode } };
@@ -368,6 +387,11 @@ cmdArg_t argDbBpAdd[] =
 cmdArg_t argDbBpDelete[] =
 { { ARGTYPE(ARG_NUM),    "stacklevel",   &domNumStackLevel },
   { ARGTYPE(ARG_NUM),    "breakpoint",   &domNumBreakpoint } };
+// Argument profile for breakpoint enable/disable
+cmdArg_t argDbBpSet[] =
+{ { ARGTYPE(ARG_NUM),    "stacklevel",   &domNumStackLevel },
+  { ARGTYPE(ARG_NUM),    "breakpoint",   &domNumBreakpoint },
+  { ARGTYPE(ARG_NUM),    "enable",       &domNumOffOn } };
 // Argument profile for conditional debug breakpoint
 cmdArg_t argDbBpCond[] =
 { { ARGTYPE(ARG_NUM),    "condition",    &domNumConditionBp } };
@@ -460,8 +484,8 @@ cmdArg_t argLcdBacklightSet[] =
 { { ARGTYPE(ARG_NUM),    "backlight",    &domNumBacklight } };
 // Argument profile for controller display
 cmdArg_t argLcdDisplaySet[] =
-{ { ARGTYPE(ARG_NUM),    "controller-0", &domNumOffOn },
-  { ARGTYPE(ARG_NUM),    "controller-1", &domNumOffOn } };
+{ { ARGTYPE(ARG_NUM),    "controller-0", &domNumCtrlDispSet },
+  { ARGTYPE(ARG_NUM),    "controller-1", &domNumCtrlDispSet } };
 // Argument profile for glut graphic options support
 cmdArg_t argLcdGlutGrSet[] =
 { { ARGTYPE(ARG_NUM),    "pixelbezel",   &domNumOffOn },
@@ -596,6 +620,12 @@ cmdArg_t argRepeatFor[] =
   { ARGTYPE(ARG_NUM),    "post",         &domNumPost } };
 
 // Command 's*'
+// Argument profile for setting Emuchron monitor activity mode
+cmdArg_t argStatsMonMode[] =
+{ { ARGTYPE(ARG_CHAR),   "mode",         &domCharMonMode } };
+// Argument profile for making a statistics snapshot
+cmdArg_t argStatsSnapMake[] =
+{ { ARGTYPE(ARG_NUM),    "print",        &domNumNoYes } };
 // Argument profile for providing command stack statistics
 cmdArg_t argStatsStack[] =
 { { ARGTYPE(ARG_NUM),    "enable",       &domNumOffOn } };
@@ -670,7 +700,8 @@ cmdCommand_t cmdGroupBeep[] =
 
 // All commands for command group 'c' (clock)
 cmdCommand_t cmdGroupClock[] =
-{ { "cf",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argClockFeed),       CMDHANDLER(doClockFeed),       "feed clock time/keyboard events" },
+{ { "cc",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argClockCycle),      CMDHANDLER(doClockCycle),      "execute single clock cycle" },
+  { "cf",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argClockFeed),       CMDHANDLER(doClockFeed),       "feed clock time/keyboard events" },
   { "cp",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doClockPrint),      "print available clocks" },
   { "cs",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argClockSelect),     CMDHANDLER(doClockSelect),     "select clock" } };
 
@@ -679,6 +710,7 @@ cmdCommand_t cmdGroupDebug[] =
 { { "dba", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbBpAdd),         CMDHANDLER(doDbBpAdd),         "add/update breakpoint" },
   { "dbd", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbBpDelete),      CMDHANDLER(doDbBpDelete),      "delete breakpoint" },
   { "dbp", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doDbBpPrint),       "print breakpoints" },
+  { "dbs", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbBpSet),         CMDHANDLER(doDbBpSet),         "set breakpoint state" },
   { "dc",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doDbContinue),      "debug continue" },
   { "dcc", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argDbBpCond),        CMDHANDLER(doDbBpCond),        "check conditional breakpoint" },
   { "di",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doDbStepIn),        "debug step in" },
@@ -776,8 +808,11 @@ cmdCommand_t cmdGroupRepeat[] =
 // All commands for command group 's' (statistics)
 cmdCommand_t cmdGroupStats[] =
 { { "sls", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argStatsStack),      CMDHANDLER(doStatsStack),      "set list runtime statistics" },
-  { "sp",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doStatsPrint),      "print application statistics" },
-  { "sr",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doStatsReset),      "reset application statistics" } };
+  { "sms", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argStatsMonMode),    CMDHANDLER(doStatsMonMode),    "set emuchron monitor mode" },
+  { "sp",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doStatsPrint),      "print aggregated statistics" },
+  { "sr",  PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doStatsReset),      "reset aggregated statistics" },
+  { "ssm", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(argStatsSnapMake),   CMDHANDLER(doStatsSnapMake),   "make snapshot statistics" },
+  { "sss", PCBTYPE(PCB_CONTINUE),    MC_TRUE,  CMDARGS(NULL),               CMDHANDLER(doStatsSnapStart),  "start new snapshot" } };
 
 // All commands for command group 't' (time/date/alarm)
 cmdCommand_t cmdGroupTime[] =

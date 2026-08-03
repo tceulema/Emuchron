@@ -43,6 +43,7 @@
 // The argument domain value validation types
 // 1) Use in combination with ARG_CHAR command argument publishing type
 #define DOM_CHAR_VAL		0  // Validated single character
+#define DOM_CHAR_VAL_OPT	1  // Validated optional single character
 // 2) Use in combination with ARG_STRING command argument publishing type
 #define DOM_WORD_VAL		10 // Validated string delimited by whitespace
 #define DOM_WORD_REGEX		11 // Regex validated string delim by whitespace
@@ -71,6 +72,11 @@
 #define CDM_RET_LOAD_ABORT	5  // Interactive loading of script aborted
 #define CMD_RET_RECOVER		6  // Stack recover from error/interrupt/abort
 
+// To prevent recursive file loading define a max stack depth when executing
+// command files. Upon changing this also change domain domNumStackLevel in
+// mchrondict.h [firmware/emulator].
+#define CMD_STACK_DEPTH_MAX	8
+
 // Definition of a structure holding an argument value and several numeric
 // expression result properties
 typedef struct _argInfo_t
@@ -89,6 +95,7 @@ typedef struct _cmdLine_t
   char *input;				// Malloc-ed command from file/prompt
   argInfo_t *argInfo;			// Malloc-ed command arguments
   argInfo_t *argInfoBp;			// Malloc-ed breakpoint argument
+  u08 argBpEnabled;			// Is breakpoint enabled
   u08 initialized;			// Are command arguments initialized
   struct _cmdCommand_t *cmdCommand;	// The associated command dict entry
   // Chaining all list commands

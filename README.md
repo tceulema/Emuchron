@@ -1,7 +1,7 @@
 ## Project Emuchron
 ### What is Emuchron
 Emuchron is a lightweight [Adafruit Monochron](http://www.adafruit.com/product/204)
-(product discontinued) emulator for Debian Linux 12 and 13.\
+(product discontinued) emulator for Debian Linux 12 (Bookworm) and 13 (Trixie).\
 It features a test and debugging platform for Monochron clocks and high-level
 glcd graphics functions, and a software framework for clock plugins.
 

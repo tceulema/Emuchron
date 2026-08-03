@@ -47,8 +47,8 @@
 
 // Functional alarm switch settings
 #define ALARM_SWITCH_NONE	0
-#define ALARM_SWITCH_ON		1
-#define ALARM_SWITCH_OFF	2
+#define ALARM_SWITCH_OFF	1
+#define ALARM_SWITCH_ON		2
 
 // Define content in a default alarm/date area, depending on alarm switch
 #define AD_AREA_ALM_ONLY	0	// Alarm (on) or blank (off)

@@ -93,6 +93,9 @@
 #define EMU_KEYS_CYCLE		\
   "<cycle: c = next cycle, p = next cycle + stats, q = quit, other key = run> "
 
+// Avoid typos in eeprom item name upon filling the eeprom dictionaty
+#define EEPNAME(a)	a, #a
+
 // Monochron defined data
 extern volatile uint8_t almAlarmEvent, almAlarming;
 extern volatile uint8_t almSnoozeEvent, almSnoozing;
@@ -128,7 +131,7 @@ uint8_t TCCR0A = 0;
 uint8_t TCCR0B = 0;
 uint8_t OCR0A = 0;
 uint8_t OCR2A = 0;
-uint8_t OCR2B = 16; // Init value 16 defines full lcd backlight brightness
+uint8_t OCR2B = OCR2A_VALUE; // Init value 16 defines full lcd backlight
 uint8_t TIMSK0 = 0;
 uint8_t TIMSK2 = 0;
 uint8_t TCCR1B = 0;
@@ -139,6 +142,30 @@ uint8_t PORTC = 0;
 uint8_t PORTD = 0;
 uint8_t PINB = 0;
 uint8_t PIND = 0;
+
+// The eeprom dictionary. When printing the eeprom contents using command 'mep'
+// the dictionary will be sorted on id value first so it will be printed in
+// the proper id order.
+eepDict_t eepDict[] =
+{
+  { EEPNAME(EE_INIT) }
+ ,{ EEPNAME(EE_BRIGHT) }
+ ,{ EEPNAME(EE_VOLUME) }
+ ,{ EEPNAME(EE_REGION) }
+ ,{ EEPNAME(EE_TIME_FORMAT) }
+ ,{ EEPNAME(EE_SNOOZE) }
+ ,{ EEPNAME(EE_BGCOLOR) }
+ ,{ EEPNAME(EE_ALARM_SELECT) }
+ ,{ EEPNAME(EE_ALARM_HOUR1) }
+ ,{ EEPNAME(EE_ALARM_MIN1) }
+ ,{ EEPNAME(EE_ALARM_HOUR2) }
+ ,{ EEPNAME(EE_ALARM_MIN2) }
+ ,{ EEPNAME(EE_ALARM_HOUR3) }
+ ,{ EEPNAME(EE_ALARM_MIN3) }
+ ,{ EEPNAME(EE_ALARM_HOUR4) }
+ ,{ EEPNAME(EE_ALARM_MIN4) }
+};
+int eepDictCount = sizeof(eepDict) / sizeof(eepDict_t);
 
 // Debug output file and debug output buffer
 FILE *stubDebugStream = NULL;
@@ -156,8 +183,8 @@ static uint8_t stubEeprom[EE_SIZE];
 // Stubbed alarm play pid
 static pid_t alarmPid = -1;
 
-// Local brightness to detect changes
-static u08 stubBacklight = 16;
+// Local (max) brightness to detect changes
+static u08 stubBacklight = OCR2A_VALUE;
 
 // Active help function and keypress overview when running an emulator
 static void (*stubHelp)(void) = NULL;
@@ -169,14 +196,11 @@ static u08 eventCfgTimeout = MC_TRUE;
 static u08 eventQuitReq = MC_FALSE;
 static u08 eventInit = MC_TRUE;
 
-// Date/time and timer statistics data
+// Date/time and stub statistics data
 static double timeDelta = 0L;
 static struct timeval tvCycleTimer;
-static int inTimeCount = 0;
-static int outTimeCount = 0;
-static int singleCycleCount = 0;
-static long long waitTotal = 0;
-static int minSleep = ANIM_TICK_CYCLE_MS + 1;
+static stubStats_t stubStats = {ANIM_TICK_CYCLE_MS, 0, 0, 0, 0,
+  ANIM_TICK_CYCLE_MS + 1};
 
 // Terminal settings for stdin keypress mode data
 static struct termios termOld, termNew;
@@ -265,7 +289,7 @@ void alarmSoundReset(void)
   almSnoozeEvent = MC_FALSE;
   almSnoozing = MC_FALSE;
   almTickerSnooze = 0;
-  almTickerAlarm = -1;
+  almTickerAlarm = 0;
   mcAlarmEvent = MC_FALSE;
   mcAlarming = MC_FALSE;
   mcSnoozeEvent = MC_FALSE;
@@ -591,13 +615,16 @@ char stubEventGet(u08 stats)
   if (eventCfgTimeout == MC_FALSE)
     cfgTickerActivity = CFG_TICK_ACTIVITY_SEC;
 
+  // Init functional clock time when starting in run mode
+  if (eventInit == MC_TRUE && eventCycleState == CYCLE_NOWAIT)
+    rtcMchronTimeInit();
+
   // Sleep the remainder of the current cycle
   if (eventInit == MC_TRUE)
   {
     // The first entry may not invoke a sleep but instead marks the timer
     // timestamp for the next cycle
     waitTimerStart(&tvCycleTimer);
-    eventInit = MC_FALSE;
   }
   else
   {
@@ -607,14 +634,14 @@ char stubEventGet(u08 stats)
     {
       if (remaining >= 0)
       {
-        inTimeCount++;
-        waitTotal = waitTotal + remaining;
-        if (minSleep > (int)round(remaining / 1000))
-          minSleep = (int)round(remaining / 1000);
+        stubStats.inTimeCount++;
+        stubStats.waitTotal = stubStats.waitTotal + remaining;
+        if (stubStats.minSleep > (int)round(remaining / 1000))
+          stubStats.minSleep = (int)round(remaining / 1000);
       }
       else if (eventCycleState == CYCLE_NOWAIT)
       {
-        outTimeCount++;
+        stubStats.outTimeCount++;
       }
     }
   }
@@ -630,36 +657,39 @@ char stubEventGet(u08 stats)
   if (eventCycleState == CYCLE_REQ_WAIT || eventCycleState == CYCLE_WAIT ||
       eventCycleState == CYCLE_WAIT_STATS)
   {
-    // Statistics
-    if (stats == MC_TRUE)
-      singleCycleCount++;
+    // Register single cycle but exclude init cycle when started in cycle mode
+    if (stats == MC_TRUE && eventInit == MC_FALSE)
+      stubStats.singleCycleCount++;
 
     // Reset any keypress hold
     hold = MC_FALSE;
 
     // When going to cycle mode stop the alarm (if sounding) for non-nerve
-    // wrecking emulator behavior, and also give a cycle mode helpmessage
+    // wrecking emulator behavior, prepare for snapshot statistics and give
+    // a cycle mode helpmessage
     if (eventCycleState == CYCLE_REQ_WAIT)
     {
       alarmPidStop();
+      ctrlStatsReset(CTRL_STATS_SNAPSHOT);
       printf("\r%s\r%s", EMU_KEYS_CLEAR, EMU_KEYS_CYCLE);
       fflush(stdout);
       eventCycleState = CYCLE_WAIT;
     }
 
-    // If we're in cycle mode with stats, print the stats that are current
-    // after the last executed clock cycle, and repeat the cycle mode help
-    // message
+    // We're in cycle mode so always provide snapshot data for the Emuchron
+    // monitor. If we're in cycle mode with stats also print them.
+    ctrlStatsSnapMake();
     if (eventCycleState == CYCLE_WAIT_STATS)
     {
-      // Print and reset glcd/controller cycle performance statistics
+      // Print and reset snapshot glcd/controller performance statistics
       printf("\ncycle statistics:\n");
       emuTimePrint(ALM_NONE);
-      ctrlStatsPrint(CTRL_STATS_CYCLE);
-      ctrlStatsReset(CTRL_STATS_CYCLE);
+      ctrlStatsPrint(CTRL_STATS_SNAPSHOT);
       printf("\n%s", EMU_KEYS_CYCLE);
       fflush(stdout);
+      ctrlStatsReset(CTRL_STATS_SNAPSHOT);
     }
+    ctrlStatsReset(CTRL_STATS_SNAPSHOT);
 
     // Wait for keypress every 75 msec interval
     ch = kbKeypressScan(MC_FALSE);
@@ -668,6 +698,11 @@ char stubEventGet(u08 stats)
       waitSleep(75);
       ch = kbKeypressScan(MC_FALSE);
     }
+
+    // Init functional clock time when starting in cycle mode after first cycle
+    // keypress command
+    if (eventInit == MC_TRUE)
+      rtcMchronTimeInit();
 
     // Verify keypress and its impact on the wait state
     if (ch == 'q')
@@ -691,7 +726,7 @@ char stubEventGet(u08 stats)
     {
       // Move from wait state to wait with statistics
       eventCycleState = CYCLE_WAIT_STATS;
-      ctrlStatsReset(CTRL_STATS_CYCLE);
+      ctrlStatsReset(CTRL_STATS_SNAPSHOT);
     }
     else if (eventCycleState == CYCLE_WAIT_STATS && ch == 'c')
     {
@@ -709,19 +744,13 @@ char stubEventGet(u08 stats)
   // Get clock time and set alarm state
   monoTimer();
 
-  // Do we need to do anything with the alarm sound
+  // Do we need to start/stop audible alarm
   if (alarmPid == -1 && almAlarming == MC_TRUE && almSnoozing == MC_FALSE &&
       (eventCycleState == CYCLE_REQ_NOWAIT || eventCycleState == CYCLE_NOWAIT))
-  {
-    // Start playing the alarm sound
     alarmPidStart();
-  }
   else if (alarmPid >= 0 && (almAlarming == MC_FALSE ||
       almSnoozing == MC_TRUE || eventCycleState == CYCLE_WAIT))
-  {
-    // Stop playing the alarm sound
     alarmPidStop();
-  }
 
   // Check if keyboard was hit
   btnHold = BTN_NONE;
@@ -850,9 +879,10 @@ char stubEventGet(u08 stats)
     }
   }
 
-  // Detect cascading quit that overides any keypress
+  // Detect cascading quit that overides any keypress and clear first call
   if (eventQuitReq == MC_TRUE)
     ch = 'q';
+  eventInit = MC_FALSE;
 
   return ch;
 }
@@ -889,6 +919,7 @@ void stubEventInit(u08 startWait, u08 cfgTimeout, u08 emuType)
     stubHelp = stubHelpMonochron;
     stubKeys = EMU_KEYS_MONOCHRON;
   }
+
   // Print the emulator run keypress overview upon starting in run mode
   if (startWait == MC_FALSE)
   {
@@ -1017,6 +1048,16 @@ u08 stubLogfileOpen(char fileName[])
 }
 
 //
+// Function: stubStatsGet
+//
+// Get a copy of the stub statistics
+//
+void stubStatsGet(stubStats_t *stubStat)
+{
+  *stubStat = stubStats;
+}
+
+//
 // Function: stubStatsPrint
 //
 // Print stub statistics
@@ -1024,18 +1065,19 @@ u08 stubLogfileOpen(char fileName[])
 void stubStatsPrint(void)
 {
   printf("stub   : cycle=%d msec, inTime=%d, outTime=%d, singleCycle=%d\n",
-    ANIM_TICK_CYCLE_MS, inTimeCount, outTimeCount, singleCycleCount);
+    ANIM_TICK_CYCLE_MS, stubStats.inTimeCount, stubStats.outTimeCount,
+    stubStats.singleCycleCount);
 
-  if (inTimeCount == 0)
+  if (stubStats.inTimeCount == 0)
     printf("         avgSleep=- msec, ");
   else
     printf("         avgSleep=%.0f msec, ",
-      waitTotal / (double)inTimeCount / 1000);
+      stubStats.waitTotal / (double)stubStats.inTimeCount / 1000);
 
-  if (minSleep == ANIM_TICK_CYCLE_MS + 1)
+  if (stubStats.minSleep == ANIM_TICK_CYCLE_MS + 1)
     printf("minSleep=- msec\n");
   else
-    printf("minSleep=%d msec\n",minSleep);
+    printf("minSleep=%d msec\n", stubStats.minSleep);
 }
 
 //
@@ -1046,11 +1088,12 @@ void stubStatsPrint(void)
 void stubStatsReset(void)
 {
   // Reset stub statistics
-  inTimeCount = 0;
-  outTimeCount = 0;
-  singleCycleCount = 0;
-  waitTotal = 0;
-  minSleep = ANIM_TICK_CYCLE_MS + 1;
+  stubStats.cycle = ANIM_TICK_CYCLE_MS;
+  stubStats.inTimeCount = 0;
+  stubStats.outTimeCount = 0;
+  stubStats.singleCycleCount = 0;
+  stubStats.waitTotal = 0;
+  stubStats.minSleep = ANIM_TICK_CYCLE_MS + 1;
 }
 
 //

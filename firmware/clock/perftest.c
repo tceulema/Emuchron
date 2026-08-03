@@ -22,7 +22,7 @@
 // function. In most cases this will be the mchron command prompt.
 //
 // The code also runs in the Emuchron emulator, but as the emulator runs on
-// most likely an Intel/AMD class cpu, its speed performance results are
+// most likely an amd64/arm64 isa class cpu, its speed performance results are
 // irrelevant. However, information related to commands and bytes sent to and
 // lcd data read from the controllers, and user calls to set the lcd cursor are
 // useful metrics that are not retrieved while running the test on Monochron.
@@ -162,6 +162,7 @@ extern volatile uint8_t mcClockNewTS, mcClockNewTM, mcClockNewTH;
 extern volatile uint8_t mcClockOldDD, mcClockOldDM, mcClockOldDY;
 extern volatile uint8_t mcClockNewDD, mcClockNewDM, mcClockNewDY;
 extern volatile uint8_t mcClockInit;
+extern volatile uint8_t mcClockTimeEvent;
 
 // Functional alarm variables
 extern volatile uint8_t mcAlarmSwitch;
@@ -704,9 +705,11 @@ static u08 perfTestLine(void)
     // Prepare display for test
     glcdClearScreen();
     perfTestTimeInit();
-    analogHmsInit(DRAW_INIT_FULL);
     mcAlarmSwitchEvent = MC_TRUE;
     mcAlarmSwitch = MC_TRUE;
+    mcClockInit = MC_TRUE;
+    mcClockTimeEvent = MC_TRUE;
+    analogHmsInit(DRAW_INIT_FULL);
 
     // Draw lines using the analog clock layout
     interruptTest = MC_FALSE;
@@ -1887,7 +1890,7 @@ static void perfTestBegin(void)
   // In case we're using glut, give the lcd device some time to catch up
   _delay_ms(250);
   // Reset glcd/controller statistics
-  ctrlStatsReset(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
+  ctrlStatsReset(CTRL_STATS_SNAPSHOT);
 #endif
 
   // Clear previous test statistics
@@ -1947,7 +1950,8 @@ static u08 perfTestEnd(u08 interruptTest)
     printf("status : %s\n", "completed");
   else
     printf("status : %s\n", "aborted");
-  ctrlStatsPrint(CTRL_STATS_GLCD | CTRL_STATS_CTRL);
+  ctrlStatsSnapMake();
+  ctrlStatsPrint(CTRL_STATS_SNAPSHOT);
 #endif
 
   // Give test statistics screen
@@ -2097,7 +2101,7 @@ static void perfTextInit(u08 length)
 //
 // Function: perfTextToggle
 //
-// Toggle the text string to be used in a perf test.
+// Toggle the text string to be used in a perf test
 //
 static void perfTextToggle(void)
 {

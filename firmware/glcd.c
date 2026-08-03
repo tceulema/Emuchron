@@ -201,7 +201,7 @@ void glcdBitmap16Ra(u08 x, u08 y, u08 w, u08 h, uint16_t *bitmap)
 // Draw a bitmap up to 32 pixels high using a bitmap data array. The bitmap
 // data resides in program space.
 //
-void glcdBitmap32PmFg(u08 x, u08 y, u08 w, u08 h, const uint32_t *bitmap)
+void glcdBitmap32Pm(u08 x, u08 y, u08 w, u08 h, const uint32_t *bitmap)
 {
   glcdBitmap(x, y, 0, 0, w, h, ELM_DWORD, DATA_PMEM, (void *)bitmap);
 }
@@ -212,7 +212,7 @@ void glcdBitmap32PmFg(u08 x, u08 y, u08 w, u08 h, const uint32_t *bitmap)
 // Draw a bitmap up to 32 pixels high using a bitmap data array. The bitmap
 // data resides in ram.
 //
-void glcdBitmap32RaFg(u08 x, u08 y, u08 w, u08 h, uint32_t *bitmap)
+void glcdBitmap32Ra(u08 x, u08 y, u08 w, u08 h, uint32_t *bitmap)
 {
   glcdBitmap(x, y, 0, 0, w, h, ELM_DWORD, DATA_RAM, (void *)bitmap);
 }

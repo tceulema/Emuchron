@@ -18,11 +18,6 @@
 #include "scanutil.h"
 #include "listutil.h"
 
-// To prevent recursive file loading define a max stack depth when executing
-// command files. Upon changing this also change domain domNumStackLevel in
-// mchrondict.h [firmware/emulator].
-#define CMD_STACK_DEPTH_MAX	8
-
 // The command stack keyboard scan interval (msec)
 #define CMD_STACK_SCAN_MSEC	100
 
@@ -38,15 +33,17 @@
 #define CMD_STACK_FMT		" %2d  %-15s  %5d  %s\n"
 #define CMD_STACK_INVOKE_FMT	"  -  %-15s      -  %s\n"
 
-// Source listing header and line templates
+// Source and breakpoint listing and header and line templates
 #define CMD_SOURCE_NOTIFY	"source list:\n"
 #define CMD_SOURCE_HEADER	"lvl  line#  pc   b  command\n"
 #define CMD_SOURCE_LVL_LINE_FMT	" %2d  %5d  "
 #define CMD_SOURCE_PC		"==>  "
 #define CMD_SOURCE_NO_PC	"     "
-#define CMD_SOURCE_BP		"@  "
-#define CMD_SOURCE_INACT_BP	"O  "
-#define CMD_SOURCE_NO_BP	"   "
+#define CMD_SOURCE_NO_BP	' '
+#define CMD_SOURCE_BP_DD	'd'
+#define CMD_SOURCE_BP_DE	'e'
+#define CMD_SOURCE_BP_ED	'D'
+#define CMD_SOURCE_BP_EE	'E'
 #define CMD_SOURCE_COMMAND_FMT	"%s\n"
 #define CMD_SOURCE_EOF_FMT	" %2d  <eof>  ==>     -\n"
 
@@ -109,6 +106,9 @@ static u08 cmdDebugActive = MC_FALSE;		// Is list debugging active
 static u08 cmdDebugHalted = MC_FALSE;		// Exec halted due to step cmd
 
 // Local function prototypes
+// Debugging
+static char cmdDebugBpStateGet(cmdLine_t *cmdLine);
+static u08 cmdDebugCmdGet(s08 offset);
 // Command line
 static cmdLine_t *cmdLineCopy(cmdLine_t *cmdLineIn);
 static cmdLine_t *cmdLineCreate(int lineNum, char *input,
@@ -130,8 +130,6 @@ static s08 cmdStackLevelGet(void);
 static void cmdStackPop(u08 scope);
 static void cmdStackStatsInit(void);
 static void cmdStackStatsPrint(void);
-// Debugging
-static u08 cmdDebugCmdGet(s08 offset);
 
 //
 // Function: cmdDebugActiveGet
@@ -198,7 +196,6 @@ u08 cmdDebugBpAdd(u08 level, u16 line, char *condition)
   {
     cmdLineSearch = cmdLineBpHead;
   }
-  lineFound = MC_FALSE;
   while (cmdLineSearch != NULL)
   {
     // See if we found the requested line
@@ -233,7 +230,7 @@ u08 cmdDebugBpAdd(u08 level, u16 line, char *condition)
 //
 // Function: cmdDebugBpDelete
 //
-// Delete a single or all command list breakpoints.
+// Delete a single or all command list breakpoints in a level.
 // The number of breakpoints deleted is returned in argument count.
 //
 u08 cmdDebugBpDelete(u08 level, u16 breakpoint, int *count)
@@ -304,6 +301,7 @@ void cmdDebugBpPrint(void)
   s08 level;
   u08 first = MC_TRUE;
   int levelCount;
+  char state;
 
   // Run through each stack level, starting at the top
   level = cmdStackLevelGet();
@@ -320,17 +318,98 @@ void cmdDebugBpPrint(void)
       {
         first = MC_FALSE;
         printf("breakpoints:\n");
-        printf("lvl    id  line#  condition\n");
+        printf("lvl    id  line#  state  condition\n");
       }
 
-      // Print breakpoint info and move to the next
+      // Print breakpoint info: uppercase/lowercase = debug active/inactive
       levelCount++;
-      printf(" %2d  %4d  %5d  %s", (int)level, levelCount, cmdLineBp->lineNum,
-        cmdLineBp->argInfoBp->arg);
+      state = cmdDebugBpStateGet(cmdLineBp);
+      printf(" %2d  %4d  %5d  %c      %s", (int)level, levelCount,
+        cmdLineBp->lineNum, state, cmdLineBp->argInfoBp->arg);
       cmdLineBp = cmdLineBp->bpNext;
     }
     level--;
   }
+}
+
+//
+// Function: cmdDebugBpSet
+//
+// Enable/disable a single or all command list breakpoints in a level.
+// The number of breakpoints affected is returned in argument count.
+//
+u08 cmdDebugBpSet(u08 level, u16 breakpoint, u08 enable, int *count)
+{
+  cmdStackLevel_t *cmdStackLevel;
+  cmdLine_t *cmdLineBp;
+  s08 levelTop;
+  int toDo = 1;
+  int done = 0;
+  int i;
+
+  // Init number of alterations done regardless of request success/failure
+  *count = 0;
+
+  // See if we have an active or interupted stack and check validity of
+  // requested level
+  levelTop = cmdStackLevelGet();
+  if (levelTop == -1 || level > levelTop)
+    return MC_FALSE;
+
+  // Check validity of breakpoint line
+  cmdStackLevel = &cmdStack.cmdStackLevel[level];
+  if ((int)breakpoint > cmdStackLevel->cmdDebugLines)
+    return MC_FALSE;
+
+  // If we need to alter all breakpoints delete the first breakpoint in the
+  // (remaining) list multiple times
+  if (breakpoint == 0)
+  {
+    toDo = cmdStackLevel->cmdDebugLines;
+    breakpoint = 1;
+  }
+
+  // Alter the requested breakpoint(s)
+  cmdLineBp = cmdStackLevel->cmdLineBpRoot;
+  while (done < toDo)
+  {
+    // Find the line in the list breakpoint chain
+    for (i = 1; i < (int)breakpoint; i++)
+      cmdLineBp = cmdLineBp->bpNext;
+
+    // Enable/disable the breakpoint
+    if (cmdLineBp->argBpEnabled != enable)
+    {
+      // Enable/disable breakpoint and increment alterations
+      cmdLineBp->argBpEnabled = enable;
+      (*count)++;
+    }
+    done++;
+
+    // Skip to next breakpoint (if any)
+    cmdLineBp = cmdLineBp->bpNext;
+  }
+
+  return MC_TRUE;
+}
+
+//
+// Function: cmdDebugBpStateGet
+//
+// Return the debug breakpoint state of a commandline
+//
+static char cmdDebugBpStateGet(cmdLine_t *cmdLine)
+{
+  if (cmdLine->argInfoBp == NULL)
+    return CMD_SOURCE_NO_BP;
+  else if (cmdDebugActive == MC_FALSE && cmdLine->argBpEnabled == MC_FALSE)
+    return CMD_SOURCE_BP_DD;
+  else if (cmdDebugActive == MC_FALSE && cmdLine->argBpEnabled == MC_TRUE)
+    return CMD_SOURCE_BP_DE;
+  else if (cmdDebugActive == MC_TRUE && cmdLine->argBpEnabled == MC_FALSE)
+    return CMD_SOURCE_BP_ED;
+  else
+    return CMD_SOURCE_BP_EE;
 }
 
 //
@@ -402,7 +481,7 @@ u08 cmdDebugCmdSet(s08 offset, u08 command)
 //
 // Set the top stack level program counter to another line
 //
-u08 cmdDebugPcSet(u16 line)
+u08 cmdDebugPcSet(char *argName, u16 line)
 {
   cmdStackLevel_t *cmdStackLevel;
   cmdLine_t *cmdLineSearch;
@@ -417,6 +496,15 @@ u08 cmdDebugPcSet(u16 line)
   cmdStackLevel = &cmdStack.cmdStackLevel[levelTop];
   if ((int)line > cmdStackLevel->cmdLines)
     return MC_FALSE;
+
+  // Ignore when requested line number is the current line number
+  if ((cmdStackLevel->cmdProgCounter == NULL && line == 0) ||
+      (cmdStackLevel->cmdProgCounter != NULL &&
+        cmdStackLevel->cmdProgCounter->lineNum == (int)line))
+  {
+    printf("%s: ignored (is current line number)\n", argName);
+    return MC_TRUE;
+  }
 
   // Clear a debug interrupted indicator (if anyway) and reset pending pcb
   // action (if anyway) on the current line
@@ -559,6 +647,7 @@ static cmdLine_t *cmdLineCreate(int lineNum, char *input,
   strcpy(cmdLine->input, input);
   cmdLine->argInfo = NULL;
   cmdLine->argInfoBp = NULL;
+  cmdLine->argBpEnabled = MC_FALSE;
   cmdLine->initialized = MC_FALSE;
   cmdLine->cmdCommand = NULL;
   cmdLine->next = NULL;
@@ -768,7 +857,8 @@ static u08 cmdListExecute(cmdLine_t **cmdProgCounter,
         cmdDebugHalted = MC_TRUE;
         return CMD_RET_INTR;
       }
-      else if (cmdStack.bpInterrupt == MC_FALSE && cmdLine->argInfoBp != NULL)
+      else if (cmdStack.bpInterrupt == MC_FALSE && cmdLine->argInfoBp != NULL &&
+          cmdLine->argBpEnabled == MC_TRUE)
       {
         // Check the breakpoint condition and interrupt execution when needed.
         // If so, flag we got interrupted by a breakpoint.
@@ -1327,6 +1417,7 @@ u08 cmdStackListPrint(u08 level, s16 range)
   cmdStackLevel_t *cmdStackLevel;
   cmdLine_t *cmdLine;
   u08 levelTop;
+  char state;
   int lineOffset, lineMin, lineMax;
 
   // Ignore if we have no stack
@@ -1375,12 +1466,8 @@ u08 cmdStackListPrint(u08 level, s16 range)
         printf(CMD_SOURCE_PC);
       else
         printf(CMD_SOURCE_NO_PC);
-      if (cmdLine->argInfoBp == NULL)
-        printf(CMD_SOURCE_NO_BP);
-      else if (cmdDebugActive == MC_FALSE)
-        printf(CMD_SOURCE_INACT_BP);
-      else
-        printf(CMD_SOURCE_BP);
+      state = cmdDebugBpStateGet(cmdLine);
+      printf("%c  ",state);
       printf(CMD_SOURCE_COMMAND_FMT, cmdLine->input);
     }
 

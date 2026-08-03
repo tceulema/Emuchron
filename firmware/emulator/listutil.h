@@ -49,8 +49,9 @@ void cmdStackTimerSet(u08 action);
 u08 cmdDebugActiveGet(void);
 u08 cmdDebugBpAdd(u08 level, u16 line, char *condition);
 u08 cmdDebugBpDelete(u08 level, u16 breakpoint, int *count);
+u08 cmdDebugBpSet(u08 level, u16 breakpoint, u08 enable, int *count);
 void cmdDebugBpPrint(void);
 u08 cmdDebugCmdSet(s08 offset, u08 command);
-u08 cmdDebugPcSet(u16 line);
+u08 cmdDebugPcSet(char *argName, u16 line);
 void cmdDebugSet(u08 enable);
 #endif

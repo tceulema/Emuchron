@@ -14,6 +14,7 @@
 
 // Standard command handler function prototypes
 u08 doBeep(cmdLine_t *cmdLine);
+u08 doClockCycle(cmdLine_t *cmdLine);
 u08 doClockFeed(cmdLine_t *cmdLine);
 u08 doClockPrint(cmdLine_t *cmdLine);
 u08 doClockSelect(cmdLine_t *cmdLine);
@@ -22,6 +23,7 @@ u08 doDbBpAdd(cmdLine_t *cmdLine);
 u08 doDbBpCond(cmdLine_t *cmdLine);
 u08 doDbBpDelete(cmdLine_t *cmdLine);
 u08 doDbBpPrint(cmdLine_t *cmdLine);
+u08 doDbBpSet(cmdLine_t *cmdLine);
 u08 doDbContinue(cmdLine_t *cmdLine);
 u08 doDbPcSet(cmdLine_t *cmdLine);
 u08 doDbSet(cmdLine_t *cmdLine);
@@ -82,8 +84,11 @@ u08 doPaintLine(cmdLine_t *cmdLine);
 u08 doPaintNumber(cmdLine_t *cmdLine);
 u08 doPaintRect(cmdLine_t *cmdLine);
 u08 doPaintRectFill(cmdLine_t *cmdLine);
+u08 doStatsMonMode(cmdLine_t *cmdLine);
 u08 doStatsPrint(cmdLine_t *cmdLine);
 u08 doStatsReset(cmdLine_t *cmdLine);
+u08 doStatsSnapMake(cmdLine_t *cmdLine);
+u08 doStatsSnapStart(cmdLine_t *cmdLine);
 u08 doStatsStack(cmdLine_t *cmdLine);
 u08 doTimeAlarmPos(cmdLine_t *cmdLine);
 u08 doTimeAlarmSet(cmdLine_t *cmdLine);

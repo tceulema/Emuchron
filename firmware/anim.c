@@ -48,9 +48,10 @@
 // The following monomain.c global variables are used to transfer the hardware
 // state to a stable functional Monochron clock state.
 // They are not to be used in individual Monochron clocks as their contents are
-// considered unstable.
+// unstable during execution of clock plugin code.
 extern volatile uint8_t almSwitchOn, almAlarming, almAlarmEvent;
 extern volatile uint8_t almSnoozing, almSnoozeEvent;
+extern int16_t almTickerAlarm;
 extern uint16_t almTickerSnooze;
 extern volatile rtcDateTime_t rtcDateTimeNext;
 extern volatile uint8_t rtcTimeEvent;
@@ -81,8 +82,8 @@ volatile uint8_t mcAlarmSwitch;
 // also turn true upon clock initialization.
 volatile uint8_t mcAlarmSwitchEvent = MC_FALSE;
 
-// Indicates whether the clock alarming state has changed since last check and
-// its current alarming state.
+// Indicates whether the clock alarming state has changed since last check, its
+// current alarming state and the alarm countdown timer in seconds.
 // Note the following:
 // - mcAlarmEvent turns true when the clock starts alarming or stops alarming
 //   due to alarm timeout or by pressing the 'M' button. Upon flipping the
@@ -92,6 +93,7 @@ volatile uint8_t mcAlarmSwitchEvent = MC_FALSE;
 //   and silent snoozing.
 volatile uint8_t mcAlarmEvent = MC_FALSE;
 volatile uint8_t mcAlarming = MC_FALSE;
+volatile uint16_t mcTickerAlarm = 0;
 
 // Indicates whether the clock snoozing state has changed since last check, its
 // current snoozing state and the snooze countdown timer in seconds.
@@ -392,15 +394,19 @@ void animClockDraw(u08 mode)
 {
   clockDriver_t *clockDriver = &mcClockPool[mcMchronClock];
 
-  // Sync alarming/snoozing state and time event for clock
+  // Sync alarming/snoozing state and its tickers, and the clock time event
   mcAlarmEvent = almAlarmEvent;
   mcAlarming = almAlarming;
+  if (almTickerAlarm >= 0)
+    mcTickerAlarm = almTickerAlarm;
+  else
+    mcTickerAlarm = 0;
   mcSnoozeEvent = almSnoozeEvent;
   mcSnoozing = almSnoozing;
+  mcTickerSnooze = almTickerSnooze;
   mcClockTimeEvent = rtcTimeEvent;
 
-  // If there's a time event, sync Monochron time with RTC and the snooze
-  // ticker
+  // If there's a time event, sync Monochron time with RTC
   if (mcClockTimeEvent == MC_TRUE)
   {
     DEBUGTP("Update by time event");
@@ -413,7 +419,6 @@ void animClockDraw(u08 mode)
     if (mcClockNewDD != mcClockOldDD || mcClockNewDM != mcClockOldDM ||
         mcClockNewDY != mcClockOldDY)
       mcClockDateEvent = MC_TRUE;
-    mcTickerSnooze = almTickerSnooze;
   }
 
   // Have the clock initialize or update itself
@@ -562,8 +567,8 @@ void animWelcome(void)
 #else
   _delay_ms(3000);
 #endif
-  beep(3750, 100);
-  beep(4000, 100);
+  monoBeep(3750, 100);
+  monoBeep(4000, 100);
 }
 
 //

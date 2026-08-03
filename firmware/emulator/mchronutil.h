@@ -42,7 +42,8 @@ typedef struct _emuArgcArgv_t
   int argGlutGeometry;		// argv index for glut geometry arg
   int argGlutPosition;		// argv index for glut window pos arg
   int argLcdType;		// argv index for lcd device arg
-  int argTty;			// argv index for ncurses tty arg
+  int argTtyLcd;		// argv index for ncurses lcd tty arg
+  int argMonColor;		// argv index for ncurses monitor color arg
   ctrlDeviceArgs_t ctrlDeviceArgs; // Processed args for lcd stub interface
 } emuArgcArgv_t;
 
@@ -69,6 +70,7 @@ typedef struct _emuGrBuf_t
 u08 emuEchoReqGet(char echo);
 u08 emuFontGet(char *fontName);
 u08 emuFormatGet(char formatId, u08 *formatBytes, u08 *formatBits);
+u08 emuMonModeGet(char mode);
 u08 emuOrientationGet(char orientationId);
 u08 emuSearchTypeGet(char searchType);
 u08 emuStartModeGet(char startId);
@@ -94,6 +96,7 @@ u08 emuEnvirCheck(char *cmdName, u08 checkStack, u08 stackActive,
 void emuTimePrint(u08 type);
 void emuTimeSync(void);
 u08 emuValuePrint(double value, u08 detail, u08 newline, u08 print);
+u08 emuValidateRegex(char *input, char *pattern);
 
 // mchron command prompt support functions
 void emuCmdPromptCleanup(char *prompt);

@@ -1,0 +1,102 @@
+#
+# Test command script for the Monochron emulator
+#
+# Purpose: Using only controller commands check each filled pixel in the lcd
+# to see if it is surrounded only by blank pixels. If so, it is a free floating
+# pixel. The script reports the number of free floating pixels found.
+#
+# How to prepare for and run this script:
+# 1) Start mchron with the glut lcd device and the Emuchron monitor. Set the
+#    monitor mode to snapshot statistics (using command 'sms s').
+# 2) Run script dot1.txt [script] for a sec to create a randomly filled
+#    display.
+# 3) Select value (true/false) to use for variable report below for detailed
+#    pixel info (true) or just a summary (false).
+# 4) Run this script to find free floating pixels.
+#    If you opted below or detailed pixel info each found pxel is highlighted
+#    in the glut lcd window.
+# 5) Check the glcd and controller 0/1 runtime statistics reported in the
+#    Emuchron monitor or on the command line.
+#
+
+# Clear every variable
+vr .
+
+# Report each individual free pixel? Select true or false.
+# vs report=false
+vs report=true
+
+# Reset controller cursors and start a new statistics snapshot
+lcr
+sss
+
+# Set display size and init number of pixels found
+vs hor=127
+vs ver=63
+vs count=0
+
+# Walk thru range x=1:126 and y=1:62
+rf x=1 x<hor x=x+1
+  rf y=1 y<ver y=y+1
+    # Get refs to and pixel pixel to investigate
+    lcs x<64?0:1
+    lxs x%64
+    lys int(y/8)
+    lr byte
+    lr byte
+    vs pixel=((byte>>(y%8))&0x1)
+    vs found=false
+    # Investigate only if pixel is on
+    iif pixel==1
+      vs found=true
+      # 1) Investigate the three pixels on the left
+      lcs (x-1)<64?0:1
+      rf yCheck=y-1 yCheck<=y+1&&found==true yCheck=yCheck+1
+        lxs (x-1)%64
+        lys int((yCheck)/8)
+        lr byte
+        lr byte
+        vs found=((byte>>(yCheck%8))&0x1)?false:true
+      rn
+      # 2) Investigate the two pixels above and below the investigate pixel
+      lcs x<64?0:1
+      rf yCheck=y-1 yCheck<=y+1&&found==true yCheck=yCheck+1
+        iif yCheck!=y
+          lxs x%64
+          lys int((yCheck)/8)
+          lr byte
+          lr byte
+          vs found=((byte>>(yCheck%8))&0x1)?false:true
+        ien
+      rn
+      # 3) Investigate the three pixels on the right
+      lcs (x+1)<64?0:1
+      rf yCheck=y-1 yCheck<=y+1&&found==true yCheck=yCheck+1
+        lxs (x+1)%64
+        lys int((yCheck)/8)
+        lr byte
+        lr byte
+        vs found=((byte>>(yCheck%8))&0x1)?false:true
+      rn
+    ien
+    # Do we have a free pixel?
+    iif found==true
+      vs count=count+1
+      # Do we report each pixel?
+      iif report==true
+        lhs x y
+        vp ^x$|^y$|^count$
+        w 0
+        lhr
+      ien
+    ien
+  rn
+rn
+
+# Show results and create a statistics snapshot
+hm Free pixels found:
+he count
+ssm report
+
+# And reset controller cursors again
+lcr

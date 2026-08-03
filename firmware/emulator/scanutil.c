@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <regex.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -84,10 +83,14 @@ void cmdArgBpCreate(char *condition, cmdLine_t *cmdLine)
 
   // Cleanup first if needed
   if (cmdLine->argInfoBp != NULL)
+  {
     cmdArgBpCleanup(cmdLine);
+    printf("breakpoint updated\n");
+  }
 
   // Create a new one
   cmdLine->argInfoBp = malloc(sizeof(argInfo_t));
+  cmdLine->argBpEnabled = MC_TRUE;
   argInfoBp = cmdLine->argInfoBp;
   argInfoBp->arg = cmdArgCreate(condition, strlen(condition), MC_TRUE);
   argInfoBp->exprAssign = MC_FALSE;
@@ -329,7 +332,7 @@ u08 cmdArgRead(char *input, cmdLine_t *cmdLine)
     argInfo = &cmdLine->argInfo[i];
 
     // Verify unexpected end-of-string
-    if (domType != DOM_STRING_OPT && c == '\0')
+    if (domType != DOM_STRING_OPT && domType != DOM_CHAR_VAL_OPT && c == '\0')
     {
       printf("%s? missing value\n", cmdArg[i].argName);
       return CMD_RET_ERROR;
@@ -453,13 +456,18 @@ static u08 cmdArgValidateChar(cmdArg_t *cmdArg, char *argValue)
 {
   int i = 0;
   u08 charFound = MC_FALSE;
+  u08 domType = cmdArg->cmdDomain->domType;
   char *argCharList = cmdArg->cmdDomain->domTextList;
 
-  if (cmdArg->cmdDomain->domType != DOM_CHAR_VAL)
+  if (domType != DOM_CHAR_VAL && domType != DOM_CHAR_VAL_OPT)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
     return CMD_RET_ERROR;
   }
+
+  // See if it is an optional char
+  if (domType == DOM_CHAR_VAL_OPT && argValue[0] == '\0')
+    return CMD_RET_OK;
 
   // We must find a single char only
   if (argValue[1] != '\0')
@@ -550,21 +558,14 @@ static u08 cmdArgValidateNum(cmdArg_t *cmdArg, argInfo_t *argInfo)
 //
 static u08 cmdArgValidateRegex(cmdArg_t *cmdArg, char *argValue)
 {
-  regex_t regex;
-  int status = 0;
-
   if (cmdArg->cmdDomain->domType != DOM_WORD_REGEX)
   {
     printf("%s? internal: invalid domain validation type\n", cmdArg->argName);
     return CMD_RET_ERROR;
   }
 
-  // Init and validate the regex pattern
-  status = regcomp(&regex, cmdArg->cmdDomain->domTextList,
-    REG_EXTENDED | REG_NOSUB);
-  status = regexec(&regex, argValue, (size_t)0, NULL, 0);
-  regfree(&regex);
-  if (status != 0)
+  // Validate the regex pattern
+  if (emuValidateRegex(argValue, cmdArg->cmdDomain->domTextList) == MC_FALSE)
   {
     // Invalid input according pattern
     printf("%s? invalid: %s\n", cmdArg->argName, argValue);
