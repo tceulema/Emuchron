@@ -7,6 +7,7 @@
 // Everything we need for running this thing in Linux
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -17,6 +18,13 @@
 #include "expr.h"
 #include "mchronutil.h"
 #include "scanutil.h"
+
+// macOS ships libedit as its readline, which lacks append_history(). As the
+// in-memory history holds everything read from the history file plus this
+// session, rewriting the whole file is equivalent.
+#ifdef __APPLE__
+#define append_history(n, file)	write_history(file)
+#endif
 
 // The command line input stream batch size for a single line
 #define CMD_BUILD_LEN		128

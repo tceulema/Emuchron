@@ -19,10 +19,24 @@ CLIB = -lm -lncurses -lreadline -lglut -lGLU -lGL -lrt -lpthread
 FLEX = flex
 FLIB = -lfl
 BISON = bison
-REMOVE = rm --force
+REMOVE = rm -f
 
 # Select Linux emulator stub code
 STUB = -DEMULIN
+
+# macOS: no librt, flex runtime is libl, readline is libedit. The glut lcd
+# device needs freeglut (e.g. XQuartz + Homebrew freeglut, found via
+# pkg-config); without it mchron is built with the ncurses lcd device only.
+ifeq ($(shell uname -s),Darwin)
+  FLIB = -ll
+  ifeq ($(shell pkg-config --exists glut 2>/dev/null && echo yes),yes)
+    CFLAGS += $(shell pkg-config --cflags glut)
+    CLIB = -lm -lncurses -lreadline $(shell pkg-config --libs glut) -lGLU -lGL -lpthread
+  else
+    STUB += -DEMU_NO_GLUT
+    CLIB = -lm -lncurses -lreadline -lpthread
+  endif
+endif
 
 # Uncomment this to get bison runtime trace output.
 # This also requires a code section in expr.c [firmware/emulator] to be

@@ -10,11 +10,34 @@
 #include <pthread.h>
 #include <time.h>
 #include <sys/time.h>
-#include <GL/freeglut.h>
 #include "../global.h"
 #include "../glcd.h"
 #include "../ks0108conf.h"
 #include "lcdglut.h"
+
+#ifdef EMU_NO_GLUT
+// Built without freeglut (for example on macOS without XQuartz/freeglut).
+// Provide inert stubs so mchron runs with the ncurses lcd device only.
+lcdGlutGlcdPix_t lcdGlutGlcdPix;
+
+u08 lcdGlutInit(lcdGlutInitArgs_t *lcdGlutInitArgsSet)
+{
+  printf("glut lcd device is not available in this build (use -l ncurses)\n");
+  return MC_FALSE;
+}
+void lcdGlutCleanup(void) {}
+void lcdGlutFlush(void) {}
+void lcdGlutStatsPrint(void) {}
+void lcdGlutStatsReset(void) {}
+void lcdGlutBacklightSet(u08 backlight) {}
+void lcdGlutDataWrite(u08 x, u08 y, u08 data) {}
+void lcdGlutDisplaySet(u08 controller, u08 display) {}
+void lcdGlutGraphicsSet(u08 bezel, u08 grid) {}
+void lcdGlutHighlightSet(u08 highlight, u08 x, u08 y) {}
+void lcdGlutSizeSet(char axis, u16 size) {}
+void lcdGlutStartLineSet(u08 controller, u08 startline) {}
+#else
+#include <GL/freeglut.h>
 
 // Get time diff between two timestamps in usec
 #define TIMEDIFF_USEC(a,b)	\
@@ -1502,3 +1525,4 @@ void lcdGlutStatsReset(void)
   gettimeofday(&lcdGlutStats.timeStart, NULL);
   pthread_mutex_unlock(&mutexStats);
 }
+#endif // EMU_NO_GLUT

@@ -240,8 +240,14 @@ static void alarmPidStart(void)
     // We forked successfully!
     // Emuchron tool genalarm generated an audio file for us to play.
     // The genalarm tool is built and run via MakefileEmu [firmware].
+#ifdef __APPLE__
+    // sox from Homebrew/MacPorts is not in /usr/bin; use PATH and coreaudio
+    execlp("play", "play", "-q", "emulator/alarm.au", "-t", "coreaudio",
+      "repeat", "3600", NULL);
+#else
     execlp("/usr/bin/play", "/usr/bin/play", "-q", "emulator/alarm.au", "-t",
       "alsa", "repeat", "3600", NULL);
+#endif
     exit(0);
   }
   else

@@ -15,9 +15,16 @@
 // Load alarm info and Mario alarm data (when configured)
 #include "../mariotune.h"
 
+// Location of sox (Homebrew/MacPorts install outside /usr/bin on macOS)
+#ifdef __APPLE__
+#define SOX_BIN		"sox"
+#else
+#define SOX_BIN		"/usr/bin/sox"
+#endif
+
 // Templates for sox command
-#define SOX_SILENT	"'|/usr/bin/sox -b16 -r12k -Dnp synth %f sin 0' "
-#define SOX_TONE	"'|/usr/bin/sox -b16 -r12k -Dnp synth %f sin %d' "
+#define SOX_SILENT	"'|" SOX_BIN " -b16 -r12k -Dnp synth %f sin 0' "
+#define SOX_TONE	"'|" SOX_BIN " -b16 -r12k -Dnp synth %f sin %d' "
 
 // This is me
 extern const char *__progname;
@@ -87,7 +94,7 @@ int main(int argc, char *argv[])
 
   // Let's create some audio using execlp
   paramLen = paramLen + sprintf(soxCmd + paramLen,
-    "/usr/bin/sox --combine concatenate ");
+    SOX_BIN " --combine concatenate ");
   paramCount++;
 
   // Generate the sequence of sox audio commands
