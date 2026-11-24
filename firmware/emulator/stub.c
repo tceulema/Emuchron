@@ -240,8 +240,14 @@ static void alarmPidStart(void)
     // We forked successfully!
     // Emuchron tool genalarm generated an audio file for us to play.
     // The genalarm tool is built and run via MakefileEmu [firmware].
+#ifdef __APPLE__
+    // sox from Homebrew/MacPorts is not in /usr/bin; use PATH and coreaudio
+    execlp("play", "play", "-q", "emulator/alarm.au", "-t", "coreaudio",
+      "repeat", "3600", NULL);
+#else
     execlp("/usr/bin/play", "/usr/bin/play", "-q", "emulator/alarm.au", "-t",
       "alsa", "repeat", "3600", NULL);
+#endif
     exit(0);
   }
   else
@@ -559,6 +565,12 @@ void stubBeep(uint16_t hz, uint8_t msec)
 {
   char shellCmd[160];
 
+#ifdef __APPLE__
+  // No alsa on macOS: play from PATH (Homebrew/MacPorts sox) via coreaudio
+  sprintf(shellCmd,
+    "play -q -b16 -r21k -DGn -t coreaudio synth %f sin %d 2>/dev/null",
+    (float)(msec) / 1000L, hz);
+#else
   if (ALSA_PREFIX_PULSE_MS > msec)
   {
     // This is a short beep that requires alsa buffer under-run mitigation.
@@ -578,6 +590,7 @@ void stubBeep(uint16_t hz, uint8_t msec)
       "/usr/bin/play -q -b16 -r21k -DGn -t alsa synth %f sin %d 2>/dev/null",
       (float)(msec) / 1000L, hz);
   }
+#endif
   system(shellCmd);
 }
 

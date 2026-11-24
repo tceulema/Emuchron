@@ -94,7 +94,17 @@ u08 cmdEcho = CMD_ECHO_YES;
 extern const char *__progname;
 
 // System timer data for command list 100 msec keyboard scan
+#ifdef __APPLE__
+// macOS lacks POSIX timer_create(). Use the process interval timer instead,
+// delivering SIGALRM to a handler that invokes the keyboard scan directly.
+static void cmdListRaiseScan(void);
+static void cmdListTimerSig(int sig)
+{
+  cmdListRaiseScan();
+}
+#else
 static timer_t kbTimer;
+#endif
 static u08 kbTimerTripped;
 
 // Command list stack and execution statistics
@@ -1351,7 +1361,11 @@ u08 cmdStackActiveGet(void)
 void cmdStackCleanup(void)
 {
   cmdStackPop(CMD_STACK_POP_ALL);
+#ifdef __APPLE__
+  cmdStackTimerSet(LIST_TIMER_DISARM);
+#else
   timer_delete(kbTimer);
+#endif
 }
 
 //
@@ -1361,7 +1375,11 @@ void cmdStackCleanup(void)
 //
 void cmdStackInit(void)
 {
+#ifdef __APPLE__
+  struct sigaction sigAction;
+#else
   struct sigevent sEvent;
+#endif
   u08 i;
 
   // Init the command stack
@@ -1383,10 +1401,16 @@ void cmdStackInit(void)
 
   // Prepare a realtime timer generating signal SIGVTALRM with a handler (but
   // only arm/disarm during stack activity)
+#ifdef __APPLE__
+  memset(&sigAction, 0, sizeof(sigAction));
+  sigAction.sa_handler = cmdListTimerSig;
+  sigaction(SIGALRM, &sigAction, NULL);
+#else
   sEvent.sigev_notify = SIGEV_SIGNAL;
   sEvent.sigev_signo = SIGVTALRM;
   sEvent.sigev_value.sival_ptr = cmdListRaiseScan;
   timer_create(CLOCK_REALTIME, &sEvent, &kbTimer);
+#endif
 }
 
 //
@@ -1918,6 +1942,22 @@ void cmdStackStatsSet(u08 enable)
 //
 void cmdStackTimerSet(u08 action)
 {
+#ifdef __APPLE__
+  struct itimerval iTimer;
+
+  if (action == LIST_TIMER_DISARM)
+  {
+    timerclear(&iTimer.it_value);
+  }
+  else // LIST_TIMER_ARM
+  {
+    kbTimerTripped = MC_FALSE;
+    iTimer.it_value.tv_sec = CMD_STACK_SCAN_MSEC / 1000;
+    iTimer.it_value.tv_usec = (CMD_STACK_SCAN_MSEC % 1000) * 1000;
+  }
+  iTimer.it_interval = iTimer.it_value;
+  setitimer(ITIMER_REAL, &iTimer, NULL);
+#else
   struct itimerspec iTimer;
 
   if (action == LIST_TIMER_DISARM)
@@ -1938,4 +1978,5 @@ void cmdStackTimerSet(u08 action)
   iTimer.it_interval.tv_sec = iTimer.it_value.tv_sec;
   iTimer.it_interval.tv_nsec = iTimer.it_value.tv_nsec;
   timer_settime(kbTimer, 0, &iTimer, NULL);
+#endif
 }

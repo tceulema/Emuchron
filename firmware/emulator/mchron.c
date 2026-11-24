@@ -1137,7 +1137,11 @@ u08 doHelp(cmdLine_t *cmdLine)
 
   // Show help using 'more'
   if (retVal == CMD_RET_OK)
+#ifdef __APPLE__
+    system("/usr/bin/more ../support/help.txt 2>&1");
+#else
     system("/bin/more ../support/help.txt 2>&1");
+#endif
 
   return retVal;
 }

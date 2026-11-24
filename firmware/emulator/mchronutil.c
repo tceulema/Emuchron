@@ -171,8 +171,13 @@ u08 emuArgcArgvGet(int argc, char *argv[], emuArgcArgv_t *emuArgcArgv)
   emuArgcArgv->argLcdType = 0;
 
   // Init the lcd device data
+#ifdef EMU_NO_GLUT
+  emuArgcArgv->ctrlDeviceArgs.useNcurLcd = MC_TRUE;
+  emuArgcArgv->ctrlDeviceArgs.useGlutLcd = MC_FALSE;
+#else
   emuArgcArgv->ctrlDeviceArgs.useNcurLcd = MC_FALSE;
   emuArgcArgv->ctrlDeviceArgs.useGlutLcd = MC_TRUE;
+#endif
   emuArgcArgv->ctrlDeviceArgs.useNcurMon = MC_FALSE;
   emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.useLcd = MC_FALSE;
   emuArgcArgv->ctrlDeviceArgs.ncurInitArgs.useMon = MC_FALSE;
